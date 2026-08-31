@@ -1,0 +1,20 @@
+{
+  "name": "restaurant-pos-os",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Multi-branch restaurant POS and central operations platform",
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  }
+}
