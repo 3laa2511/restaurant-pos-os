@@ -1,6 +1,6 @@
 import type { Order } from './order.js';
-import type { PaymentInput, PaymentMethod } from '../../../services/api/src/modules/payments/payment-policy.js';
-import { calculateCashChange, validatePayment } from '../../../services/api/src/modules/payments/payment-policy.js';
+import type { PaymentInput, PaymentMethod } from '../../../../services/api/src/modules/payments/payment-policy.js';
+import { calculateCashChange, validatePayment } from '../../../../services/api/src/modules/payments/payment-policy.js';
 
 export interface CheckoutRequest {
   order: Order;
