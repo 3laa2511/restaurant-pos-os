@@ -43,7 +43,7 @@ export class PrismaOrderRepository implements OrderRepository {
     return this.map(order);
   }
 
-  private map(order: { id: string; orderNumber: string; branchId: string; createdById: string; source: unknown; type: unknown; status: unknown; total: { toString(): string }; }): CreateOrderRecord {
+  private map(order: { id: string; orderNumber: string; branchId: string; createdById: string; source: unknown; type: unknown; status: unknown; total: { toString(): string }; version: number }): CreateOrderRecord {
     return {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -53,7 +53,7 @@ export class PrismaOrderRepository implements OrderRepository {
       type: String(order.type),
       status: String(order.status) as OrderStatus,
       total: order.total.toString(),
-      version: 1,
+      version: order.version,
     };
   }
 }
