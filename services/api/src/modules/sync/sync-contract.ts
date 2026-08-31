@@ -1,0 +1,34 @@
+export type SyncOperationType = 'CREATE' | 'UPDATE' | 'CANCEL' | 'PAYMENT' | 'SHIFT';
+
+export interface SyncEnvelope {
+  id: string;
+  deviceId: string;
+  branchId: string;
+  operation: SyncOperationType;
+  entityType: string;
+  entityId: string;
+  idempotencyKey: string;
+  clientSequence: number;
+  occurredAt: string;
+  payload: Record<string, unknown>;
+}
+
+export type SyncResult =
+  | { status: 'APPLIED'; operationId: string }
+  | { status: 'DUPLICATE'; operationId: string }
+  | { status: 'CONFLICT'; operationId: string; reason: string }
+  | { status: 'REJECTED'; operationId: string; reason: string };
+
+export function validateSyncEnvelope(input: SyncEnvelope): void {
+  if (!input.id.trim() || !input.deviceId.trim() || !input.branchId.trim()) {
+    throw new Error('Sync identity is required');
+  }
+  if (!input.entityType.trim() || !input.entityId.trim()) {
+    throw new Error('Sync entity is required');
+  }
+  if (!input.idempotencyKey.trim()) throw new Error('Idempotency key is required');
+  if (!Number.isInteger(input.clientSequence) || input.clientSequence < 1) {
+    throw new Error('Client sequence must be a positive integer');
+  }
+  if (Number.isNaN(Date.parse(input.occurredAt))) throw new Error('Invalid occurredAt');
+}
