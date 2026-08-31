@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus { ACTIVE INACTIVE SUSPENDED }
+enum OrderSource { POS CALL_CENTER MOBILE WEB QR AGGREGATOR }
+enum OrderType { DINE_IN TAKEAWAY DELIVERY }
+enum OrderStatus { DRAFT CONFIRMED SENT_TO_KITCHEN PREPARING READY ASSIGNED OUT_FOR_DELIVERY DELIVERED CLOSED CANCELLED VOIDED REFUNDED FAILED }
+enum PaymentStatus { PENDING PAID PARTIALLY_REFUNDED REFUNDED VOIDED FAILED }
+enum ShiftStatus { OPEN CLOSED }
+enum DeviceStatus { ACTIVE INACTIVE BLOCKED }
+
+enum RoleCode { CASHIER CALL_CENTER_OPERATOR CALL_CENTER_SUPERVISOR KITCHEN DISPATCHER BRANCH_MANAGER CENTRAL_ADMIN OWNER }
+
+model Branch {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  nameAr      String?
+  active      Boolean      @default(true)
+  users       User[]
+  devices     Device[]
+  orders      Order[]
+  shifts      Shift[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model User {
+  id            String       @id @default(cuid())
+  username      String       @unique
+  displayName   String
+  passwordHash  String
+  status        UserStatus   @default(ACTIVE)
+  branchId      String?
+  branch        Branch?      @relation(fields: [branchId], references: [id])
+  roleLinks     UserRole[]
+  orders        Order[]      @relation("CreatedOrders")
+  shifts        Shift[]
+  auditLogs     AuditLog[]
+  devices       Device[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Role {
+  id          String      @id @default(cuid())
+  code        RoleCode    @unique
+  name        String
+  userLinks   UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String      @id @default(cuid())
+  code        String      @unique
+  name        String
+  roles       RolePermission[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@id([roleId, permissionId])
+}
+
+model Device {
+  id          String       @id @default(cuid())
+  deviceCode  String       @unique
+  name        String
+  status      DeviceStatus @default(ACTIVE)
+  branchId    String
+  branch      Branch       @relation(fields: [branchId], references: [id])
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  nameAr    String?
+  sortOrder Int       @default(0)
+  active    Boolean   @default(true)
+  products  Product[]
+}
+
+model Product {
+  id          String       @id @default(cuid())
+  sku         String       @unique
+  name        String
+  nameAr      String?
+  price       Decimal      @db.Decimal(12, 2)
+  active      Boolean      @default(true)
+  categoryId  String
+  category    Category     @relation(fields: [categoryId], references: [id])
+  orderItems  OrderItem[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Order {
+  id          String       @id @default(cuid())
+  orderNumber String
+  source      OrderSource
+  type        OrderType
+  status      OrderStatus  @default(DRAFT)
+  branchId    String
+  branch      Branch       @relation(fields: [branchId], references: [id])
+  createdById String
+  createdBy   User         @relation("CreatedOrders", fields: [createdById], references: [id])
+  customerId  String?
+  customer    Customer?    @relation(fields: [customerId], references: [id])
+  items       OrderItem[]
+  payments    Payment[]
+  events      OrderEvent[]
+  total       Decimal      @db.Decimal(12, 2)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  @@unique([branchId, orderNumber])
+}
+
+model OrderItem {
+  id          String    @id @default(cuid())
+  orderId     String
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  quantity    Int
+  unitPrice   Decimal   @db.Decimal(12, 2)
+  lineTotal   Decimal   @db.Decimal(12, 2)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model OrderEvent {
+  id            String   @id @default(cuid())
+  eventId       String   @unique
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type          String
+  actorUserId   String?
+  deviceId      String?
+  payload       Json
+  occurredAt    DateTime
+  createdAt     DateTime @default(now())
+  @@index([orderId, occurredAt])
+}
+
+model Customer {
+  id        String    @id @default(cuid())
+  phone     String    @unique
+  name      String?
+  orders    Order[]
+  addresses CustomerAddress[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model CustomerAddress {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label      String?
+  address    String
+  area       String?
+  notes      String?
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  orderId       String
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  amount        Decimal       @db.Decimal(12, 2)
+  method        String
+  status        PaymentStatus @default(PENDING)
+  idempotencyKey String       @unique
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Shift {
+  id         String      @id @default(cuid())
+  branchId   String
+  branch     Branch      @relation(fields: [branchId], references: [id])
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  status     ShiftStatus @default(OPEN)
+  openingCash Decimal     @db.Decimal(12, 2)
+  closingCash Decimal?    @db.Decimal(12, 2)
+  openedAt   DateTime    @default(now())
+  closedAt   DateTime?
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorUserId String?
+  actor      User?    @relation(fields: [actorUserId], references: [id])
+  branchId   String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+}
