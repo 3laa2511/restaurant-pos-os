@@ -2,6 +2,7 @@ import type { Order } from './order.js';
 import type { PrintJob } from './print-job.js';
 import type { LocalDatabaseBridge } from './tauri-bridge.js';
 import type { PaymentInput } from '../../../../services/api/src/modules/payments/payment-policy.js';
+import { assertIdempotencyKey } from '../../../../services/api/src/modules/orders/idempotency.js';
 
 export interface CheckoutPersistenceInput {
   db: LocalDatabaseBridge;
@@ -18,6 +19,7 @@ export interface CompletedCheckoutPersistenceInput extends CheckoutPersistenceIn
 }
 
 type SqlStatement = { sql: string; params: unknown[] };
+type ExistingSyncRecord = { entity_id: string; payload: string };
 
 function buildOrderStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlStatement[] {
   const now = input.now ?? input.order.createdAt;
@@ -140,14 +142,29 @@ export function buildCompletedCheckoutStatements(
 }
 
 function validatePersistenceInput(input: CheckoutPersistenceInput): void {
-  if (!input.idempotencyKey) throw new Error('Checkout idempotency key is required');
+  assertIdempotencyKey(input.idempotencyKey);
   if (!Number.isInteger(input.clientSequence) || input.clientSequence < 0) {
     throw new Error('Checkout client sequence must be a non-negative integer');
   }
 }
 
+async function assertNotAlreadyCommitted(input: CheckoutPersistenceInput): Promise<boolean> {
+  const rows = await input.db.query<ExistingSyncRecord>(
+    `SELECT entity_id, payload FROM sync_queue WHERE idempotency_key = ? LIMIT 1`,
+    [input.idempotencyKey],
+  );
+  if (!rows.length) return false;
+
+  const expectedPayload = JSON.stringify(input.order);
+  if (rows[0].entity_id !== input.order.id || rows[0].payload !== expectedPayload) {
+    throw new Error('Checkout idempotency key was reused with a different order');
+  }
+  return true;
+}
+
 export async function persistCheckout(input: CheckoutPersistenceInput): Promise<void> {
   validatePersistenceInput(input);
+  if (await assertNotAlreadyCommitted(input)) return;
   await input.db.transaction(buildCheckoutStatements(input));
 }
 
@@ -161,5 +178,6 @@ export async function persistCompletedCheckout(
   if (input.payment.amount !== input.order.total) {
     throw new Error('Payment amount does not match checkout total');
   }
+  if (await assertNotAlreadyCommitted(input)) return;
   await input.db.transaction(buildCompletedCheckoutStatements(input));
 }
