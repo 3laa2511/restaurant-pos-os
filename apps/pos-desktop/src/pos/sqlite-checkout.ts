@@ -20,6 +20,7 @@ export interface CompletedCheckoutPersistenceInput extends CheckoutPersistenceIn
 
 type SqlStatement = { sql: string; params: unknown[] };
 type ExistingSyncRecord = { entity_id: string; payload: string };
+type OpenShiftRecord = { id: string };
 
 function buildOrderStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlStatement[] {
   const now = input.now ?? input.order.createdAt;
@@ -162,6 +163,20 @@ async function assertNotAlreadyCommitted(input: CheckoutPersistenceInput): Promi
   return true;
 }
 
+async function assertOpenShift(input: CompletedCheckoutPersistenceInput): Promise<void> {
+  const rows = await input.db.query<OpenShiftRecord>(
+    `SELECT id FROM shifts
+     WHERE id = ?
+       AND branch_id = ?
+       AND device_id = ?
+       AND cashier_id = ?
+       AND status = 'OPEN'
+     LIMIT 1`,
+    [input.payment.shiftId, input.order.branchId, input.order.deviceId, input.order.cashierId],
+  );
+  if (!rows.length) throw new Error('Checkout requires an open shift for this cashier and POS');
+}
+
 export async function persistCheckout(input: CheckoutPersistenceInput): Promise<void> {
   validatePersistenceInput(input);
   if (await assertNotAlreadyCommitted(input)) return;
@@ -179,5 +194,6 @@ export async function persistCompletedCheckout(
     throw new Error('Payment amount does not match checkout total');
   }
   if (await assertNotAlreadyCommitted(input)) return;
+  await assertOpenShift(input);
   await input.db.transaction(buildCompletedCheckoutStatements(input));
 }
