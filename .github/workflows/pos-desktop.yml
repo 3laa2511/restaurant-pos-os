@@ -11,25 +11,45 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: pnpm/action-setup@v4
         with:
           version: 10.15.0
           run_install: false
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+
       - name: Typecheck desktop
         run: pnpm --dir apps/pos-desktop typecheck
+
       - name: Build desktop frontend
         run: pnpm --dir apps/pos-desktop build
+
+      - name: Install Linux Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libgtk-3-dev \
+            libglib2.0-dev \
+            pkg-config \
+            patchelf
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/pos-desktop/src-tauri -> target
+
       - name: Check Tauri native layer
         working-directory: apps/pos-desktop/src-tauri
         run: cargo check
