@@ -4,6 +4,7 @@ import './styles.css';
 import { categories, demoProducts, searchProducts } from './pos/catalog.js';
 import { addProduct, calculateCart, emptyCart, removeProduct, setQuantity } from './pos/cart.js';
 import { confirmOrder, createOrder } from './pos/order.js';
+import { createPrintJob } from './pos/print-job.js';
 import { createDatabaseBridge } from './pos/tauri-bridge.js';
 import { persistCompletedCheckout } from './pos/sqlite-checkout.js';
 import type { CartState } from './pos/types.js';
@@ -41,30 +42,16 @@ export function App() {
       }));
 
       const stationByProduct: Readonly<Record<string, KitchenStation>> = {};
-      const printJobs = [...new Set(order.items.map((item) => stationByProduct[item.productId] ?? 'KITCHEN'))].map((station, index) => ({
+      const stations = [...new Set(order.items.map((item) => stationByProduct[item.productId] ?? 'KITCHEN'))];
+      const printJobs = stations.map((station, index) => createPrintJob({
         id: `${order.id}:kitchen:${index}`,
-        orderId: order.id,
-        orderNumber: order.orderNumber,
+        order: {
+          ...order,
+          items: order.items.filter((item) => (stationByProduct[item.productId] ?? 'KITCHEN') === station),
+        },
         station,
-        copies: 1,
-        payload: `#${order.orderNumber} | ${station}\n${order.items.map((item) => `${item.quantity} x ${item.nameAr}${item.note ? ` — ${item.note}` : ''}`).join('\n')}\n`,
-        status: 'PENDING' as const,
-        attempts: 0,
-        lastError: null,
-        createdAt: order.createdAt,
       }));
-      printJobs.push({
-        id: `${order.id}:customer`,
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        station: 'CUSTOMER',
-        copies: 1,
-        payload: `#${order.orderNumber}\n${order.items.map((item) => `${item.quantity} x ${item.nameAr}${item.note ? ` — ${item.note}` : ''}`).join('\n')}\n----------------\nالإجمالي: ${order.total.toFixed(2)} ج.م\n`,
-        status: 'PENDING',
-        attempts: 0,
-        lastError: null,
-        createdAt: order.createdAt,
-      });
+      printJobs.push(createPrintJob({ id: `${order.id}:customer`, order, station: 'CUSTOMER' }));
 
       const payment: PaymentInput = {
         orderId: order.id,
