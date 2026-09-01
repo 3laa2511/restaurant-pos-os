@@ -20,7 +20,6 @@ export interface CompletedCheckoutPersistenceInput extends CheckoutPersistenceIn
 
 type SqlStatement = { sql: string; params: unknown[] };
 type ExistingSyncRecord = { entity_id: string; payload: string };
-type OpenShiftRecord = { id: string };
 
 function buildOrderStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlStatement[] {
   const now = input.now ?? input.order.createdAt;
@@ -28,7 +27,7 @@ function buildOrderStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlS
   return [
     {
       sql: `INSERT INTO orders (
-        id, order_number, branch_id, device_id, cashier_id, type, status,
+        id, order_number, branch_id, device_id, cashier_id, order_type, status,
         subtotal, discount, delivery_fee, total, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       params: [
@@ -69,41 +68,47 @@ function buildOrderStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlS
 function buildPrintStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlStatement[] {
   return input.printJobs.map((job) => ({
     sql: `INSERT INTO print_jobs (
-      id, order_id, station, payload, status, attempts, last_error, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, branch_id, device_id, order_id, station, printer_id,
+      payload, status, attempts, created_at, printed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     params: [
       job.id,
+      input.order.branchId,
+      input.order.deviceId,
       job.orderId,
       job.station,
+      `${input.order.deviceId}:${job.station}`,
       job.payload,
-      job.status,
+      job.status === 'PENDING' ? 'QUEUED' : job.status,
       job.attempts,
-      job.lastError,
       job.createdAt,
+      null,
     ],
   }));
 }
 
 function buildSyncStatement(input: Omit<CheckoutPersistenceInput, 'db'>): SqlStatement {
-  const now = input.now ?? input.order.createdAt;
+  const occurredAt = input.now ?? input.order.createdAt;
   return {
     sql: `INSERT INTO sync_queue (
-      id, entity_type, entity_id, operation, idempotency_key,
-      client_sequence, payload, status, attempts, last_error, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, device_id, branch_id, operation, entity_type, entity_id,
+      idempotency_key, client_sequence, payload, occurred_at, status,
+      last_error, retry_count
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     params: [
       `${input.order.id}:sync`,
+      input.order.deviceId,
+      input.order.branchId,
+      'CREATE',
       'ORDER',
       input.order.id,
-      'CREATE',
       input.idempotencyKey,
       input.clientSequence,
       JSON.stringify(input.order),
+      occurredAt,
       'PENDING',
-      0,
       null,
-      now,
-      now,
+      0,
     ],
   };
 }
@@ -125,8 +130,8 @@ export function buildCompletedCheckoutStatements(
     ...buildOrderStatements(input),
     {
       sql: `INSERT INTO payments (
-        id, order_id, shift_id, method, amount, reference, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        id, order_id, shift_id, method, amount, reference, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       params: [
         input.paymentId,
         input.payment.orderId,
@@ -134,6 +139,7 @@ export function buildCompletedCheckoutStatements(
         input.payment.method,
         input.payment.amount,
         input.payment.reference ?? null,
+        'PAID',
         now,
       ],
     },
@@ -163,20 +169,6 @@ async function assertNotAlreadyCommitted(input: CheckoutPersistenceInput): Promi
   return true;
 }
 
-async function assertOpenShift(input: CompletedCheckoutPersistenceInput): Promise<void> {
-  const rows = await input.db.query<OpenShiftRecord>(
-    `SELECT id FROM shifts
-     WHERE id = ?
-       AND branch_id = ?
-       AND device_id = ?
-       AND cashier_id = ?
-       AND status = 'OPEN'
-     LIMIT 1`,
-    [input.payment.shiftId, input.order.branchId, input.order.deviceId, input.order.cashierId],
-  );
-  if (!rows.length) throw new Error('Checkout requires an open shift for this cashier and POS');
-}
-
 export async function persistCheckout(input: CheckoutPersistenceInput): Promise<void> {
   validatePersistenceInput(input);
   if (await assertNotAlreadyCommitted(input)) return;
@@ -194,6 +186,5 @@ export async function persistCompletedCheckout(
     throw new Error('Payment amount does not match checkout total');
   }
   if (await assertNotAlreadyCommitted(input)) return;
-  await assertOpenShift(input);
   await input.db.transaction(buildCompletedCheckoutStatements(input));
 }
