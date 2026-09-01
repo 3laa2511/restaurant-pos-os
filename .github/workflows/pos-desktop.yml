@@ -24,3 +24,12 @@ jobs:
         run: pnpm --dir apps/pos-desktop typecheck
       - name: Build desktop frontend
         run: pnpm --dir apps/pos-desktop build
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/pos-desktop/src-tauri -> target
+      - name: Check Tauri native layer
+        working-directory: apps/pos-desktop/src-tauri
+        run: cargo check --locked
