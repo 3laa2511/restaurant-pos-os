@@ -86,7 +86,7 @@ fn query_statement(connection: &Connection, statement: &SqlStatement) -> SqlResu
                 SqlValue::Integer(v) => Value::from(v),
                 SqlValue::Real(v) => Value::from(v),
                 SqlValue::Text(v) => Value::from(v),
-                SqlValue::Blob(v) => Value::String(format!("blob:{}", hex::encode(v))),
+                SqlValue::Blob(v) => Value::Array(v.into_iter().map(Value::from).collect()),
             };
             record.insert(name.clone(), json_value);
         }
