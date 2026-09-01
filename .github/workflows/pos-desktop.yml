@@ -32,4 +32,4 @@ jobs:
           workspaces: apps/pos-desktop/src-tauri -> target
       - name: Check Tauri native layer
         working-directory: apps/pos-desktop/src-tauri
-        run: cargo check --locked
+        run: cargo check
