@@ -16,10 +16,17 @@ const SCHEMA: &str = include_str!("../../src/pos/sqlite-schema.sql");
 
 fn initialize_connection() -> SqlResult<Connection> {
     let connection = Connection::open("restaurant-pos.db")?;
-    connection.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;")?;
+    // Keep the critical POS path responsive under concurrent readers/writers.
+    // WAL allows readers to continue while a short writer transaction is active.
+    connection.execute_batch(
+        "PRAGMA foreign_keys=ON;
+         PRAGMA journal_mode=WAL;
+         PRAGMA synchronous=NORMAL;
+         PRAGMA busy_timeout=2500;"
+    )?;
     connection.execute_batch(SCHEMA)?;
     connection.execute_batch(
-        "CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);\
+        "CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
          INSERT OR IGNORE INTO schema_meta(key, value) VALUES ('schema_version', '1');"
     )?;
     Ok(connection)
