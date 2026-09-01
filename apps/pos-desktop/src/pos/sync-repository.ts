@@ -1,5 +1,5 @@
 import type { LocalDatabaseBridge } from './tauri-bridge.js';
-import type { SyncQueueItem } from './sync-worker.js';
+import type { SyncQueueItem } from './sync-contract.js';
 
 export interface SyncRepository {
   getPending(limit: number, maxRetries: number): Promise<SyncQueueItem[]>;
