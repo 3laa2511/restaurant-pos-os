@@ -206,3 +206,23 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorUserId, createdAt])
 }
+model SyncOperation {
+  id String @id @default(cuid())
+  operationId String @unique
+  deviceId String
+  branchId String
+  operation String
+  entityType String
+  entityId String
+  idempotencyKey String @unique
+  clientSequence Int
+  occurredAt DateTime
+  payload Json
+  requestHash String
+  status String @default("RECEIVED")
+  result Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([deviceId, clientSequence])
+  @@index([status, createdAt])
+}
