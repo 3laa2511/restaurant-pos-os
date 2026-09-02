@@ -22,7 +22,7 @@ struct SqlStatement {
 }
 
 const SCHEMA: &str = include_str!("../../src/pos/sqlite-schema.sql");
-const CURRENT_SCHEMA_VERSION: i64 = 2;
+const CURRENT_SCHEMA_VERSION: i64 = 3;
 
 fn column_exists(connection: &Connection, table: &str, column: &str) -> SqlResult<bool> {
     let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
@@ -49,8 +49,14 @@ fn migrate_schema(connection: &Connection) -> SqlResult<()> {
     }
 
     connection.execute_batch(
-        "CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until);
-         INSERT INTO schema_meta(key, value) VALUES ('schema_version', '2')
+        "CREATE TABLE IF NOT EXISTS device_sequences (
+            id TEXT PRIMARY KEY,
+            device_id TEXT NOT NULL UNIQUE,
+            next_sequence INTEGER NOT NULL DEFAULT 0 CHECK(next_sequence >= 0),
+            updated_at TEXT NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until);
+         INSERT INTO schema_meta(key, value) VALUES ('schema_version', '3')
          ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
     )?;
     connection.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
