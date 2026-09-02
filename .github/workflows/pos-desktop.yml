@@ -27,6 +27,9 @@ jobs:
       - name: Typecheck desktop
         run: pnpm --dir apps/pos-desktop typecheck
 
+      - name: Test desktop sync queue
+        run: pnpm --dir apps/pos-desktop test
+
       - name: Build desktop frontend
         run: pnpm --dir apps/pos-desktop build
 
