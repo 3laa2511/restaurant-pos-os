@@ -22,6 +22,40 @@ struct SqlStatement {
 }
 
 const SCHEMA: &str = include_str!("../../src/pos/sqlite-schema.sql");
+const CURRENT_SCHEMA_VERSION: i64 = 2;
+
+fn column_exists(connection: &Connection, table: &str, column: &str) -> SqlResult<bool> {
+    let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn migrate_schema(connection: &Connection) -> SqlResult<()> {
+    connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+    )?;
+
+    if !column_exists(connection, "sync_queue", "locked_by")? {
+        connection.execute("ALTER TABLE sync_queue ADD COLUMN locked_by TEXT", [])?;
+    }
+    if !column_exists(connection, "sync_queue", "locked_until")? {
+        connection.execute("ALTER TABLE sync_queue ADD COLUMN locked_until TEXT", [])?;
+    }
+
+    connection.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until);
+         INSERT INTO schema_meta(key, value) VALUES ('schema_version', '2')
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
+    )?;
+    connection.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
+    Ok(())
+}
 
 fn initialize_connection() -> SqlResult<Connection> {
     let connection = Connection::open("restaurant-pos.db")?;
@@ -32,10 +66,7 @@ fn initialize_connection() -> SqlResult<Connection> {
          PRAGMA busy_timeout=2500;",
     )?;
     connection.execute_batch(SCHEMA)?;
-    connection.execute_batch(
-        "CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-         INSERT OR IGNORE INTO schema_meta(key, value) VALUES ('schema_version', '1');",
-    )?;
+    migrate_schema(&connection)?;
     Ok(connection)
 }
 
@@ -100,7 +131,7 @@ fn query_statement(connection: &Connection, statement: &SqlStatement) -> SqlResu
 fn db_initialize(state: State<'_, DbState>) -> Result<Health, String> {
     let connection = initialize_connection().map_err(|e| e.to_string())?;
     *state.0.lock().map_err(|_| "database lock poisoned".to_string())? = Some(connection);
-    Ok(Health { engine: "sqlite", sqlite: true, schema_version: 1 })
+    Ok(Health { engine: "sqlite", sqlite: true, schema_version: CURRENT_SCHEMA_VERSION })
 }
 
 #[tauri::command]
@@ -133,7 +164,7 @@ fn db_transaction(state: State<'_, DbState>, statements: Vec<SqlStatement>) -> R
 #[tauri::command]
 fn database_health(state: State<'_, DbState>) -> Health {
     let initialized = state.0.lock().ok().and_then(|g| g.as_ref().map(|_| true)).unwrap_or(false);
-    Health { engine: "sqlite", sqlite: initialized, schema_version: if initialized { 1 } else { 0 } }
+    Health { engine: "sqlite", sqlite: initialized, schema_version: if initialized { CURRENT_SCHEMA_VERSION } else { 0 } }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

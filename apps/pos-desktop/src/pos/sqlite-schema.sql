@@ -91,6 +91,8 @@ CREATE TABLE IF NOT EXISTS sync_queue (
   status TEXT NOT NULL CHECK(status IN ('PENDING','SYNCING','SYNCED','FAILED')),
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
+  locked_by TEXT,
+  locked_until TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -98,4 +100,5 @@ CREATE TABLE IF NOT EXISTS sync_queue (
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_status_sequence ON sync_queue(status, client_sequence);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON print_jobs(status);
