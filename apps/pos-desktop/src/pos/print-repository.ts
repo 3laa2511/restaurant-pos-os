@@ -105,7 +105,7 @@ export function createSqlitePrintRepository(db: LocalDatabaseBridge): PrintRelia
     },
 
     getSnapshot: async (): Promise<PrintReliabilitySnapshot> => {
-      const rows = await db.query<{ status: PrintReliabilitySnapshot[keyof PrintReliabilitySnapshot]; count: number }>(
+      const rows = await db.query<{ status: string; count: number }>(
         `SELECT status, COUNT(*) AS count
          FROM print_jobs
          GROUP BY status`,
