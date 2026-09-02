@@ -38,8 +38,9 @@ export class OfflineSyncWorker {
     this.running = true;
     try {
       const result = await this.orchestrator.runOnce();
-      if (result.failedAttempts !== null) {
-        await new Promise((resolve) => setTimeout(resolve, this.retryPolicy.delayFor(result.failedAttempts)));
+      const failedAttempts = result.failedAttempts;
+      if (typeof failedAttempts === 'number') {
+        await new Promise((resolve) => setTimeout(resolve, this.retryPolicy.delayFor(failedAttempts)));
       }
       return result.synced;
     } finally {
