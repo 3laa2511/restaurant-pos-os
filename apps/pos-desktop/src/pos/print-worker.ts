@@ -57,6 +57,27 @@ export class PrintWorker {
     this.leaseMs = Math.max(1000, options.leaseMs ?? 30_000);
   }
 
+  private async printWithLease(job: PrintJob): Promise<void> {
+    let leaseLost = false;
+    const heartbeatMs = Math.max(500, Math.floor(this.leaseMs / 3));
+    const heartbeat = globalThis.setInterval(() => {
+      void this.repository.renewLease(job.id, this.workerId, this.leaseMs)
+        .then((owned) => {
+          if (!owned) leaseLost = true;
+        })
+        .catch(() => {
+          // A transient heartbeat failure is retried on the next heartbeat tick.
+        });
+    }, heartbeatMs);
+
+    try {
+      await this.transport.print(job);
+      if (leaseLost) throw new Error('Print job ownership lost during printing');
+    } finally {
+      globalThis.clearInterval(heartbeat);
+    }
+  }
+
   async runOnce(): Promise<PrintWorkerResult> {
     if (this.running) return { attempted: 0, printed: 0, failed: 0 };
     this.running = true;
@@ -73,7 +94,7 @@ export class PrintWorker {
       let failed = 0;
       for (const job of jobs) {
         try {
-          await this.transport.print(job);
+          await this.printWithLease(job);
           await this.repository.markPrinted(job.id, this.workerId);
           printed += 1;
         } catch (error) {
