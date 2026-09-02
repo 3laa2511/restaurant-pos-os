@@ -1,4 +1,4 @@
-import type { SyncQueueItem, SyncTransport } from './sync-contract.js';
+import type { SyncTransport } from './sync-contract.js';
 import type { SyncRepository } from './sync-repository.js';
 
 export interface SyncOrchestratorOptions {
@@ -10,6 +10,7 @@ export interface SyncRunResult {
   attempted: number;
   synced: number;
   failed: number;
+  failedRetryCount: number | null;
 }
 
 export class SyncOrchestrator {
@@ -26,6 +27,7 @@ export class SyncOrchestrator {
 
     let synced = 0;
     let failed = 0;
+    let failedRetryCount: number | null = null;
 
     for (const item of items) {
       try {
@@ -36,12 +38,11 @@ export class SyncOrchestrator {
         const message = error instanceof Error ? error.message : String(error);
         await this.repository.markFailed(item.id, message);
         failed += 1;
+        failedRetryCount = item.retry_count + 1;
         break;
       }
     }
 
-    return { attempted: items.length, synced, failed };
+    return { attempted: items.length, synced, failed, failedRetryCount };
   }
 }
-
-export type { SyncQueueItem };
