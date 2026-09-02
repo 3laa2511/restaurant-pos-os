@@ -12,7 +12,9 @@
     "@nestjs/common": "^11.1.6",
     "@nestjs/core": "^11.1.6",
     "@nestjs/platform-express": "^11.1.6",
+    "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "pg": "^8.16.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
@@ -20,6 +22,7 @@
     "@jest/globals": "^30.0.5",
     "@nestjs/cli": "^11.0.10",
     "@types/node": "^24.3.0",
+    "@types/pg": "^8.15.5",
     "eslint": "^9.34.0",
     "jest": "^30.0.5",
     "prisma": "^7.10.0",
