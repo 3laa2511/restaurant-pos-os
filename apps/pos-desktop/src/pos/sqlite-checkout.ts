@@ -50,9 +50,13 @@ function buildOrderStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlS
 function buildPrintStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlStatement[] {
   return input.printJobs.map((job) => ({
     sql: `INSERT INTO print_jobs (
-      id, order_id, station, payload, status, attempts, last_error, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    params: [job.id, job.orderId, job.station, job.payload, job.status, job.attempts, job.lastError, job.createdAt],
+      id, order_id, order_number, station, copies, payload, status,
+      attempts, last_error, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    params: [
+      job.id, job.orderId, job.orderNumber, job.station, job.copies, job.payload,
+      job.status, job.attempts, job.lastError, job.createdAt, input.now ?? job.createdAt,
+    ],
   }));
 }
 
@@ -98,6 +102,10 @@ function validatePersistenceInput(input: CheckoutPersistenceInput): void {
   assertIdempotencyKey(input.idempotencyKey);
   if (!Number.isInteger(input.clientSequence) || input.clientSequence < 0) {
     throw new Error('Checkout client sequence must be a non-negative integer');
+  }
+  for (const job of input.printJobs) {
+    if (job.orderId !== input.order.id) throw new Error('Print job order does not match checkout order');
+    if (!Number.isInteger(job.copies) || job.copies < 1) throw new Error('Print job copies must be positive');
   }
 }
 
