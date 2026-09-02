@@ -79,10 +79,12 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE TABLE IF NOT EXISTS print_jobs (
   id TEXT PRIMARY KEY,
   order_id TEXT NOT NULL REFERENCES orders(id),
+  order_number TEXT NOT NULL,
   station TEXT NOT NULL,
+  copies INTEGER NOT NULL DEFAULT 1 CHECK(copies > 0),
   payload TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('PENDING','PRINTING','PRINTED','FAILED')),
-  attempts INTEGER NOT NULL DEFAULT 0,
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
   last_error TEXT,
   locked_by TEXT,
   locked_until TEXT,
@@ -111,5 +113,5 @@ CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_status_sequence ON sync_queue(status, client_sequence);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until);
-CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON print_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_print_jobs_status_created ON print_jobs(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_lease ON print_jobs(status, locked_until);
