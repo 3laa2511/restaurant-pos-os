@@ -11,8 +11,8 @@ function createDatabase() {
   db.exec(`
     INSERT INTO orders (id, order_number, branch_id, device_id, cashier_id, type, status, subtotal, discount, delivery_fee, total, created_at, updated_at)
     VALUES ('order-1', 'BR01-01-000001', 'branch-1', 'device-1', 'cashier-1', 'TAKEAWAY', 'CONFIRMED', 100, 0, 0, 100, '2026-01-01T10:00:00Z', '2026-01-01T10:00:00Z');
-    INSERT INTO print_jobs (id, order_id, station, payload, status, attempts, last_error, created_at, updated_at)
-    VALUES ('print-1', 'order-1', 'KITCHEN', 'payload-1', 'PENDING', 0, NULL, '2026-01-01T10:00:00Z', '2026-01-01T10:00:00Z');
+    INSERT INTO print_jobs (id, order_id, order_number, station, copies, payload, status, attempts, last_error, created_at, updated_at)
+    VALUES ('print-1', 'order-1', 'BR01-01-000001', 'KITCHEN', 1, 'payload-1', 'PENDING', 0, NULL, '2026-01-01T10:00:00Z', '2026-01-01T10:00:00Z');
   `);
   return db;
 }
@@ -38,7 +38,7 @@ function claim(db, workerId, limit = 10, maxAttempts = 3, leaseSeconds = 30) {
 
 test('two print workers claim disjoint jobs', () => {
   const db = createDatabase();
-  db.exec(`INSERT INTO print_jobs (id, order_id, station, payload, status, attempts, created_at, updated_at) VALUES ('print-2','order-1','BAR','payload-2','PENDING',0,'2026-01-01T10:00:01Z','2026-01-01T10:00:01Z');`);
+  db.exec(`INSERT INTO print_jobs (id, order_id, order_number, station, copies, payload, status, attempts, created_at, updated_at) VALUES ('print-2','order-1','BR01-01-000001','BAR',1,'payload-2','PENDING',0,'2026-01-01T10:00:01Z','2026-01-01T10:00:01Z');`);
   const first = claim(db, 'worker-a', 1);
   const second = claim(db, 'worker-b', 1);
   assert.equal(first.length, 1);
