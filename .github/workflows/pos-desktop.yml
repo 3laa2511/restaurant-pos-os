@@ -24,6 +24,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: Typecheck API
+        run: pnpm --dir services/api typecheck
+
+      - name: Test API
+        run: pnpm --dir services/api test -- --runInBand
+
       - name: Typecheck desktop
         run: pnpm --dir apps/pos-desktop typecheck
 
