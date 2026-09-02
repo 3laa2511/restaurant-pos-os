@@ -7,8 +7,10 @@ import { confirmOrder, createOrder } from './pos/order.js';
 import { createPrintJob } from './pos/print-job.js';
 import { createDatabaseBridge } from './pos/tauri-bridge.js';
 import { persistCompletedCheckout } from './pos/sqlite-checkout.js';
+import { nextDeviceSequence } from './pos/sqlite-sequence.js';
 import { closeLocalShift, getOpenShift, openLocalShift } from './pos/sqlite-shift.js';
 import { openShift, requestShiftClose } from './pos/shift.js';
+import { formatOrderNumber } from './pos/order-number.js';
 import type { Shift } from './pos/shift.js';
 import type { CartState } from './pos/types.js';
 import type { KitchenStation } from './pos/kitchen-routing.js';
@@ -27,13 +29,14 @@ type CheckoutIdentity = {
   clientSequence: number;
 };
 
-function createCheckoutIdentity(): CheckoutIdentity {
+async function createCheckoutIdentity(): Promise<CheckoutIdentity> {
   const token = crypto.randomUUID();
+  const clientSequence = await nextDeviceSequence(db, DEVICE_ID);
   return {
     orderId: token,
-    orderNumber: `POS-${Date.now()}`,
-    idempotencyKey: `POS-01:${token}`,
-    clientSequence: Date.now(),
+    orderNumber: formatOrderNumber({ branchCode: BRANCH_ID, deviceCode: DEVICE_ID, sequence: clientSequence }),
+    idempotencyKey: `${DEVICE_ID}:${token}`,
+    clientSequence,
   };
 }
 
@@ -117,7 +120,7 @@ export function App() {
 
     try {
       await db.initialize();
-      const identity = checkoutIdentity ?? createCheckoutIdentity();
+      const identity = checkoutIdentity ?? await createCheckoutIdentity();
       if (!checkoutIdentity) setCheckoutIdentity(identity);
 
       const order = confirmOrder(createOrder({
