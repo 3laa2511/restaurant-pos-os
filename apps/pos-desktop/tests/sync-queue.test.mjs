@@ -57,7 +57,7 @@ function claim(db, workerId, limit = 1, maxAttempts = 8, leaseSeconds = 30) {
     FROM sync_queue
     WHERE status = 'SYNCING' AND locked_by = ?
     ORDER BY client_sequence ASC
-  `).all(workerId);
+  `).all(workerId).map((row) => ({ ...row }));
 }
 
 test('two workers claim disjoint queue items', () => {
@@ -68,10 +68,10 @@ test('two workers claim disjoint queue items', () => {
     const workerA = claim(db, 'worker-a', 1);
     const workerB = claim(db, 'worker-b', 1);
 
-    assert.deepEqual(workerA.map((row) => row.id), ['item-1']);
-    assert.deepEqual(workerB.map((row) => row.id), ['item-2']);
+    assert.deepEqual(workerA, [{ id: 'item-1', locked_by: 'worker-a', status: 'SYNCING' }]);
+    assert.deepEqual(workerB, [{ id: 'item-2', locked_by: 'worker-b', status: 'SYNCING' }]);
 
-    const syncing = db.prepare(`SELECT id, locked_by FROM sync_queue WHERE status = 'SYNCING' ORDER BY id`).all();
+    const syncing = db.prepare(`SELECT id, locked_by FROM sync_queue WHERE status = 'SYNCING' ORDER BY id`).all().map((row) => ({ ...row }));
     assert.deepEqual(syncing, [
       { id: 'item-1', locked_by: 'worker-a' },
       { id: 'item-2', locked_by: 'worker-b' },
