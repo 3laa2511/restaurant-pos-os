@@ -63,8 +63,13 @@ export class PrintWorker {
           printed += 1;
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          await this.repository.markFailed(job.id, this.workerId, message);
-          failed += 1;
+          try {
+            await this.repository.markFailed(job.id, this.workerId, message);
+            failed += 1;
+          } catch {
+            // Ownership may have expired while the printer was busy. A later worker
+            // is responsible for recovery; never mutate a job we no longer own.
+          }
         }
       }
 
