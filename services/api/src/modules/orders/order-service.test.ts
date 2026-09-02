@@ -19,8 +19,8 @@ describe('OrderService', () => {
     const audits: unknown[] = [];
     const service = new OrderService(
       repository,
-      { append: async (event) => events.push(event) },
-      { append: async (audit) => audits.push(audit) },
+      { append: async (event) => { events.push(event); } },
+      { append: async (audit) => { audits.push(audit); } },
     );
 
     const order = await service.create(context, {
