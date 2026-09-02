@@ -22,7 +22,6 @@ export function createSqlitePrintRepository(db: LocalDatabaseBridge): PrintRepos
       if (!normalizedWorkerId) throw new Error('Print worker id is required');
       const leaseSeconds = Math.max(1, Math.ceil(safeLeaseMs / 1000));
 
-      // Recover only jobs whose lease has actually expired. Ownership is fenced by locked_by below.
       await db.execute(
         `UPDATE print_jobs
          SET status = 'PENDING', locked_by = NULL, locked_until = NULL, updated_at = datetime('now')
