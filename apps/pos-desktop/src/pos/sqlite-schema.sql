@@ -10,6 +10,13 @@ CREATE TABLE IF NOT EXISTS device_config (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS device_sequences (
+  id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL UNIQUE,
+  next_sequence INTEGER NOT NULL DEFAULT 0 CHECK(next_sequence >= 0),
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY,
   sku TEXT NOT NULL UNIQUE,
