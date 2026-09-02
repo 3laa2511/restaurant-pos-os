@@ -1,6 +1,6 @@
-import type { SyncQueueItem, SyncTransport } from './sync-contract.js';
-import { ExponentialRetryPolicy } from './retry-policy.js';
+import { SyncOrchestrator } from './sync-orchestrator.js';
 import type { SyncRepository } from './sync-repository.js';
+import type { SyncTransport } from './sync-contract.js';
 
 export type { SyncQueueItem, SyncTransport } from './sync-contract.js';
 
@@ -13,41 +13,23 @@ export interface SyncWorkerOptions {
 
 export class OfflineSyncWorker {
   private running = false;
-  private readonly retryPolicy: ExponentialRetryPolicy;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private readonly orchestrator: SyncOrchestrator;
 
   constructor(
-    private readonly repository: SyncRepository,
-    private readonly transport: SyncTransport,
+    repository: SyncRepository,
+    transport: SyncTransport,
     private readonly options: SyncWorkerOptions = {},
   ) {
-    this.retryPolicy = new ExponentialRetryPolicy({
-      baseDelayMs: options.baseDelayMs,
-      maxDelayMs: options.maxDelayMs,
-    });
+    this.orchestrator = new SyncOrchestrator(repository, transport, options);
   }
 
   async runOnce(): Promise<number> {
     if (this.running) return 0;
     this.running = true;
     try {
-      const batchSize = this.options.batchSize ?? 25;
-      const maxRetries = this.options.maxRetries ?? 8;
-      const items = await this.repository.getPending(batchSize, maxRetries);
-
-      let completed = 0;
-      for (const item of items) {
-        try {
-          await this.transport.push(item);
-          await this.repository.markSynced(item.id);
-          completed += 1;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          await this.repository.markFailed(item.id, message);
-          await new Promise((resolve) => setTimeout(resolve, this.retryPolicy.delayFor(item.retry_count)));
-          break;
-        }
-      }
-      return completed;
+      const result = await this.orchestrator.runOnce();
+      return result.synced;
     } finally {
       this.running = false;
     }
@@ -55,12 +37,21 @@ export class OfflineSyncWorker {
 
   start(intervalMs = 2000): () => void {
     let stopped = false;
-    const tick = async () => {
+
+    const tick = async (): Promise<void> => {
       if (stopped) return;
-      await this.runOnce();
-      if (!stopped) setTimeout(tick, intervalMs);
+      try {
+        await this.runOnce();
+      } finally {
+        if (!stopped) this.timer = setTimeout(() => void tick(), intervalMs);
+      }
     };
+
     void tick();
-    return () => { stopped = true; };
+    return () => {
+      stopped = true;
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = null;
+    };
   }
 }
