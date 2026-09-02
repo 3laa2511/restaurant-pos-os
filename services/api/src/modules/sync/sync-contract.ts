@@ -14,7 +14,7 @@ export interface SyncEnvelope {
 }
 
 export type SyncResult =
-  | { status: 'APPLIED'; operationId: string }
+  | { status: 'ACCEPTED'; operationId: string }
   | { status: 'DUPLICATE'; operationId: string }
   | { status: 'CONFLICT'; operationId: string; reason: string }
   | { status: 'REJECTED'; operationId: string; reason: string };
@@ -26,9 +26,14 @@ export function validateSyncEnvelope(input: SyncEnvelope): void {
   if (!input.entityType.trim() || !input.entityId.trim()) {
     throw new Error('Sync entity is required');
   }
-  if (!input.idempotencyKey.trim()) throw new Error('Idempotency key is required');
+  if (!input.idempotencyKey || input.idempotencyKey.length < 16 || input.idempotencyKey.length > 128) {
+    throw new Error('A valid idempotency key is required');
+  }
   if (!Number.isInteger(input.clientSequence) || input.clientSequence < 1) {
     throw new Error('Client sequence must be a positive integer');
   }
   if (Number.isNaN(Date.parse(input.occurredAt))) throw new Error('Invalid occurredAt');
+  if (!input.payload || typeof input.payload !== 'object' || Array.isArray(input.payload)) {
+    throw new Error('Sync payload must be an object');
+  }
 }
