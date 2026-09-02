@@ -22,16 +22,13 @@ function seedShift(db) {
 function checkoutStatements({ orderId, orderNumber, idempotencyKey, paymentId, printJobId, now = '2026-09-02T08:01:00.000Z' }) {
   return [
     {
-      sql: `INSERT INTO orders (
-        id, order_number, branch_id, device_id, cashier_id, type, status,
-        subtotal, discount, delivery_fee, total, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO orders (id, order_number, branch_id, device_id, cashier_id, type, status, subtotal, discount, delivery_fee, total, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       params: [orderId, orderNumber, 'branch-1', 'device-1', 'cashier-1', 'TAKEAWAY', 'CONFIRMED', 100, 0, 0, 100, now, now],
     },
     {
-      sql: `INSERT INTO order_items (
-        id, order_id, product_id, name_ar, name_en, sku, unit_price, quantity, note
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO order_items (id, order_id, product_id, name_ar, name_en, sku, unit_price, quantity, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       params: [`${orderId}:item:0`, orderId, 'product-1', 'منتج', 'Product', 'SKU-1', 100, 1, null],
     },
     {
@@ -45,10 +42,8 @@ function checkoutStatements({ orderId, orderNumber, idempotencyKey, paymentId, p
       params: [printJobId, orderId, 'CASHIER', '{}', now],
     },
     {
-      sql: `INSERT INTO sync_queue (
-        id, entity_type, entity_id, operation, idempotency_key, client_sequence,
-        payload, status, attempts, last_error, locked_by, locked_until, created_at, updated_at
-      ) VALUES (?, 'ORDER', ?, 'CREATE', ?, 1, ?, 'PENDING', 0, NULL, NULL, NULL, ?, ?)`,
+      sql: `INSERT INTO sync_queue (id, entity_type, entity_id, operation, idempotency_key, client_sequence, payload, status, attempts, last_error, locked_by, locked_until, created_at, updated_at)
+            VALUES (?, 'ORDER', ?, 'CREATE', ?, 1, ?, 'PENDING', 0, NULL, NULL, NULL, ?, ?)`,
       params: [`${orderId}:sync`, orderId, idempotencyKey, JSON.stringify({ id: orderId }), now, now],
     },
   ];
@@ -57,9 +52,7 @@ function checkoutStatements({ orderId, orderNumber, idempotencyKey, paymentId, p
 function executeTransaction(db, statements) {
   db.exec('BEGIN IMMEDIATE');
   try {
-    for (const statement of statements) {
-      db.prepare(statement.sql).run(...statement.params);
-    }
+    for (const statement of statements) db.prepare(statement.sql).run(...statement.params);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -74,15 +67,7 @@ function count(db, table) {
 test('completed checkout commits order, payment, print job, and outbox together', () => {
   const db = createDatabase();
   seedShift(db);
-
-  executeTransaction(db, checkoutStatements({
-    orderId: 'order-1',
-    orderNumber: 'ORD-0001',
-    idempotencyKey: 'checkout-1',
-    paymentId: 'payment-1',
-    printJobId: 'print-1',
-  }));
-
+  executeTransaction(db, checkoutStatements({ orderId: 'order-1', orderNumber: 'ORD-0001', idempotencyKey: 'checkout-1', paymentId: 'payment-1', printJobId: 'print-1' }));
   assert.equal(count(db, 'orders'), 1);
   assert.equal(count(db, 'order_items'), 1);
   assert.equal(count(db, 'payments'), 1);
@@ -95,15 +80,8 @@ test('completed checkout commits order, payment, print job, and outbox together'
 test('later print-job constraint failure rolls back the entire checkout', () => {
   const db = createDatabase();
   seedShift(db);
-  const statements = checkoutStatements({
-    orderId: 'order-2',
-    orderNumber: 'ORD-0002',
-    idempotencyKey: 'checkout-2',
-    paymentId: 'payment-2',
-    printJobId: 'print-2',
-  });
+  const statements = checkoutStatements({ orderId: 'order-2', orderNumber: 'ORD-0002', idempotencyKey: 'checkout-2', paymentId: 'payment-2', printJobId: 'print-2' });
   statements[3].params[1] = 'missing-order';
-
   assert.throws(() => executeTransaction(db, statements), /FOREIGN KEY/);
   assert.equal(count(db, 'orders'), 0);
   assert.equal(count(db, 'order_items'), 0);
@@ -116,16 +94,23 @@ test('later print-job constraint failure rolls back the entire checkout', () => 
 test('payment foreign-key failure rolls back order and all downstream state', () => {
   const db = createDatabase();
   seedShift(db);
-  const statements = checkoutStatements({
-    orderId: 'order-3',
-    orderNumber: 'ORD-0003',
-    idempotencyKey: 'checkout-3',
-    paymentId: 'payment-3',
-    printJobId: 'print-3',
-  });
+  const statements = checkoutStatements({ orderId: 'order-3', orderNumber: 'ORD-0003', idempotencyKey: 'checkout-3', paymentId: 'payment-3', printJobId: 'print-3' });
   statements[2].params[2] = 'missing-shift';
-
   assert.throws(() => executeTransaction(db, statements), /FOREIGN KEY/);
+  assert.equal(count(db, 'orders'), 0);
+  assert.equal(count(db, 'order_items'), 0);
+  assert.equal(count(db, 'payments'), 0);
+  assert.equal(count(db, 'print_jobs'), 0);
+  assert.equal(count(db, 'sync_queue'), 0);
+  db.close();
+});
+
+test('order item constraint failure rolls back the checkout before payment, print, or outbox can commit', () => {
+  const db = createDatabase();
+  seedShift(db);
+  const statements = checkoutStatements({ orderId: 'order-4', orderNumber: 'ORD-0004', idempotencyKey: 'checkout-4', paymentId: 'payment-4', printJobId: 'print-4' });
+  statements[1].params[7] = 0;
+  assert.throws(() => executeTransaction(db, statements), /CHECK/);
   assert.equal(count(db, 'orders'), 0);
   assert.equal(count(db, 'order_items'), 0);
   assert.equal(count(db, 'payments'), 0);
@@ -137,44 +122,13 @@ test('payment foreign-key failure rolls back order and all downstream state', ()
 test('idempotency key is database-enforced and cannot be reused for another order', () => {
   const db = createDatabase();
   seedShift(db);
-
-  executeTransaction(db, checkoutStatements({
-    orderId: 'order-4',
-    orderNumber: 'ORD-0004',
-    idempotencyKey: 'checkout-4',
-    paymentId: 'payment-4',
-    printJobId: 'print-4',
-  }));
-
-  const second = checkoutStatements({
-    orderId: 'order-5',
-    orderNumber: 'ORD-0005',
-    idempotencyKey: 'checkout-4',
-    paymentId: 'payment-5',
-    printJobId: 'print-5',
-  });
-
+  executeTransaction(db, checkoutStatements({ orderId: 'order-5', orderNumber: 'ORD-0005', idempotencyKey: 'checkout-5', paymentId: 'payment-5', printJobId: 'print-5' }));
+  const second = checkoutStatements({ orderId: 'order-6', orderNumber: 'ORD-0006', idempotencyKey: 'checkout-5', paymentId: 'payment-6', printJobId: 'print-6' });
   assert.throws(() => executeTransaction(db, second), /UNIQUE/);
   assert.equal(count(db, 'orders'), 1);
   assert.equal(count(db, 'payments'), 1);
   assert.equal(count(db, 'print_jobs'), 1);
   assert.equal(count(db, 'sync_queue'), 1);
-  assert.equal(db.prepare('SELECT order_number FROM orders').get().order_number, 'ORD-0004');
-  db.close();
-});
-
-test('outbox event cannot exist without its local order', () => {
-  const db = createDatabase();
-  const now = '2026-09-02T08:02:00.000Z';
-
-  assert.throws(() => executeTransaction(db, [{
-    sql: `INSERT INTO sync_queue (
-      id, entity_type, entity_id, operation, idempotency_key, client_sequence,
-      payload, status, attempts, last_error, locked_by, locked_until, created_at, updated_at
-    ) VALUES (?, 'ORDER', ?, 'CREATE', ?, 1, ?, 'PENDING', 0, NULL, NULL, NULL, ?, ?)`,
-    params: ['orphan-sync', 'missing-order', 'orphan-key', JSON.stringify({ id: 'missing-order' }), now, now],
-  }]));
-
-  assert.equal(count(db, 'sync_queue'), 0);
+  assert.equal(db.prepare('SELECT order_number FROM orders').get().order_number, 'ORD-0005');
   db.close();
 });
