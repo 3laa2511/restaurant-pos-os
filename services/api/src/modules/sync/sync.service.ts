@@ -1,56 +1,93 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { SyncQueue } from './sync-queue.js';
+import { PrismaService } from '../../database/prisma.service.js';
 import { SyncEnvelope, SyncResult, validateSyncEnvelope } from './sync-contract.js';
-
-interface StoredOperation {
-  fingerprint: string;
-  result: SyncResult;
-}
 
 @Injectable()
 export class SyncService {
-  private readonly queue = new SyncQueue();
-  private readonly operations = new Map<string, StoredOperation>();
+  constructor(private readonly prisma: PrismaService) {}
 
-  submit(envelope: SyncEnvelope): SyncResult {
+  async submit(envelope: SyncEnvelope): Promise<SyncResult> {
     validateSyncEnvelope(envelope);
 
-    const fingerprint = createHash('sha256')
+    const requestHash = createHash('sha256')
       .update(JSON.stringify(envelope))
       .digest('hex');
 
-    const existing = this.operations.get(envelope.idempotencyKey);
-    if (existing) {
-      if (existing.fingerprint !== fingerprint) {
-        return {
-          status: 'CONFLICT',
-          operationId: existing.result.operationId,
-          reason: 'Idempotency key was reused with a different operation',
-        };
-      }
-      return { status: 'DUPLICATE', operationId: existing.result.operationId };
+    const existing = await this.prisma.syncOperation.findUnique({
+      where: { idempotencyKey: envelope.idempotencyKey },
+    });
+
+    if (existing) return this.resultForExisting(existing, requestHash);
+
+    const operationId = randomUUID();
+    const result: SyncResult = { status: 'ACCEPTED', operationId };
+
+    try {
+      await this.prisma.syncOperation.create({
+        data: {
+          id: randomUUID(),
+          operationId,
+          deviceId: envelope.deviceId,
+          branchId: envelope.branchId,
+          operation: envelope.operation,
+          entityType: envelope.entityType,
+          entityId: envelope.entityId,
+          idempotencyKey: envelope.idempotencyKey,
+          clientSequence: envelope.clientSequence,
+          occurredAt: new Date(envelope.occurredAt),
+          payload: envelope.payload,
+          requestHash,
+          status: 'RECEIVED',
+          result,
+          updatedAt: new Date(),
+        },
+      });
+      return result;
+    } catch {
+      const raced = await this.prisma.syncOperation.findUnique({
+        where: { idempotencyKey: envelope.idempotencyKey },
+      });
+      if (!raced) throw new Error('Sync operation could not be persisted');
+      return this.resultForExisting(raced, requestHash);
+    }
+  }
+
+  async pending(limit = 100) {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
+    return this.prisma.syncOperation.findMany({
+      where: { status: 'RECEIVED' },
+      orderBy: [{ clientSequence: 'asc' }, { createdAt: 'asc' }],
+      take: boundedLimit,
+      select: {
+        operationId: true,
+        deviceId: true,
+        branchId: true,
+        operation: true,
+        entityType: true,
+        entityId: true,
+        idempotencyKey: true,
+        clientSequence: true,
+        occurredAt: true,
+        payload: true,
+        status: true,
+      },
+    });
+  }
+
+  private resultForExisting(existing: { operationId: string; requestHash: string; result: unknown }, requestHash: string): SyncResult {
+    if (existing.requestHash !== requestHash) {
+      return {
+        status: 'CONFLICT',
+        operationId: existing.operationId,
+        reason: 'Idempotency key was reused with a different operation',
+      };
     }
 
-    const result: SyncResult = {
-      status: 'APPLIED',
-      operationId: randomUUID(),
-    };
+    if (existing.result && typeof existing.result === 'object' && 'status' in existing.result) {
+      return existing.result as SyncResult;
+    }
 
-    this.operations.set(envelope.idempotencyKey, { fingerprint, result });
-    this.queue.enqueue(envelope);
-    return result;
-  }
-
-  pending(): readonly SyncEnvelope[] {
-    return this.queue.pending();
-  }
-
-  acknowledge(idempotencyKey: string, result: SyncResult): void {
-    this.queue.acknowledge(idempotencyKey, result);
-    this.operations.set(idempotencyKey, {
-      fingerprint: this.operations.get(idempotencyKey)?.fingerprint ?? '',
-      result,
-    });
+    return { status: 'DUPLICATE', operationId: existing.operationId };
   }
 }
