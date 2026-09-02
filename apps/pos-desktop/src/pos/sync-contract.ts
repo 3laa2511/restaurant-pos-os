@@ -1,17 +1,19 @@
+export type SyncQueueStatus = 'PENDING' | 'SYNCING' | 'SYNCED' | 'FAILED';
+export type SyncOperation = 'CREATE' | 'UPDATE' | 'DELETE';
+
 export interface SyncQueueItem {
   id: string;
-  device_id: string;
-  branch_id: string;
-  operation: string;
   entity_type: string;
   entity_id: string;
+  operation: SyncOperation;
   idempotency_key: string;
   client_sequence: number;
   payload: string;
-  occurred_at: string;
-  status: string;
-  retry_count: number;
+  status: SyncQueueStatus;
+  attempts: number;
   last_error: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SyncTransport {
