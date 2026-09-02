@@ -1,5 +1,15 @@
 export type SyncOperationType = 'CREATE' | 'UPDATE' | 'CANCEL' | 'PAYMENT' | 'SHIFT';
 
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export type JsonObject = { [key: string]: JsonValue };
+
 export interface SyncEnvelope {
   id: string;
   deviceId: string;
@@ -10,7 +20,7 @@ export interface SyncEnvelope {
   idempotencyKey: string;
   clientSequence: number;
   occurredAt: string;
-  payload: Record<string, unknown>;
+  payload: JsonObject;
 }
 
 export type SyncResult =
