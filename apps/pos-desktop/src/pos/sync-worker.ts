@@ -59,18 +59,25 @@ export class OfflineSyncWorker {
   }
 }
 
+function requireNonEmptyString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`Sync payload field ${field} is required`);
+  return value.trim();
+}
+
 export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetch = fetch): SyncTransport {
   const base = apiBaseUrl.replace(/\/$/, '');
   return {
     async push(item: SyncQueueItem): Promise<void> {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
+      const deviceId = requireNonEmptyString(payload.deviceId, 'deviceId');
+      const branchId = requireNonEmptyString(payload.branchId, 'branchId');
       const response = await fetcher(`${base}/api/sync/operations`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           id: item.id,
-          deviceId: payload.deviceId ?? 'unknown-device',
-          branchId: payload.branchId ?? 'unknown-branch',
+          deviceId,
+          branchId,
           operation: item.operation,
           entityType: item.entity_type,
           entityId: item.entity_id,
