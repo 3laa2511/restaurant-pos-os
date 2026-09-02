@@ -40,11 +40,11 @@ export class SyncOrchestrator {
     for (const item of items) {
       try {
         await this.transport.push(item);
-        await this.repository.markSynced(item.id);
+        await this.repository.markSynced(item.id, this.workerId);
         synced += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        await this.repository.markFailed(item.id, message);
+        await this.repository.markFailed(item.id, this.workerId, message);
         failed += 1;
         failedAttempts = item.attempts + 1;
         break;
