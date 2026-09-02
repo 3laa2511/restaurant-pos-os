@@ -28,7 +28,7 @@ jobs:
         run: pnpm --dir services/api typecheck
 
       - name: Test API
-        run: pnpm --dir services/api test -- --runInBand
+        run: pnpm --dir services/api test --runInBand
 
       - name: Typecheck desktop
         run: pnpm --dir apps/pos-desktop typecheck
