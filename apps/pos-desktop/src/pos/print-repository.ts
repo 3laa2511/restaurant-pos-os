@@ -4,6 +4,7 @@ import type { PrintReliabilityRepository, PrintReliabilitySnapshot } from './pri
 
 export interface PrintRepository {
   claimPending(limit: number, maxAttempts: number, workerId: string, leaseMs: number): Promise<PrintJob[]>;
+  renewLease(id: string, workerId: string, leaseMs: number): Promise<boolean>;
   markPrinted(id: string, workerId: string): Promise<void>;
   markFailed(id: string, workerId: string, message: string): Promise<void>;
 }
@@ -64,6 +65,21 @@ export function createSqlitePrintRepository(db: LocalDatabaseBridge): PrintRelia
          ORDER BY created_at ASC`,
         [normalizedWorkerId],
       );
+    },
+
+    renewLease: async (id, workerId, leaseMs) => {
+      const safeLeaseMs = normalizePositiveInteger(leaseMs, 'Print lease duration');
+      const normalizedWorkerId = workerId.trim();
+      if (!normalizedWorkerId) throw new Error('Print worker id is required');
+      const leaseSeconds = Math.max(1, Math.ceil(safeLeaseMs / 1000));
+      const result = await db.query<{ id: string }>(
+        `UPDATE print_jobs
+         SET locked_until = datetime('now', ? || ' seconds'), updated_at = datetime('now')
+         WHERE id = ? AND status = 'PRINTING' AND locked_by = ?
+         RETURNING id`,
+        [leaseSeconds, id, normalizedWorkerId],
+      );
+      return result.length === 1;
     },
 
     markPrinted: async (id, workerId) => {
