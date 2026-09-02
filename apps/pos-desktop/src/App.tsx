@@ -5,6 +5,7 @@ import { categories, demoProducts, searchProducts } from './pos/catalog.js';
 import { addProduct, calculateCart, emptyCart, removeProduct, setQuantity } from './pos/cart.js';
 import { confirmOrder, createOrder } from './pos/order.js';
 import { createPrintJob } from './pos/print-job.js';
+import { createPrintWorkerRuntime } from './pos/print-worker.js';
 import { createDatabaseBridge } from './pos/tauri-bridge.js';
 import { persistCompletedCheckout } from './pos/sqlite-checkout.js';
 import { nextDeviceSequence } from './pos/sqlite-sequence.js';
@@ -56,9 +57,15 @@ export function App() {
 
   useEffect(() => {
     let active = true;
+    let printRuntime: ReturnType<typeof createPrintWorkerRuntime> | null = null;
     void (async () => {
       try {
         await db.initialize();
+        if (!active) return;
+
+        // Printing is a background concern: checkout only persists durable jobs and never waits for a printer.
+        printRuntime = createPrintWorkerRuntime({ db, invoke, intervalMs: 1000, workerId: `print-worker:${DEVICE_ID}` });
+
         const existing = await getOpenShift(db, { branchId: BRANCH_ID, deviceId: DEVICE_ID, cashierId: CASHIER_ID });
         if (active) setShift(existing);
       } catch (error) {
@@ -67,7 +74,10 @@ export function App() {
         if (active) setShiftLoading(false);
       }
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+      printRuntime?.stop();
+    };
   }, []);
 
   function resetCheckoutIdentity(): void {
