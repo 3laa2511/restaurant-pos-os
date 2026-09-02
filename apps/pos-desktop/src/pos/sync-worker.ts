@@ -39,7 +39,7 @@ export class OfflineSyncWorker {
     try {
       const result = await this.orchestrator.runOnce();
       if (result.failedAttempts !== null) {
-        await new Promise((resolve) => setTimeout(resolve, this.retryPolicy.delayFor(result.failedAttempts!)));
+        await new Promise((resolve) => setTimeout(resolve, this.retryPolicy.delayFor(result.failedAttempts)));
       }
       return result.synced;
     } finally {
@@ -64,7 +64,7 @@ export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetc
   return {
     async push(item: SyncQueueItem): Promise<void> {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
-      const response = await fetcher(`${base}/sync/operations`, {
+      const response = await fetcher(`${base}/api/sync/operations`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -76,7 +76,7 @@ export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetc
           entityId: item.entity_id,
           idempotencyKey: item.idempotency_key,
           clientSequence: item.client_sequence,
-          occurredAt: payload.occurredAt ?? item.created_at,
+          occurredAt: payload.createdAt ?? item.created_at,
           payload,
         }),
       });
