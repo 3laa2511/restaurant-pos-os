@@ -3,7 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "generate": "prisma generate --config prisma.config.ts",
+    "typecheck": "pnpm generate && tsc --noEmit",
     "lint": "eslint .",
     "test": "jest"
   },
@@ -16,6 +17,7 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
+    "@jest/globals": "^30.0.5",
     "@nestjs/cli": "^11.0.10",
     "@types/node": "^24.3.0",
     "eslint": "^9.34.0",
