@@ -22,7 +22,7 @@ struct SqlStatement {
 }
 
 const SCHEMA: &str = include_str!("../../src/pos/sqlite-schema.sql");
-const CURRENT_SCHEMA_VERSION: i64 = 3;
+const CURRENT_SCHEMA_VERSION: i64 = 4;
 
 fn column_exists(connection: &Connection, table: &str, column: &str) -> SqlResult<bool> {
     let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
@@ -55,8 +55,23 @@ fn migrate_schema(connection: &Connection) -> SqlResult<()> {
             next_sequence INTEGER NOT NULL DEFAULT 0 CHECK(next_sequence >= 0),
             updated_at TEXT NOT NULL
          );
-         CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until);
-         INSERT INTO schema_meta(key, value) VALUES ('schema_version', '3')
+         CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until);",
+    )?;
+
+    if !column_exists(connection, "print_jobs", "locked_by")? {
+        connection.execute("ALTER TABLE print_jobs ADD COLUMN locked_by TEXT", [])?;
+    }
+    if !column_exists(connection, "print_jobs", "locked_until")? {
+        connection.execute("ALTER TABLE print_jobs ADD COLUMN locked_until TEXT", [])?;
+    }
+    if !column_exists(connection, "print_jobs", "updated_at")? {
+        connection.execute("ALTER TABLE print_jobs ADD COLUMN updated_at TEXT", [])?;
+        connection.execute("UPDATE print_jobs SET updated_at = created_at WHERE updated_at IS NULL", [])?;
+    }
+
+    connection.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_print_jobs_lease ON print_jobs(status, locked_until);
+         INSERT INTO schema_meta(key, value) VALUES ('schema_version', '4')
          ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
     )?;
     connection.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
