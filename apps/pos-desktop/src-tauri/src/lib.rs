@@ -58,6 +58,12 @@ fn migrate_schema(connection: &Connection) -> SqlResult<()> {
          CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until);",
     )?;
 
+    if !column_exists(connection, "print_jobs", "order_number")? {
+        connection.execute("ALTER TABLE print_jobs ADD COLUMN order_number TEXT NOT NULL DEFAULT ''", [])?;
+    }
+    if !column_exists(connection, "print_jobs", "copies")? {
+        connection.execute("ALTER TABLE print_jobs ADD COLUMN copies INTEGER NOT NULL DEFAULT 1", [])?;
+    }
     if !column_exists(connection, "print_jobs", "locked_by")? {
         connection.execute("ALTER TABLE print_jobs ADD COLUMN locked_by TEXT", [])?;
     }
@@ -70,7 +76,8 @@ fn migrate_schema(connection: &Connection) -> SqlResult<()> {
     }
 
     connection.execute_batch(
-        "CREATE INDEX IF NOT EXISTS idx_print_jobs_lease ON print_jobs(status, locked_until);
+        "CREATE INDEX IF NOT EXISTS idx_print_jobs_status_created ON print_jobs(status, created_at);
+         CREATE INDEX IF NOT EXISTS idx_print_jobs_lease ON print_jobs(status, locked_until);
          INSERT INTO schema_meta(key, value) VALUES ('schema_version', '4')
          ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
     )?;
