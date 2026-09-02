@@ -1,15 +1,17 @@
 import type { PrintJob } from './print-job.js';
 import type { PrintRepository } from './print-repository.js';
 import { createSqlitePrintRepository } from './print-repository.js';
-import type { LocalDatabaseBridge, TauriInvoke } from './tauri-bridge.js';
+import type { LocalDatabaseBridge } from './tauri-bridge.js';
 
 export interface PrintTransport {
   print(job: PrintJob): Promise<void>;
 }
 
-export function createTauriPrintTransport(invoke: TauriInvoke): PrintTransport {
+type PrintInvoker = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+
+export function createTauriPrintTransport(invoke: PrintInvoker): PrintTransport {
   return {
-    print: (job) => invoke.invoke('print_job', {
+    print: (job) => invoke('print_job', {
       payload: job.payload,
       copies: job.copies,
       station: job.station,
@@ -98,7 +100,7 @@ export interface PrintWorkerRuntime {
 
 export interface PrintWorkerRuntimeOptions {
   db: LocalDatabaseBridge;
-  invoke: TauriInvoke;
+  invoke: PrintInvoker;
   intervalMs?: number;
   workerId?: string;
 }
