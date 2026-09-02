@@ -1,6 +1,7 @@
 import { SyncOrchestrator } from './sync-orchestrator.js';
 import type { SyncRepository } from './sync-repository.js';
 import type { SyncTransport } from './sync-contract.js';
+import { ExponentialRetryPolicy } from './retry-policy.js';
 
 export type { SyncQueueItem, SyncTransport } from './sync-contract.js';
 
@@ -15,13 +16,14 @@ export class OfflineSyncWorker {
   private running = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly orchestrator: SyncOrchestrator;
+  private readonly retryPolicy: ExponentialRetryPolicy;
 
-  constructor(
-    repository: SyncRepository,
-    transport: SyncTransport,
-    private readonly options: SyncWorkerOptions = {},
-  ) {
+  constructor(repository: SyncRepository, transport: SyncTransport, options: SyncWorkerOptions = {}) {
     this.orchestrator = new SyncOrchestrator(repository, transport, options);
+    this.retryPolicy = new ExponentialRetryPolicy({
+      baseDelayMs: options.baseDelayMs,
+      maxDelayMs: options.maxDelayMs,
+    });
   }
 
   async runOnce(): Promise<number> {
@@ -29,6 +31,9 @@ export class OfflineSyncWorker {
     this.running = true;
     try {
       const result = await this.orchestrator.runOnce();
+      if (result.failedRetryCount !== null) {
+        await new Promise((resolve) => setTimeout(resolve, this.retryPolicy.delayFor(result.failedRetryCount)));
+      }
       return result.synced;
     } finally {
       this.running = false;
