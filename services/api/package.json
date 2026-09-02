@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "generate": "prisma generate --config prisma.config.ts",
+    "generate": "prisma generate --schema ../../prisma/schema.prisma",
     "typecheck": "pnpm generate && tsc --noEmit",
     "lint": "eslint .",
     "test": "jest"
