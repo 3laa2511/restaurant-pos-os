@@ -1,5 +1,6 @@
 import type { LocalDatabaseBridge } from './tauri-bridge.js';
 import type { PrintJob } from './print-job.js';
+import type { PrintReliabilityRepository, PrintReliabilitySnapshot } from './print-reliability.js';
 
 export interface PrintRepository {
   claimPending(limit: number, maxAttempts: number, workerId: string, leaseMs: number): Promise<PrintJob[]>;
@@ -12,7 +13,7 @@ function normalizePositiveInteger(value: number, name: string): number {
   return value;
 }
 
-export function createSqlitePrintRepository(db: LocalDatabaseBridge): PrintRepository {
+export function createSqlitePrintRepository(db: LocalDatabaseBridge): PrintReliabilityRepository {
   return {
     claimPending: async (limit, maxAttempts, workerId, leaseMs) => {
       const safeLimit = normalizePositiveInteger(limit, 'Print claim limit');
@@ -88,6 +89,35 @@ export function createSqlitePrintRepository(db: LocalDatabaseBridge): PrintRepos
         [message.slice(0, 2000), id, workerId],
       );
       if (result.length !== 1) throw new Error('Print job ownership lost before failure recording');
+    },
+
+    recoverExpired: async () => {
+      const result = await db.query<{ id: string }>(
+        `UPDATE print_jobs
+         SET status = 'PENDING', locked_by = NULL, locked_until = NULL,
+             updated_at = datetime('now')
+         WHERE status = 'PRINTING'
+           AND locked_until IS NOT NULL
+           AND locked_until <= datetime('now')
+         RETURNING id`,
+      );
+      return result.length;
+    },
+
+    getSnapshot: async (): Promise<PrintReliabilitySnapshot> => {
+      const rows = await db.query<{ status: PrintReliabilitySnapshot[keyof PrintReliabilitySnapshot]; count: number }>(
+        `SELECT status, COUNT(*) AS count
+         FROM print_jobs
+         GROUP BY status`,
+      );
+      const snapshot: PrintReliabilitySnapshot = { pending: 0, printing: 0, printed: 0, failed: 0 };
+      for (const row of rows) {
+        if (row.status === 'PENDING') snapshot.pending = row.count;
+        else if (row.status === 'PRINTING') snapshot.printing = row.count;
+        else if (row.status === 'PRINTED') snapshot.printed = row.count;
+        else if (row.status === 'FAILED') snapshot.failed = row.count;
+      }
+      return snapshot;
     },
   };
 }
