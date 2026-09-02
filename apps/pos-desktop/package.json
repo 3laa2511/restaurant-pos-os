@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
+    "test": "node --test tests/sync-queue.test.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
