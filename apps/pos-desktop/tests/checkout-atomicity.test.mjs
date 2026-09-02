@@ -37,9 +37,9 @@ function checkoutStatements({ orderId, orderNumber, idempotencyKey, paymentId, p
       params: [paymentId, orderId, 'shift-1', 'CASH', 100, null, now],
     },
     {
-      sql: `INSERT INTO print_jobs (id, order_id, station, payload, status, attempts, last_error, created_at)
-            VALUES (?, ?, ?, ?, 'PENDING', 0, NULL, ?)`,
-      params: [printJobId, orderId, 'CASHIER', '{}', now],
+      sql: `INSERT INTO print_jobs (id, order_id, order_number, station, copies, payload, status, attempts, last_error, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 1, ?, 'PENDING', 0, NULL, ?, ?)`,
+      params: [printJobId, orderId, orderNumber, 'CASHIER', '{}', now, now],
     },
     {
       sql: `INSERT INTO sync_queue (id, entity_type, entity_id, operation, idempotency_key, client_sequence, payload, status, attempts, last_error, locked_by, locked_until, created_at, updated_at)
@@ -73,6 +73,8 @@ test('completed checkout commits order, payment, print job, and outbox together'
   assert.equal(count(db, 'payments'), 1);
   assert.equal(count(db, 'print_jobs'), 1);
   assert.equal(count(db, 'sync_queue'), 1);
+  assert.equal(db.prepare('SELECT order_number, copies FROM print_jobs').get().order_number, 'ORD-0001');
+  assert.equal(db.prepare('SELECT order_number, copies FROM print_jobs').get().copies, 1);
   assert.equal(db.prepare('SELECT entity_id FROM sync_queue WHERE idempotency_key = ?').get('checkout-1').entity_id, 'order-1');
   db.close();
 });

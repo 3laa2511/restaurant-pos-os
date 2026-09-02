@@ -189,6 +189,76 @@ fn db_transaction(state: State<'_, DbState>, statements: Vec<SqlStatement>) -> R
     tx.commit().map_err(|e| e.to_string())
 }
 
+fn printer_name_for_station(station: &str) -> Option<String> {
+    let key = match station {
+        "KITCHEN" => "POS_PRINTER_KITCHEN",
+        "BAR" => "POS_PRINTER_BAR",
+        "CUSTOMER" => "POS_PRINTER_CUSTOMER",
+        _ => "POS_PRINTER",
+    };
+    std::env::var(key).ok().filter(|value| !value.trim().is_empty()).or_else(|| {
+        std::env::var("POS_PRINTER").ok().filter(|value| !value.trim().is_empty())
+    })
+}
+
+#[tauri::command]
+fn print_job(payload: String, copies: i64, station: String, order_number: String) -> Result<(), String> {
+    if payload.is_empty() || payload.len() > 1_000_000 {
+        return Err("print payload must be between 1 byte and 1 MB".to_string());
+    }
+    if !(1..=20).contains(&copies) {
+        return Err("print copies must be between 1 and 20".to_string());
+    }
+
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let safe_order = order_number.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').take(40).collect::<String>();
+    let filename = format!("restaurant-pos-{}-{}.txt", safe_order, stamp);
+    let path = std::env::temp_dir().join(filename);
+    std::fs::write(&path, payload.as_bytes()).map_err(|e| format!("cannot spool print job: {e}"))?;
+
+    let printer = printer_name_for_station(&station);
+    let result = print_file(&path, copies, printer.as_deref());
+    let _ = std::fs::remove_file(&path);
+    result
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn print_file(path: &std::path::Path, copies: i64, printer: Option<&str>) -> Result<(), String> {
+    let mut command = std::process::Command::new("lp");
+    command.arg("-n").arg(copies.to_string());
+    if let Some(printer) = printer {
+        command.arg("-d").arg(printer);
+    }
+    let output = command.arg(path).output().map_err(|e| format!("printer command unavailable: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!("printer rejected job: {}", String::from_utf8_lossy(&output.stderr).trim()))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn print_file(path: &std::path::Path, copies: i64, printer: Option<&str>) -> Result<(), String> {
+    if printer.is_some() {
+        return Err("station-specific Windows printers are not configured yet".to_string());
+    }
+    for _ in 0..copies {
+        let path_text = path.to_string_lossy().replace('\\', "\\\\").replace('\"', "\\\"");
+        let script = format!("Start-Process -FilePath \"{}\" -Verb Print -Wait", path_text);
+        let output = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .map_err(|e| format!("PowerShell print command unavailable: {e}"))?;
+        if !output.status.success() {
+            return Err(format!("printer rejected job: {}", String::from_utf8_lossy(&output.stderr).trim()));
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn database_health(state: State<'_, DbState>) -> Health {
     let initialized = state.0.lock().ok().and_then(|g| g.as_ref().map(|_| true)).unwrap_or(false);
@@ -205,7 +275,7 @@ pub fn run() {
             *state.0.lock().map_err(|_| "database lock poisoned")? = Some(connection);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![db_initialize, db_execute, db_query, db_transaction, database_health])
+        .invoke_handler(tauri::generate_handler![db_initialize, db_execute, db_query, db_transaction, print_job, database_health])
         .run(tauri::generate_context!())
         .expect("error while running restaurant POS");
 }
