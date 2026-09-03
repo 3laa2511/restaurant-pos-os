@@ -1,3 +1,6 @@
+import { evaluateDiscountRule } from './discount-rules.js';
+import type { DiscountContext, DiscountRule } from './discount-rules.js';
+
 export interface PricingModifier {
   id: string;
   name: string;
@@ -9,6 +12,7 @@ export interface PricingItem {
   productId: string;
   quantity: number;
   unitPrice: number;
+  categoryId?: string;
   modifiers?: PricingModifier[];
   /** Backward-compatible aggregate modifier amount per item. */
   modifierTotal?: number;
@@ -36,6 +40,21 @@ export interface OrderTotals {
   total: number;
 }
 
+export interface DiscountRulePricingInput {
+  rule: DiscountRule;
+  orderType: DiscountContext['orderType'];
+  /** Required when a rule has product/category eligibility filters. */
+  categoryIdsByProductId?: Readonly<Record<string, string>>;
+  approvalGranted?: boolean;
+}
+
+export interface DiscountRulePricingResult {
+  totals: OrderTotals;
+  ruleId: string;
+  discount: number;
+  requiresApproval: boolean;
+}
+
 function assertMoney(value: number, field: string): void {
   if (!Number.isFinite(value) || value < 0) throw new Error(`${field} must be a finite non-negative number`);
 }
@@ -44,13 +63,8 @@ function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-/**
- * Deterministic order pricing. All intermediate monetary values are rounded to
- * two decimals, preventing floating-point residue from leaking into totals.
- */
-export function calculateOrderPricing(items: readonly PricingItem[], rules: PricingRules = {}): OrderTotals {
+function calculateSubtotal(items: readonly PricingItem[]): number {
   let subtotal = 0;
-
   for (const item of items) {
     if (!Number.isInteger(item.quantity) || item.quantity < 1) throw new Error('Invalid quantity');
     assertMoney(item.unitPrice, 'unitPrice');
@@ -66,7 +80,15 @@ export function calculateOrderPricing(items: readonly PricingItem[], rules: Pric
 
     subtotal += (item.unitPrice + modifierTotal) * item.quantity;
   }
-  subtotal = roundMoney(subtotal);
+  return roundMoney(subtotal);
+}
+
+/**
+ * Deterministic order pricing. All intermediate monetary values are rounded to
+ * two decimals, preventing floating-point residue from leaking into totals.
+ */
+export function calculateOrderPricing(items: readonly PricingItem[], rules: PricingRules = {}): OrderTotals {
+  const subtotal = calculateSubtotal(items);
 
   let discount = 0;
   if (rules.discount?.kind === 'PERCENT') {
@@ -101,6 +123,50 @@ export function calculateOrderPricing(items: readonly PricingItem[], rules: Pric
     serviceFee,
     deliveryFee: roundMoney(deliveryFee),
     total: roundMoney(taxable + tax + serviceFee + deliveryFee),
+  };
+}
+
+/**
+ * Business-rule pricing entry point. The discount amount is derived from the
+ * server-side rule and order context; callers cannot choose an arbitrary amount.
+ */
+export function calculateOrderPricingWithDiscountRule(
+  items: readonly PricingItem[],
+  input: DiscountRulePricingInput,
+  rules: Omit<PricingRules, 'discount'> = {},
+): DiscountRulePricingResult {
+  const subtotal = calculateSubtotal(items);
+  const contextItems = items.map((item) => ({
+    productId: item.productId,
+    categoryId: item.categoryId ?? input.categoryIdsByProductId?.[item.productId] ?? '',
+    quantity: item.quantity,
+    lineTotal: roundMoney((item.unitPrice + (item.modifierTotal ?? 0) + (item.modifiers ?? []).reduce((sum, modifier) => sum + modifier.unitPrice * (modifier.quantity ?? 1), 0)) * item.quantity),
+  }));
+
+  if ((input.rule.productIds?.length || input.rule.categoryIds?.length) && contextItems.some((item) => !item.categoryId)) {
+    throw new Error('Category identity is required for discount eligibility evaluation');
+  }
+
+  const decision = evaluateDiscountRule(input.rule, {
+    orderType: input.orderType,
+    subtotal,
+    items: contextItems,
+  });
+  if (!decision.eligible) throw new Error(`Discount rule is not eligible: ${decision.reason}`);
+  if (decision.requiresApproval && !input.approvalGranted) throw new Error('Discount approval is required');
+
+  // The rule engine returns the monetary discount. Feed that amount into the
+  // pricing engine as a fixed adjustment so PERCENT rules are not interpreted twice.
+  const totals = calculateOrderPricing(items, {
+    ...rules,
+    discount: { kind: 'FIXED', value: decision.discount },
+  });
+
+  return {
+    totals,
+    ruleId: decision.ruleId,
+    discount: decision.discount,
+    requiresApproval: decision.requiresApproval,
   };
 }
 
