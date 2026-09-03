@@ -1,3 +1,4 @@
+import { describe, expect, it } from '@jest/globals';
 import { calculateOrderPricing } from './order-pricing.js';
 
 describe('calculateOrderPricing', () => {
