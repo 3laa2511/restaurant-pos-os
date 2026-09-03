@@ -3,6 +3,14 @@ import { calculatePricing } from './pricing.js';
 
 export type OrderStatus = 'DRAFT' | 'CONFIRMED' | 'SENT_TO_KITCHEN' | 'PAID' | 'CANCELLED';
 
+export interface OrderItemModifierSnapshot {
+  groupId: string;
+  optionId: string;
+  nameAr: string;
+  nameEn: string;
+  priceDelta: number;
+}
+
 export interface OrderItemSnapshot {
   productId: string;
   nameAr: string;
@@ -11,6 +19,7 @@ export interface OrderItemSnapshot {
   unitPrice: number;
   quantity: number;
   note: string | null;
+  modifiers: OrderItemModifierSnapshot[];
 }
 
 export interface Order {
@@ -35,8 +44,16 @@ export function createOrder(input: { id: string; orderNumber: string; branchId: 
   if (!input.id || !input.orderNumber || !input.branchId || !input.deviceId || !input.cashierId) throw new Error('Order identity is required');
   if (!input.cart.items.length) throw new Error('Cannot create an empty order');
 
+  const items = input.cart.items.map((item) => {
+    const modifiers = (item.modifiers ?? []).map((modifier) => {
+      if (!modifier.groupId || !modifier.optionId) throw new Error('Modifier selection identity is required');
+      return modifier;
+    });
+    return { item, modifiers };
+  });
+
   const pricing = calculatePricing({
-    items: input.cart.items.map((item) => ({ unitPrice: item.product.price, quantity: item.quantity })),
+    items: items.map(({ item }) => ({ unitPrice: item.product.price, quantity: item.quantity })),
     discount: input.cart.discount > 0 ? { kind: 'FIXED', value: input.cart.discount } : null,
     deliveryFee: input.cart.deliveryFee,
   });
@@ -49,7 +66,16 @@ export function createOrder(input: { id: string; orderNumber: string; branchId: 
     cashierId: input.cashierId,
     type: input.cart.orderType,
     status: 'DRAFT',
-    items: input.cart.items.map((item) => ({ productId: item.product.id, nameAr: item.product.nameAr, nameEn: item.product.nameEn, sku: item.product.sku, unitPrice: item.product.price, quantity: item.quantity, note: item.note || null })),
+    items: items.map(({ item, modifiers }) => ({
+      productId: item.product.id,
+      nameAr: item.product.nameAr,
+      nameEn: item.product.nameEn,
+      sku: item.product.sku,
+      unitPrice: item.product.price,
+      quantity: item.quantity,
+      note: item.note || null,
+      modifiers: modifiers.map(({ groupId, optionId }) => ({ groupId, optionId, nameAr: optionId, nameEn: optionId, priceDelta: 0 })),
+    })),
     subtotal: pricing.subtotal,
     discount: pricing.discount,
     tax: pricing.tax,
