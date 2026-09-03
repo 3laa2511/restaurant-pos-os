@@ -47,9 +47,14 @@ function resolveModifiers(itemModifiers: NonNullable<CartState['items'][number][
   for (const selection of itemModifiers) {
     const group = groups.get(selection.groupId);
     if (!group) throw new Error(`Modifier group ${selection.groupId} is unavailable`);
+    if (!Number.isInteger(group.minSelections) || !Number.isInteger(group.maxSelections) || group.minSelections < 0 || group.maxSelections < group.minSelections) {
+      throw new Error(`Modifier group ${group.id} has invalid selection limits`);
+    }
     const option = group.options.find((candidate) => candidate.id === selection.optionId && candidate.active);
     if (!option) throw new Error(`Modifier option ${selection.optionId} is unavailable`);
+    if (!Number.isFinite(option.priceDelta) || option.priceDelta < 0) throw new Error(`Modifier option ${option.id} has invalid price`);
     const selections = selectionsByGroup.get(group.id) ?? new Set<string>();
+    if (selections.has(option.id)) throw new Error(`Modifier option ${option.id} was selected more than once`);
     selections.add(option.id);
     selectionsByGroup.set(group.id, selections);
   }
