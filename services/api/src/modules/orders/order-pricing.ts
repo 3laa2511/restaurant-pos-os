@@ -175,8 +175,6 @@ export function calculateOrderPricingWithDiscountRule(
   if (!decision.eligible) throw new Error(`Discount rule is not eligible: ${decision.reason}`);
   if (decision.requiresApproval && !input.approvalGranted) throw new Error('Discount approval is required');
 
-  // The rule engine returns the monetary discount. Feed that amount into the
-  // pricing engine as a fixed adjustment so PERCENT rules are not interpreted twice.
   const totals = calculateOrderPricing(items, {
     ...rules,
     discount: { kind: 'FIXED', value: decision.discount },
@@ -198,21 +196,21 @@ export function calculateOrderPricingWithPolicies(
   items: readonly PricingItem[],
   input: PolicyPricingInput,
 ): PolicyPricingResult {
-  const base = input.discountRule
-    ? calculateOrderPricingWithDiscountRule(items, input.discountRule, { deliveryFee: input.deliveryFee })
+  const baseTotals = input.discountRule
+    ? calculateOrderPricingWithDiscountRule(items, input.discountRule, { deliveryFee: input.deliveryFee }).totals
     : calculateOrderPricing(items, { discount: input.discount, deliveryFee: input.deliveryFee });
 
   const policy = evaluateTaxFeePolicies(
-    { orderType: input.orderType, taxableAmount: base.totable ?? base.totable },
+    { orderType: input.orderType, taxableAmount: baseTotals.taxable },
     input.taxRule,
     input.serviceFeeRule,
   );
 
   const totals: OrderTotals = {
-    ...base.totals,
+    ...baseTotals,
     tax: policy.tax,
     serviceFee: policy.serviceFee,
-    total: roundMoney(base.totals.taxable + policy.tax + policy.serviceFee + base.totals.deliveryFee),
+    total: roundMoney(baseTotals.taxable + policy.tax + policy.serviceFee + baseTotals.deliveryFee),
   };
 
   return {
@@ -220,7 +218,7 @@ export function calculateOrderPricingWithPolicies(
     taxRuleId: policy.taxRuleId,
     serviceFeeRuleId: policy.serviceFeeRuleId,
     discountRuleId: input.discountRule?.rule.id ?? null,
-    requiresDiscountApproval: base.requiresApproval ?? false,
+    requiresDiscountApproval: input.discountRule?.approvalGranted === false ? true : false,
   };
 }
 
