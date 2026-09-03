@@ -1,5 +1,7 @@
 import { evaluateDiscountRule } from './discount-rules.js';
 import type { DiscountContext, DiscountRule } from './discount-rules.js';
+import { evaluateTaxFeePolicies } from './tax-fee-policy.js';
+import type { ServiceFeeRule, TaxFeeContext, TaxRule } from './tax-fee-policy.js';
 
 export interface PricingModifier {
   id: string;
@@ -43,7 +45,7 @@ export interface OrderTotals {
 export interface DiscountRulePricingInput {
   rule: DiscountRule;
   orderType: DiscountContext['orderType'];
-  /** Required when a rule has product/category eligibility filters. */
+  /** Required when a rule has category eligibility filters. */
   categoryIdsByProductId?: Readonly<Record<string, string>>;
   approvalGranted?: boolean;
 }
@@ -53,6 +55,23 @@ export interface DiscountRulePricingResult {
   ruleId: string;
   discount: number;
   requiresApproval: boolean;
+}
+
+export interface PolicyPricingInput {
+  orderType: TaxFeeContext['orderType'];
+  taxRule?: TaxRule;
+  serviceFeeRule?: ServiceFeeRule;
+  discountRule?: DiscountRulePricingInput;
+  discount?: Discount;
+  deliveryFee?: number;
+}
+
+export interface PolicyPricingResult {
+  totals: OrderTotals;
+  taxRuleId: string | null;
+  serviceFeeRuleId: string | null;
+  discountRuleId: string | null;
+  requiresDiscountApproval: boolean;
 }
 
 function assertMoney(value: number, field: string): void {
@@ -143,7 +162,8 @@ export function calculateOrderPricingWithDiscountRule(
     lineTotal: roundMoney((item.unitPrice + (item.modifierTotal ?? 0) + (item.modifiers ?? []).reduce((sum, modifier) => sum + modifier.unitPrice * (modifier.quantity ?? 1), 0)) * item.quantity),
   }));
 
-  if ((input.rule.productIds?.length || input.rule.categoryIds?.length) && contextItems.some((item) => !item.categoryId)) {
+  const hasCategoryFilter = (input.rule.categoryIds?.length ?? 0) > 0;
+  if (hasCategoryFilter && contextItems.some((item) => !item.categoryId)) {
     throw new Error('Category identity is required for discount eligibility evaluation');
   }
 
@@ -167,6 +187,40 @@ export function calculateOrderPricingWithDiscountRule(
     ruleId: decision.ruleId,
     discount: decision.discount,
     requiresApproval: decision.requiresApproval,
+  };
+}
+
+/**
+ * Production pricing entry point using server-owned discount, tax and service
+ * fee policies. Legacy PricingRules remains available for compatibility.
+ */
+export function calculateOrderPricingWithPolicies(
+  items: readonly PricingItem[],
+  input: PolicyPricingInput,
+): PolicyPricingResult {
+  const base = input.discountRule
+    ? calculateOrderPricingWithDiscountRule(items, input.discountRule, { deliveryFee: input.deliveryFee })
+    : calculateOrderPricing(items, { discount: input.discount, deliveryFee: input.deliveryFee });
+
+  const policy = evaluateTaxFeePolicies(
+    { orderType: input.orderType, taxableAmount: base.totable ?? base.totable },
+    input.taxRule,
+    input.serviceFeeRule,
+  );
+
+  const totals: OrderTotals = {
+    ...base.totals,
+    tax: policy.tax,
+    serviceFee: policy.serviceFee,
+    total: roundMoney(base.totals.taxable + policy.tax + policy.serviceFee + base.totals.deliveryFee),
+  };
+
+  return {
+    totals,
+    taxRuleId: policy.taxRuleId,
+    serviceFeeRuleId: policy.serviceFeeRuleId,
+    discountRuleId: input.discountRule?.rule.id ?? null,
+    requiresDiscountApproval: base.requiresApproval ?? false,
   };
 }
 
