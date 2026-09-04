@@ -1,4 +1,5 @@
-import { PERMISSIONS, PermissionCode, ROLE_CODES, RoleCode } from './rbac.constants.js';
+import { PERMISSIONS, ROLE_CODES } from './rbac.constants.js';
+import type { PermissionCode, RoleCode } from './rbac.constants.js';
 
 const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
   [ROLE_CODES.CASHIER]: [
