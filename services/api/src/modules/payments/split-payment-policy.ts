@@ -27,6 +27,10 @@ function assertMoney(value: number, field: string, allowZero = false): void {
   if (!Number.isFinite(value) || value < 0 || (!allowZero && value === 0)) {
     throw new Error(`${field} must be ${allowZero ? 'non-negative' : 'positive'}`);
   }
+  const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+  if (Math.abs(value - rounded) > 1e-9) {
+    throw new Error(`${field} must have at most 2 decimal places`);
+  }
 }
 
 function roundMoney(value: number): number {
