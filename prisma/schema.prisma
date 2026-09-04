@@ -31,6 +31,7 @@ model Branch {
   shifts Shift[]
   sessions Session[]
   cashDrawers CashDrawer[]
+  cashDrawerMovements CashDrawerMovement[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -90,6 +91,7 @@ model Device {
   user User? @relation(fields: [userId], references: [id])
   shifts Shift[]
   cashDrawer CashDrawer?
+  cashDrawerMovements CashDrawerMovement[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
