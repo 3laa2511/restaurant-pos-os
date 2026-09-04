@@ -7,78 +7,15 @@ datasource db {
   provider = "postgresql"
 }
 
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
-}
-
-enum OrderSource {
-  POS
-  CALL_CENTER
-  MOBILE
-  WEB
-  QR
-  AGGREGATOR
-}
-
-enum OrderType {
-  DINE_IN
-  TAKEAWAY
-  DELIVERY
-}
-
-enum OrderStatus {
-  DRAFT
-  CONFIRMED
-  SENT_TO_KITCHEN
-  PREPARING
-  READY
-  ASSIGNED
-  OUT_FOR_DELIVERY
-  DELIVERED
-  CLOSED
-  CANCELLED
-  VOIDED
-  REFUNDED
-  FAILED
-}
-
-enum PaymentStatus {
-  PENDING
-  PAID
-  PARTIALLY_REFUNDED
-  REFUNDED
-  VOIDED
-  FAILED
-}
-
-enum PaymentAdjustmentType {
-  REFUND
-  VOID
-}
-
-enum ShiftStatus {
-  OPEN
-  CLOSED
-}
-
-enum DeviceStatus {
-  ACTIVE
-  INACTIVE
-  BLOCKED
-}
-
-enum RoleCode {
-  CASHIER
-  CALL_CENTER_OPERATOR
-  CALL_CENTER_SUPERVISOR
-  KITCHEN
-  DISPATCHER
-  BRANCH_MANAGER
-  CENTRAL_ADMIN
-  OWNER
-}
+enum UserStatus { ACTIVE INACTIVE SUSPENDED }
+enum OrderSource { POS CALL_CENTER MOBILE WEB QR AGGREGATOR }
+enum OrderType { DINE_IN TAKEAWAY DELIVERY }
+enum OrderStatus { DRAFT CONFIRMED SENT_TO_KITCHEN PREPARING READY ASSIGNED OUT_FOR_DELIVERY DELIVERED CLOSED CANCELLED VOIDED REFUNDED FAILED }
+enum PaymentStatus { PENDING PAID PARTIALLY_REFUNDED REFUNDED VOIDED FAILED }
+enum PaymentAdjustmentType { REFUND VOID }
+enum ShiftStatus { OPEN CLOSED }
+enum DeviceStatus { ACTIVE INACTIVE BLOCKED }
+enum RoleCode { CASHIER CALL_CENTER_OPERATOR CALL_CENTER_SUPERVISOR KITCHEN DISPATCHER BRANCH_MANAGER CENTRAL_ADMIN OWNER }
 
 model Branch {
   id String @id @default(cuid())
@@ -147,6 +84,7 @@ model Device {
   branch Branch @relation(fields: [branchId], references: [id])
   userId String?
   user User? @relation(fields: [userId], references: [id])
+  shifts Shift[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -297,6 +235,8 @@ model Shift {
   branch Branch @relation(fields: [branchId], references: [id])
   userId String
   user User @relation(fields: [userId], references: [id])
+  deviceId String
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   payments Payment[]
   paymentAdjustments PaymentAdjustment[]
   status ShiftStatus @default(OPEN)
@@ -304,6 +244,9 @@ model Shift {
   closingCash Decimal? @db.Decimal(12, 2)
   openedAt DateTime @default(now())
   closedAt DateTime?
+  @@index([branchId, status])
+  @@index([userId, status])
+  @@index([deviceId, status])
 }
 model AuditLog {
   id String @id @default(cuid())
