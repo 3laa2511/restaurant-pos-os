@@ -6,9 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: pos-desktop-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -22,13 +30,19 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint API
+        run: pnpm --dir services/api lint
 
       - name: Typecheck API
         run: pnpm --dir services/api typecheck
 
       - name: Test API
         run: pnpm --dir services/api test --runInBand
+
+      - name: Lint desktop
+        run: pnpm --dir apps/pos-desktop lint
 
       - name: Typecheck desktop
         run: pnpm --dir apps/pos-desktop typecheck
