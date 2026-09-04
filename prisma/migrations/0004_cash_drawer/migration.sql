@@ -1,11 +1,6 @@
 CREATE TYPE "CashDrawerMovementType" AS ENUM ('OPENING_FLOAT', 'SALE', 'CASH_CHANGE', 'REFUND', 'PAY_IN', 'PAY_OUT', 'ADJUSTMENT');
 CREATE TYPE "CashDrawerDirection" AS ENUM ('IN', 'OUT');
 
-ALTER TABLE "Branch" ADD COLUMN "cashDrawer_placeholder" BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE "Device" ADD COLUMN "cashDrawer_placeholder" BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE "User" ADD COLUMN "cashDrawer_placeholder" BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE "Shift" ADD COLUMN "cashDrawer_placeholder" BOOLEAN NOT NULL DEFAULT FALSE;
-
 CREATE TABLE "CashDrawer" (
   "id" TEXT NOT NULL,
   "branchId" TEXT NOT NULL,
@@ -62,8 +57,3 @@ ALTER TABLE "CashDrawerMovement"
   ADD CONSTRAINT "CashDrawerMovement_shiftId_fkey" FOREIGN KEY ("shiftId") REFERENCES "Shift"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "CashDrawerMovement"
   ADD CONSTRAINT "CashDrawerMovement_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
-ALTER TABLE "Branch" DROP COLUMN "cashDrawer_placeholder";
-ALTER TABLE "Device" DROP COLUMN "cashDrawer_placeholder";
-ALTER TABLE "User" DROP COLUMN "cashDrawer_placeholder";
-ALTER TABLE "Shift" DROP COLUMN "cashDrawer_placeholder";
