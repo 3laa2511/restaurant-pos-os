@@ -35,6 +35,10 @@ function requireText(value: string, field: string): void {
   if (!value.trim()) throw new Error(`${field} is required`);
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 'P2002';
+}
+
 @Injectable()
 export class PaymentService {
   constructor(private readonly prisma: PrismaService) {}
@@ -63,147 +67,159 @@ export class PaymentService {
 
     const operationId = randomUUID();
 
-    return this.prisma.$transaction(async (tx) => {
-      const order = await tx.order.findUnique({
-        where: { id: input.orderId },
-        select: { id: true, branchId: true, status: true, total: true, version: true },
-      });
-      if (!order) throw new Error('Order not found');
-      assertBranchAccess(context, order.branchId);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const order = await tx.order.findUnique({
+          where: { id: input.orderId },
+          select: { id: true, branchId: true, status: true, total: true, version: true },
+        });
+        if (!order) throw new Error('Order not found');
+        assertBranchAccess(context, order.branchId);
 
-      const shift = await tx.shift.findUnique({
-        where: { id: input.shiftId },
-        select: { id: true, branchId: true, status: true },
-      });
-      if (!shift) throw new Error('Shift not found');
-      if (shift.branchId !== order.branchId) throw new Error('Shift does not belong to the order branch');
-      if (shift.status !== 'OPEN') throw new Error('Shift is not open');
-      if (order.status !== 'CONFIRMED') throw new Error(`Order must be confirmed before payment: ${order.status}`);
+        const shift = await tx.shift.findUnique({
+          where: { id: input.shiftId },
+          select: { id: true, branchId: true, status: true },
+        });
+        if (!shift) throw new Error('Shift not found');
+        if (shift.branchId !== order.branchId) throw new Error('Shift does not belong to the order branch');
+        if (shift.status !== 'OPEN') throw new Error('Shift is not open');
+        if (order.status !== 'CONFIRMED') throw new Error(`Order must be confirmed before payment: ${order.status}`);
 
-      const totalDue = Number(order.total.toString());
-      const validated = validateSplitPayment({
-        orderId: input.orderId,
-        shiftId: input.shiftId,
-        totalDue,
-        allocations: input.allocations,
-      });
+        const totalDue = Number(order.total.toString());
+        const validated = validateSplitPayment({
+          orderId: input.orderId,
+          shiftId: input.shiftId,
+          totalDue,
+          allocations: input.allocations,
+        });
 
-      const existingPayments = await tx.payment.findMany({
-        where: { orderId: input.orderId },
-        select: { id: true },
-      });
-      if (existingPayments.length > 0) {
-        throw new Error('Order already has payments; use the refund/void flow instead of charging again');
-      }
+        const existingPayments = await tx.payment.findMany({
+          where: { orderId: input.orderId },
+          select: { id: true },
+        });
+        if (existingPayments.length > 0) {
+          throw new Error('Order already has payments; use the refund/void flow instead of charging again');
+        }
 
-      const paymentIds: string[] = [];
-      for (const [index, allocation] of input.allocations.entries()) {
-        const paymentId = randomUUID();
-        paymentIds.push(paymentId);
-        const receivedAmount = allocation.method === 'CASH'
-          ? allocation.receivedCash ?? allocation.amount
-          : null;
-        const changeAmount = allocation.method === 'CASH'
-          ? money(Math.max(0, (receivedAmount ?? allocation.amount) - allocation.amount))
-          : 0;
+        const paymentIds: string[] = [];
+        for (const [index, allocation] of input.allocations.entries()) {
+          const paymentId = randomUUID();
+          paymentIds.push(paymentId);
+          const receivedAmount = allocation.method === 'CASH'
+            ? allocation.receivedCash ?? allocation.amount
+            : null;
+          const changeAmount = allocation.method === 'CASH'
+            ? money(Math.max(0, (receivedAmount ?? allocation.amount) - allocation.amount))
+            : 0;
 
-        await tx.payment.create({
+          await tx.payment.create({
+            data: {
+              id: paymentId,
+              orderId: input.orderId,
+              shiftId: input.shiftId,
+              amount: allocation.amount.toFixed(2),
+              method: allocation.method,
+              reference: allocation.reference?.trim() || null,
+              receivedAmount: receivedAmount === null ? null : receivedAmount.toFixed(2),
+              changeAmount: changeAmount.toFixed(2),
+              status: 'PAID',
+              idempotencyKey: `${input.idempotencyKey}:payment:${index}`,
+            },
+          });
+        }
+
+        const transition = await tx.order.updateMany({
+          where: { id: input.orderId, version: order.version, status: 'CONFIRMED' },
+          data: { status: 'CLOSED', version: { increment: 1 } },
+        });
+        if (transition.count !== 1) {
+          throw new Error('Order was changed by another operation before payment could be finalized');
+        }
+
+        await tx.orderEvent.create({
           data: {
-            id: paymentId,
+            id: randomUUID(),
+            eventId: randomUUID(),
             orderId: input.orderId,
-            shiftId: input.shiftId,
-            amount: allocation.amount.toFixed(2),
-            method: allocation.method,
-            reference: allocation.reference?.trim() || null,
-            receivedAmount: receivedAmount === null ? null : receivedAmount.toFixed(2),
-            changeAmount: changeAmount.toFixed(2),
-            status: 'PAID',
-            idempotencyKey: `${input.idempotencyKey}:payment:${index}`,
+            type: 'ORDER_PAID',
+            actorUserId: context.userId,
+            deviceId: context.deviceId ?? input.deviceId,
+            payload: {
+              operationId,
+              totalPaid: validated.totalAllocated,
+              paymentCount: input.allocations.length,
+              paymentIds,
+              change: validated.change,
+            },
+            occurredAt: new Date(),
           },
         });
-      }
 
-      const transition = await tx.order.updateMany({
-        where: { id: input.orderId, version: order.version, status: 'CONFIRMED' },
-        data: { status: 'CLOSED', version: { increment: 1 } },
-      });
-      if (transition.count !== 1) {
-        throw new Error('Order was changed by another operation before payment could be finalized');
-      }
-
-      await tx.orderEvent.create({
-        data: {
-          id: randomUUID(),
-          eventId: randomUUID(),
-          orderId: input.orderId,
-          type: 'ORDER_PAID',
-          actorUserId: context.userId,
-          deviceId: context.deviceId ?? input.deviceId,
-          payload: {
-            operationId,
-            totalPaid: validated.totalAllocated,
-            paymentCount: input.allocations.length,
-            paymentIds,
-            change: validated.change,
+        await tx.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorUserId: context.userId,
+            branchId: order.branchId,
+            action: 'PAYMENT_SETTLED',
+            entityType: 'ORDER',
+            entityId: input.orderId,
+            metadata: {
+              operationId,
+              totalPaid: validated.totalAllocated,
+              paymentCount: input.allocations.length,
+              paymentIds,
+              change: validated.change,
+            },
           },
-          occurredAt: new Date(),
-        },
-      });
+        });
 
-      await tx.auditLog.create({
-        data: {
-          id: randomUUID(),
-          actorUserId: context.userId,
-          branchId: order.branchId,
-          action: 'PAYMENT_SETTLED',
-          entityType: 'ORDER',
-          entityId: input.orderId,
-          metadata: {
-            operationId,
-            totalPaid: validated.totalAllocated,
-            paymentCount: input.allocations.length,
-            paymentIds,
-            change: validated.change,
-          },
-        },
-      });
-
-      const result: PersistSplitPaymentResult = {
-        operationId,
-        orderId: input.orderId,
-        status: 'PAID',
-        totalPaid: validated.totalAllocated,
-        change: validated.change,
-        paymentIds,
-      };
-
-      await tx.syncOperation.create({
-        data: {
-          id: randomUUID(),
+        const result: PersistSplitPaymentResult = {
           operationId,
-          deviceId: input.deviceId,
-          branchId: order.branchId,
-          operation: 'PAYMENT_SETTLED',
-          entityType: 'ORDER',
-          entityId: input.orderId,
-          idempotencyKey: input.idempotencyKey,
-          clientSequence: input.clientSequence,
-          occurredAt: new Date(),
-          payload: {
-            orderId: input.orderId,
-            shiftId: input.shiftId,
-            allocations: input.allocations,
-            paymentIds,
-          },
-          requestHash,
-          status: 'APPLIED',
-          result,
-          updatedAt: new Date(),
-        },
-      });
+          orderId: input.orderId,
+          status: 'PAID',
+          totalPaid: validated.totalAllocated,
+          change: validated.change,
+          paymentIds,
+        };
 
-      return result;
-    });
+        await tx.syncOperation.create({
+          data: {
+            id: randomUUID(),
+            operationId,
+            deviceId: input.deviceId,
+            branchId: order.branchId,
+            operation: 'PAYMENT_SETTLED',
+            entityType: 'ORDER',
+            entityId: input.orderId,
+            idempotencyKey: input.idempotencyKey,
+            clientSequence: input.clientSequence,
+            occurredAt: new Date(),
+            payload: {
+              orderId: input.orderId,
+              shiftId: input.shiftId,
+              allocations: input.allocations,
+              paymentIds,
+            },
+            requestHash,
+            status: 'APPLIED',
+            result,
+            updatedAt: new Date(),
+          },
+        });
+
+        return result;
+      });
+    } catch (error) {
+      // The idempotency key is the concurrency gate. If another request won the
+      // unique insert race, its transaction has committed the authoritative result.
+      if (isUniqueConstraintError(error)) {
+        const winner = await this.prisma.syncOperation.findUnique({
+          where: { idempotencyKey: input.idempotencyKey },
+        });
+        if (winner) return this.existingResult(winner.result, winner.requestHash, requestHash, winner.operationId);
+      }
+      throw error;
+    }
   }
 
   private existingResult(
@@ -219,7 +235,14 @@ export class PaymentService {
       throw new Error('Existing payment operation has no recoverable result');
     }
     const value = result as Partial<PersistSplitPaymentResult>;
-    if (value.status !== 'PAID' || value.orderId === undefined || value.totalPaid === undefined || value.change === undefined || !Array.isArray(value.paymentIds)) {
+    if (
+      value.operationId !== operationId ||
+      value.status !== 'PAID' ||
+      value.orderId === undefined ||
+      value.totalPaid === undefined ||
+      value.change === undefined ||
+      !Array.isArray(value.paymentIds)
+    ) {
       throw new Error('Existing payment operation has an invalid result');
     }
     return {
