@@ -2,11 +2,15 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { AuthService, hashPassword } from './auth.service.js';
 
 const mockPrisma = () => ({
-  user: { findUnique: jest.fn() },
-  branch: { findUnique: jest.fn() },
-  device: { findUnique: jest.fn() },
-  session: { create: jest.fn(), findUnique: jest.fn(), updateMany: jest.fn() },
-  auditLog: { create: jest.fn() },
+  user: { findUnique: jest.fn<() => Promise<any>>() },
+  branch: { findUnique: jest.fn<() => Promise<any>>() },
+  device: { findUnique: jest.fn<() => Promise<any>>() },
+  session: {
+    create: jest.fn<() => Promise<any>>(),
+    findUnique: jest.fn<() => Promise<any>>(),
+    updateMany: jest.fn<() => Promise<any>>(),
+  },
+  auditLog: { create: jest.fn<() => Promise<any>>() },
 });
 
 describe('auth service', () => {
