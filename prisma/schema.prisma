@@ -16,6 +16,8 @@ enum PaymentAdjustmentType { REFUND VOID }
 enum ShiftStatus { OPEN CLOSED }
 enum DeviceStatus { ACTIVE INACTIVE BLOCKED }
 enum RoleCode { CASHIER CALL_CENTER_OPERATOR CALL_CENTER_SUPERVISOR KITCHEN DISPATCHER BRANCH_MANAGER CENTRAL_ADMIN OWNER }
+enum CashDrawerMovementType { OPENING_FLOAT SALE CASH_CHANGE REFUND PAY_IN PAY_OUT ADJUSTMENT }
+enum CashDrawerDirection { IN OUT }
 
 model Branch {
   id String @id @default(cuid())
@@ -28,6 +30,7 @@ model Branch {
   orders Order[]
   shifts Shift[]
   sessions Session[]
+  cashDrawers CashDrawer[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -45,6 +48,7 @@ model User {
   auditLogs AuditLog[]
   devices Device[]
   sessions Session[]
+  cashDrawerMovements CashDrawerMovement[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -85,6 +89,7 @@ model Device {
   userId String?
   user User? @relation(fields: [userId], references: [id])
   shifts Shift[]
+  cashDrawer CashDrawer?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -239,6 +244,7 @@ model Shift {
   device Device @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   payments Payment[]
   paymentAdjustments PaymentAdjustment[]
+  cashDrawerMovements CashDrawerMovement[]
   status ShiftStatus @default(OPEN)
   openingCash Decimal @db.Decimal(12, 2)
   closingCash Decimal? @db.Decimal(12, 2)
@@ -247,6 +253,47 @@ model Shift {
   @@index([branchId, status])
   @@index([userId, status])
   @@index([deviceId, status])
+}
+model CashDrawer {
+  id String @id @default(cuid())
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  deviceId String @unique
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  name String
+  active Boolean @default(true)
+  movements CashDrawerMovement[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([branchId, active])
+}
+model CashDrawerMovement {
+  id String @id @default(cuid())
+  drawerId String
+  drawer CashDrawer @relation(fields: [drawerId], references: [id], onDelete: Restrict)
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  deviceId String
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  shiftId String
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type CashDrawerMovementType
+  direction CashDrawerDirection
+  amount Decimal @db.Decimal(12, 2)
+  reason String
+  sourceType String?
+  sourceId String?
+  idempotencyKey String @unique
+  operationId String @unique
+  metadata Json?
+  occurredAt DateTime
+  createdAt DateTime @default(now())
+  @@index([drawerId, occurredAt])
+  @@index([shiftId, occurredAt])
+  @@index([branchId, occurredAt])
+  @@index([userId, occurredAt])
 }
 model AuditLog {
   id String @id @default(cuid())
