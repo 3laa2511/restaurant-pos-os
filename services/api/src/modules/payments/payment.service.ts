@@ -39,14 +39,15 @@ function isUniqueConstraintError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 'P2002';
 }
 
+function jsonValue(value: unknown): ReturnType<typeof JSON.parse> {
+  return JSON.parse(JSON.stringify(value));
+}
+
 @Injectable()
 export class PaymentService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async settleSplitPayment(
-    context: AuthContext,
-    input: PersistSplitPaymentInput,
-  ): Promise<PersistSplitPaymentResult> {
+  async settleSplitPayment(context: AuthContext, input: PersistSplitPaymentInput): Promise<PersistSplitPaymentResult> {
     assertPermission(context, PERMISSIONS.PAYMENT_CREATE);
     requireText(input.orderId, 'Order');
     requireText(input.shiftId, 'Shift');
@@ -60,9 +61,7 @@ export class PaymentService {
       .update(JSON.stringify({ ...input, allocations: input.allocations }))
       .digest('hex');
 
-    const existing = await this.prisma.syncOperation.findUnique({
-      where: { idempotencyKey: input.idempotencyKey },
-    });
+    const existing = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) return this.existingResult(existing.result, existing.requestHash, requestHash, existing.operationId);
 
     const operationId = randomUUID();
@@ -85,18 +84,14 @@ export class PaymentService {
         if (shift.status !== 'OPEN') throw new Error('Shift is not open');
         if (order.status !== 'CONFIRMED') throw new Error(`Order must be confirmed before payment: ${order.status}`);
 
-        const totalDue = Number(order.total.toString());
         const validated = validateSplitPayment({
           orderId: input.orderId,
           shiftId: input.shiftId,
-          totalDue,
+          totalDue: Number(order.total.toString()),
           allocations: input.allocations,
         });
 
-        const existingPayments = await tx.payment.findMany({
-          where: { orderId: input.orderId },
-          select: { id: true },
-        });
+        const existingPayments = await tx.payment.findMany({ where: { orderId: input.orderId }, select: { id: true } });
         if (existingPayments.length > 0) {
           throw new Error('Order already has payments; use the refund/void flow instead of charging again');
         }
@@ -105,9 +100,7 @@ export class PaymentService {
         for (const [index, allocation] of input.allocations.entries()) {
           const paymentId = randomUUID();
           paymentIds.push(paymentId);
-          const receivedAmount = allocation.method === 'CASH'
-            ? allocation.receivedCash ?? allocation.amount
-            : null;
+          const receivedAmount = allocation.method === 'CASH' ? allocation.receivedCash ?? allocation.amount : null;
           const changeAmount = allocation.method === 'CASH'
             ? money(Math.max(0, (receivedAmount ?? allocation.amount) - allocation.amount))
             : 0;
@@ -132,10 +125,15 @@ export class PaymentService {
           where: { id: input.orderId, version: order.version, status: 'CONFIRMED' },
           data: { status: 'CLOSED', version: { increment: 1 } },
         });
-        if (transition.count !== 1) {
-          throw new Error('Order was changed by another operation before payment could be finalized');
-        }
+        if (transition.count !== 1) throw new Error('Order was changed by another operation before payment could be finalized');
 
+        const eventPayload = {
+          operationId,
+          totalPaid: validated.totalAllocated,
+          paymentCount: input.allocations.length,
+          paymentIds,
+          change: validated.change,
+        };
         await tx.orderEvent.create({
           data: {
             id: randomUUID(),
@@ -144,13 +142,7 @@ export class PaymentService {
             type: 'ORDER_PAID',
             actorUserId: context.userId,
             deviceId: context.deviceId ?? input.deviceId,
-            payload: {
-              operationId,
-              totalPaid: validated.totalAllocated,
-              paymentCount: input.allocations.length,
-              paymentIds,
-              change: validated.change,
-            },
+            payload: jsonValue(eventPayload),
             occurredAt: new Date(),
           },
         });
@@ -163,13 +155,7 @@ export class PaymentService {
             action: 'PAYMENT_SETTLED',
             entityType: 'ORDER',
             entityId: input.orderId,
-            metadata: {
-              operationId,
-              totalPaid: validated.totalAllocated,
-              paymentCount: input.allocations.length,
-              paymentIds,
-              change: validated.change,
-            },
+            metadata: jsonValue(eventPayload),
           },
         });
 
@@ -194,15 +180,15 @@ export class PaymentService {
             idempotencyKey: input.idempotencyKey,
             clientSequence: input.clientSequence,
             occurredAt: new Date(),
-            payload: {
+            payload: jsonValue({
               orderId: input.orderId,
               shiftId: input.shiftId,
               allocations: input.allocations,
               paymentIds,
-            },
+            }),
             requestHash,
             status: 'APPLIED',
-            result,
+            result: jsonValue(result),
             updatedAt: new Date(),
           },
         });
@@ -210,39 +196,19 @@ export class PaymentService {
         return result;
       });
     } catch (error) {
-      // The idempotency key is the concurrency gate. If another request won the
-      // unique insert race, its transaction has committed the authoritative result.
       if (isUniqueConstraintError(error)) {
-        const winner = await this.prisma.syncOperation.findUnique({
-          where: { idempotencyKey: input.idempotencyKey },
-        });
+        const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
         if (winner) return this.existingResult(winner.result, winner.requestHash, requestHash, winner.operationId);
       }
       throw error;
     }
   }
 
-  private existingResult(
-    result: unknown,
-    storedHash: string,
-    requestHash: string,
-    operationId: string,
-  ): PersistSplitPaymentResult {
-    if (storedHash !== requestHash) {
-      throw new Error('Idempotency key was reused with a different payment request');
-    }
-    if (!result || typeof result !== 'object') {
-      throw new Error('Existing payment operation has no recoverable result');
-    }
+  private existingResult(result: unknown, storedHash: string, requestHash: string, operationId: string): PersistSplitPaymentResult {
+    if (storedHash !== requestHash) throw new Error('Idempotency key was reused with a different payment request');
+    if (!result || typeof result !== 'object') throw new Error('Existing payment operation has no recoverable result');
     const value = result as Partial<PersistSplitPaymentResult>;
-    if (
-      value.operationId !== operationId ||
-      value.status !== 'PAID' ||
-      value.orderId === undefined ||
-      value.totalPaid === undefined ||
-      value.change === undefined ||
-      !Array.isArray(value.paymentIds)
-    ) {
+    if (value.operationId !== operationId || value.status !== 'PAID' || value.orderId === undefined || value.totalPaid === undefined || value.change === undefined || !Array.isArray(value.paymentIds)) {
       throw new Error('Existing payment operation has an invalid result');
     }
     return {
