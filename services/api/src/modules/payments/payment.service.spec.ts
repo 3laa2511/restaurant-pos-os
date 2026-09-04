@@ -142,4 +142,42 @@ describe('PaymentService.settleSplitPayment', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(tx.payment.create).not.toHaveBeenCalled();
   });
+
+  it('recovers the winner when two requests race on the same idempotency key', async () => {
+    const { prisma, tx } = buildPrisma();
+    const stored = {
+      operationId: 'operation-winner',
+      orderId: 'order-1',
+      status: 'PAID',
+      totalPaid: 250,
+      change: 0,
+      paymentIds: ['payment-winner'],
+    };
+    const input = {
+      orderId: 'order-1',
+      shiftId: 'shift-1',
+      allocations: [{ method: 'CASH' as const, amount: 250 }],
+      idempotencyKey: 'checkout-race',
+      deviceId: 'device-1',
+      clientSequence: 45,
+    };
+    const requestHash = (await import('node:crypto')).createHash('sha256')
+      .update(JSON.stringify({ ...input, allocations: input.allocations }))
+      .digest('hex');
+
+    prisma.syncOperation.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        operationId: 'operation-winner',
+        requestHash,
+        result: stored,
+      });
+    tx.syncOperation.create.mockRejectedValueOnce({ code: 'P2002' });
+
+    const service = new PaymentService(prisma as unknown as PrismaService);
+
+    await expect(service.settleSplitPayment(context, input)).resolves.toEqual(stored);
+    expect(prisma.syncOperation.findUnique).toHaveBeenCalledTimes(2);
+    expect(tx.syncOperation.create).toHaveBeenCalledTimes(1);
+  });
 });
