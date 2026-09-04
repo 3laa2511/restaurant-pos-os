@@ -14,9 +14,10 @@ export class AuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedHttpRequest>();
     const authorization = request.header('authorization');
     const match = authorization?.match(/^Bearer\s+(.+)$/i);
-    if (!match) throw new UnauthorizedException('Authentication required');
+    const accessToken = match?.[1]?.trim();
+    if (!accessToken) throw new UnauthorizedException('Authentication required');
 
-    const authenticated = await this.auth.authenticate(match[1]);
+    const authenticated = await this.auth.authenticate(accessToken);
     request.authContext = authenticated.context;
     request.sessionId = authenticated.sessionId;
     return true;
