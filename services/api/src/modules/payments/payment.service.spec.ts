@@ -8,7 +8,7 @@ import type { PrismaService } from '../../database/prisma.service.js';
 const context: AuthContext = {
   userId: 'user-1', branchId: 'branch-1', deviceId: 'device-1', roles: [], permissions: [PERMISSIONS.PAYMENT_CREATE],
 };
-type Mock = jest.Mock;
+type AsyncMock = jest.Mock<() => Promise<unknown>>;
 
 function buildPrisma() {
   const tx = {
@@ -19,12 +19,12 @@ function buildPrisma() {
     auditLog: { create: jest.fn() },
     syncOperation: { create: jest.fn() },
   } as {
-    order: { findUnique: Mock; updateMany: Mock };
-    shift: { findUnique: Mock };
-    payment: { findMany: Mock; create: Mock };
-    orderEvent: { create: Mock };
-    auditLog: { create: Mock };
-    syncOperation: { create: Mock };
+    order: { findUnique: AsyncMock; updateMany: AsyncMock };
+    shift: { findUnique: AsyncMock };
+    payment: { findMany: AsyncMock; create: AsyncMock };
+    orderEvent: { create: AsyncMock };
+    auditLog: { create: AsyncMock };
+    syncOperation: { create: AsyncMock };
   };
   tx.order.findUnique.mockResolvedValue({ id: 'order-1', branchId: 'branch-1', status: 'CONFIRMED', total: { toString: () => '250.00' }, version: 3 });
   tx.order.updateMany.mockResolvedValue({ count: 1 });
@@ -36,7 +36,7 @@ function buildPrisma() {
   tx.syncOperation.create.mockResolvedValue({});
 
   const prisma = {
-    syncOperation: { findUnique: jest.fn() as Mock },
+    syncOperation: { findUnique: jest.fn() as AsyncMock },
     $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
   };
   prisma.syncOperation.findUnique.mockResolvedValue(null);
