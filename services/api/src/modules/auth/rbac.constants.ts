@@ -22,6 +22,8 @@ export const PERMISSIONS = {
   PAYMENT_VOID: 'payment.void',
   SHIFT_OPEN: 'shift.open',
   SHIFT_CLOSE: 'shift.close',
+  CASH_DRAWER_VIEW: 'cash_drawer.view',
+  CASH_DRAWER_MANAGE: 'cash_drawer.manage',
   REPORT_VIEW_OPERATIONAL: 'report.view_operational',
   REPORT_VIEW_FINANCIAL: 'report.view_financial',
   USER_MANAGE: 'user.manage',
