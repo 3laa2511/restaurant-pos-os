@@ -22,7 +22,6 @@ export interface SplitPaymentResult {
 }
 
 const MAX_ALLOCATIONS = 10;
-const EPSILON = 0.000001;
 
 function assertMoney(value: number, field: string, allowZero = false): void {
   if (!Number.isFinite(value) || value < 0 || (!allowZero && value === 0)) {
@@ -95,5 +94,3 @@ export function validateSplitPayment(input: SplitPaymentInput): SplitPaymentResu
 export function calculateSplitPaymentChange(input: SplitPaymentInput): number {
   return validateSplitPayment(input).change;
 }
-
-export { EPSILON };
