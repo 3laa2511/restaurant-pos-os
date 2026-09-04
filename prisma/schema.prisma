@@ -53,6 +53,11 @@ enum PaymentStatus {
   FAILED
 }
 
+enum PaymentAdjustmentType {
+  REFUND
+  VOID
+}
+
 enum ShiftStatus {
   OPEN
   CLOSED
@@ -179,6 +184,7 @@ model Order {
   customer Customer? @relation(fields: [customerId], references: [id])
   items OrderItem[]
   payments Payment[]
+  paymentAdjustments PaymentAdjustment[]
   events OrderEvent[]
   total Decimal @db.Decimal(12, 2)
   createdAt DateTime @default(now())
@@ -242,8 +248,30 @@ model Payment {
   changeAmount Decimal @default(0) @db.Decimal(12, 2)
   status PaymentStatus @default(PENDING)
   idempotencyKey String @unique
+  adjustments PaymentAdjustment[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+model PaymentAdjustment {
+  id String @id @default(cuid())
+  paymentId String
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  shiftId String
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  type PaymentAdjustmentType
+  amount Decimal @db.Decimal(12, 2)
+  reason String
+  reference String?
+  actorUserId String
+  deviceId String?
+  idempotencyKey String @unique
+  operationId String @unique
+  createdAt DateTime @default(now())
+  @@index([paymentId, createdAt])
+  @@index([orderId, createdAt])
+  @@index([shiftId, createdAt])
 }
 model Shift {
   id String @id @default(cuid())
@@ -252,6 +280,7 @@ model Shift {
   userId String
   user User @relation(fields: [userId], references: [id])
   payments Payment[]
+  paymentAdjustments PaymentAdjustment[]
   status ShiftStatus @default(OPEN)
   openingCash Decimal @db.Decimal(12, 2)
   closingCash Decimal? @db.Decimal(12, 2)
