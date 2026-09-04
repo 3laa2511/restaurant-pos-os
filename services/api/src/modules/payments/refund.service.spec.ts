@@ -3,7 +3,7 @@ import { RefundService } from './refund.service.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 
-type Mock = jest.Mock;
+type AsyncMock = jest.Mock<() => Promise<unknown>>;
 
 function context(): AuthContext {
   return { userId: 'user-1', branchId: 'branch-1', deviceId: 'device-1', roles: [], permissions: [PERMISSIONS.PAYMENT_REFUND] };
@@ -19,16 +19,16 @@ function prismaMock() {
     auditLog: { create: jest.fn() },
     syncOperation: { create: jest.fn() },
   } as {
-    payment: { findUnique: Mock; update: Mock; findMany: Mock };
-    shift: { findUnique: Mock };
-    paymentAdjustment: { findMany: Mock; create: Mock };
-    order: { update: Mock };
-    orderEvent: { create: Mock };
-    auditLog: { create: Mock };
-    syncOperation: { create: Mock };
+    payment: { findUnique: AsyncMock; update: AsyncMock; findMany: AsyncMock };
+    shift: { findUnique: AsyncMock };
+    paymentAdjustment: { findMany: AsyncMock; create: AsyncMock };
+    order: { update: AsyncMock };
+    orderEvent: { create: AsyncMock };
+    auditLog: { create: AsyncMock };
+    syncOperation: { create: AsyncMock };
   };
   const prisma = {
-    syncOperation: { findUnique: jest.fn() as Mock },
+    syncOperation: { findUnique: jest.fn() as AsyncMock },
     $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
   };
   return { prisma, tx };
