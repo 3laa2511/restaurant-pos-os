@@ -1,18 +1,22 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, UseGuards, Post } from '@nestjs/common';
+import { AuthGuard } from '../auth/auth.guard.js';
+import { CurrentAuth } from '../auth/auth.decorators.js';
+import type { AuthContext } from '../auth/authorization.types.js';
 import { SyncEnvelope } from './sync-contract.js';
 import { SyncService } from './sync.service.js';
 
+@UseGuards(AuthGuard)
 @Controller('sync')
 export class SyncController {
   constructor(private readonly sync: SyncService) {}
 
   @Post('operations')
-  submit(@Body() envelope: SyncEnvelope) {
-    return this.sync.submit(envelope);
+  submit(@CurrentAuth() context: AuthContext, @Body() envelope: SyncEnvelope) {
+    return this.sync.submit(context, envelope);
   }
 
   @Get('pending')
-  pending() {
-    return this.sync.pending();
+  pending(@CurrentAuth() context: AuthContext) {
+    return this.sync.pending(context);
   }
 }
