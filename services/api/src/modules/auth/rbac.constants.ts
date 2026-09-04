@@ -19,6 +19,7 @@ export const PERMISSIONS = {
   ORDER_VOID_ITEM: 'order.void_item',
   PAYMENT_CREATE: 'payment.create',
   PAYMENT_REFUND: 'payment.refund',
+  PAYMENT_VOID: 'payment.void',
   SHIFT_OPEN: 'shift.open',
   SHIFT_CLOSE: 'shift.close',
   REPORT_VIEW_OPERATIONAL: 'report.view_operational',
