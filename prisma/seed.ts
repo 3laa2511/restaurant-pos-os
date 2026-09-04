@@ -14,6 +14,8 @@ const permissions = [
   ['payment.refund', 'Refund payments'],
   ['shift.open', 'Open shifts'],
   ['shift.close', 'Close shifts'],
+  ['cash_drawer.view', 'View cash drawer'],
+  ['cash_drawer.manage', 'Manage cash drawer movements'],
   ['report.view_operational', 'View operational reports'],
   ['report.view_financial', 'View financial reports'],
   ['user.manage', 'Manage users'],
@@ -44,12 +46,12 @@ async function main() {
   }
 
   const fullAccess = permissions.map(([code]) => code);
-  const cashier = ['order.create', 'order.view', 'order.confirm', 'order.send_to_kitchen', 'payment.create', 'shift.open', 'shift.close', 'report.view_operational', 'driver.assign'];
+  const cashier = ['order.create', 'order.view', 'order.confirm', 'order.send_to_kitchen', 'payment.create', 'shift.open', 'shift.close', 'cash_drawer.view', 'report.view_operational', 'driver.assign'];
   const callCenter = ['order.create', 'order.view', 'order.confirm', 'order.send_to_kitchen'];
-  const supervisor = [...callCenter, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_operational', 'report.view_financial', 'driver.assign', 'audit.view'];
+  const supervisor = [...callCenter, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_operational', 'report.view_financial', 'driver.assign', 'audit.view', 'cash_drawer.view'];
   const kitchen = ['order.view'];
   const dispatcher = ['order.view', 'driver.assign'];
-  const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'audit.view'];
+  const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'audit.view', 'cash_drawer.manage'];
   const matrix: Record<RoleCode, readonly string[]> = { CASHIER: cashier, CALL_CENTER_OPERATOR: callCenter, CALL_CENTER_SUPERVISOR: supervisor, KITCHEN: kitchen, DISPATCHER: dispatcher, BRANCH_MANAGER: manager, CENTRAL_ADMIN: fullAccess, OWNER: fullAccess };
 
   for (const [roleCode, permissionCodes] of Object.entries(matrix) as [RoleCode, readonly string[]][]) {
