@@ -73,7 +73,8 @@ export function calculateOrderPricingWithDiscountRule(items: readonly PricingIte
   const decision = evaluateDiscountRule(input.rule, { orderType: input.orderType, subtotal, items: contextItems });
   if (!decision.eligible) throw new Error(`Discount rule is not eligible: ${decision.reason}`);
   if (decision.requiresApproval && !input.approvalGranted) throw new Error('Discount approval is required');
-  const totals = calculateOrderPricing(items, { ...rules, discount: { kind: 'FIXED', value: decision.discount } });
+  const pricingRules: PricingRules = { ...rules, discount: { kind: 'FIXED', value: decision.discount } };
+  const totals = calculateOrderPricing(items, pricingRules);
   return { totals, ruleId: decision.ruleId, discount: decision.discount, requiresApproval: decision.requiresApproval };
 }
 
@@ -81,11 +82,16 @@ export function calculateOrderPricingWithPolicies(items: readonly PricingItem[],
   let baseTotals: OrderTotals;
   let requiresDiscountApproval = false;
   if (input.discountRule) {
-    const discounted = calculateOrderPricingWithDiscountRule(items, input.discountRule, { deliveryFee: input.deliveryFee });
+    const pricingRules: Omit<PricingRules, 'discount'> = {};
+    if (input.deliveryFee !== undefined) pricingRules.deliveryFee = input.deliveryFee;
+    const discounted = calculateOrderPricingWithDiscountRule(items, input.discountRule, pricingRules);
     baseTotals = discounted.totals;
     requiresDiscountApproval = discounted.requiresApproval;
   } else {
-    baseTotals = calculateOrderPricing(items, { discount: input.discount, deliveryFee: input.deliveryFee });
+    const pricingRules: PricingRules = {};
+    if (input.discount !== undefined) pricingRules.discount = input.discount;
+    if (input.deliveryFee !== undefined) pricingRules.deliveryFee = input.deliveryFee;
+    baseTotals = calculateOrderPricing(items, pricingRules);
   }
 
   const policy = evaluateTaxFeePolicies(
@@ -109,5 +115,6 @@ export function calculateOrderPricingWithPolicies(items: readonly PricingItem[],
 }
 
 export function calculateOrderTotals(items: readonly PricingItem[], discount = 0, deliveryFee = 0): OrderTotals {
-  return calculateOrderPricing(items, { discount: { kind: 'FIXED', value: discount }, deliveryFee });
+  const pricingRules: PricingRules = { discount: { kind: 'FIXED', value: discount }, deliveryFee };
+  return calculateOrderPricing(items, pricingRules);
 }
