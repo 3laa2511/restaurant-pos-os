@@ -1,5 +1,4 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
-import type { Request } from 'express';
 import { AuthGuard } from './auth.guard.js';
 import { AuthService } from './auth.service.js';
 import type { AuthenticatedRequest, LoginInput } from './auth.service.js';
@@ -23,7 +22,7 @@ export class AuthController {
 
   @UseGuards(AuthGuard)
   @Post('logout')
-  async logout(@Req() request: Request & AuthenticatedRequest, @CurrentAuth() context: AuthContext) {
+  async logout(@Req() request: AuthenticatedRequest, @CurrentAuth() context: AuthContext) {
     if (!request.sessionId) throw new Error('Session context is missing');
     await this.auth.logout(request.sessionId, context.userId);
     return { success: true };
