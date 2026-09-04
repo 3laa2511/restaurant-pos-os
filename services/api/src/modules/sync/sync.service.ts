@@ -1,13 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
+import type { AuthContext } from '../auth/authorization.types.js';
 import { SyncEnvelope, SyncResult, validateSyncEnvelope } from './sync-contract.js';
 
 @Injectable()
 export class SyncService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async submit(envelope: SyncEnvelope): Promise<SyncResult> {
+  async submit(context: AuthContext, envelope: SyncEnvelope): Promise<SyncResult> {
+    this.assertDeviceScope(context, envelope.deviceId, envelope.branchId);
     validateSyncEnvelope(envelope);
 
     const requestHash = createHash('sha256')
@@ -53,10 +55,13 @@ export class SyncService {
     }
   }
 
-  async pending(limit = 100) {
+  async pending(context: AuthContext, limit = 100) {
     const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
     return this.prisma.syncOperation.findMany({
-      where: { status: 'RECEIVED' },
+      where: {
+        status: 'RECEIVED',
+        ...(context.branchId ? { branchId: context.branchId } : {}),
+      },
       orderBy: [{ clientSequence: 'asc' }, { createdAt: 'asc' }],
       take: boundedLimit,
       select: {
@@ -73,6 +78,15 @@ export class SyncService {
         status: true,
       },
     });
+  }
+
+  private assertDeviceScope(context: AuthContext, deviceId: string, branchId: string): void {
+    if (!context.branchId || context.branchId !== branchId) {
+      throw new Error('Forbidden: branch access denied');
+    }
+    if (!context.deviceId || context.deviceId !== deviceId) {
+      throw new Error('Forbidden: device access denied');
+    }
   }
 
   private resultForExisting(existing: { operationId: string; requestHash: string; result: unknown }, requestHash: string): SyncResult {
