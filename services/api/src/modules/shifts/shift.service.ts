@@ -4,7 +4,7 @@ import { Prisma } from '../../generated/prisma/index.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
-import { assertShiftCanClose, validateOpenShift } from './shift-policy.js';
+import { assertMoneyAmount, assertShiftCanClose, validateOpenShift } from './shift-policy.js';
 
 export interface OpenShiftInput {
   branchId: string;
@@ -32,12 +32,6 @@ export interface ShiftResult {
 
 const money = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 
-const assertMoney = (value: number, field: string): void => {
-  if (!Number.isFinite(value) || value < 0 || Math.abs(value * 100 - Math.round(value * 100)) > Number.EPSILON) {
-    throw new Error(`${field} must be a non-negative amount with at most 2 decimal places`);
-  }
-};
-
 const text = (value: string, field: string): void => {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required`);
 };
@@ -52,6 +46,21 @@ const requestHash = (value: unknown): string =>
 const isUnique = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 
+const isSerializationConflict = (error: unknown): boolean =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+
+const runSerializable = async <T>(operation: () => Promise<T>): Promise<T> => {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isSerializationConflict(error) || attempt === maxAttempts) throw error;
+    }
+  }
+  throw new Error('Unreachable transaction retry state');
+};
+
 @Injectable()
 export class ShiftService {
   constructor(private readonly prisma: PrismaService) {}
@@ -62,7 +71,7 @@ export class ShiftService {
     text(input.deviceId, 'Device');
     text(input.idempotencyKey, 'Idempotency key');
     validSequence(input.clientSequence);
-    assertMoney(input.openingCash, 'Opening cash');
+    assertMoneyAmount(input.openingCash, 'Opening cash');
     validateOpenShift({ branchId: input.branchId, cashierId: context.userId, deviceId: input.deviceId, openingCash: input.openingCash });
     assertBranchAccess(context, input.branchId);
     if (context.deviceId !== input.deviceId) throw new Error('Shift device does not match the authenticated device');
@@ -76,7 +85,7 @@ export class ShiftService {
 
     const operationId = randomUUID();
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      return await runSerializable(() => this.prisma.$transaction(async (tx) => {
         const branch = await tx.branch.findUnique({ where: { id: input.branchId }, select: { id: true, active: true } });
         if (!branch?.active) throw new Error('Branch not found or inactive');
         const device = await tx.device.findUnique({ where: { id: input.deviceId }, select: { id: true, branchId: true, status: true } });
@@ -91,12 +100,18 @@ export class ShiftService {
           throw new Error(`Cashier already has an open shift (${openShift.id})`);
         }
 
-        const shift = await tx.shift.create({ data: { id: randomUUID(), branchId: input.branchId, userId: context.userId, deviceId: input.deviceId, openingCash: input.openingCash.toFixed(2), status: 'OPEN' } });
+        let shift;
+        try {
+          shift = await tx.shift.create({ data: { id: randomUUID(), branchId: input.branchId, userId: context.userId, deviceId: input.deviceId, openingCash: input.openingCash.toFixed(2), status: 'OPEN' } });
+        } catch (error) {
+          if (isUnique(error)) throw new Error('Cashier or device already has an open shift');
+          throw error;
+        }
         await tx.auditLog.create({ data: { id: randomUUID(), actorUserId: context.userId, branchId: input.branchId, action: 'SHIFT_OPENED', entityType: 'SHIFT', entityId: shift.id, metadata: { operationId, openingCash: input.openingCash, deviceId: input.deviceId } } });
         const result: ShiftResult = { operationId, shiftId: shift.id, status: 'OPEN' };
         await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: input.deviceId, branchId: input.branchId, operation: 'SHIFT_OPENED', entityType: 'SHIFT', entityId: shift.id, idempotencyKey: input.idempotencyKey, clientSequence: input.clientSequence, occurredAt: new Date(), payload: { shiftId: shift.id, openingCash: input.openingCash }, requestHash: hash, status: 'APPLIED', result, updatedAt: new Date() } });
         return result;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (isUnique(error)) {
         const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
@@ -114,7 +129,7 @@ export class ShiftService {
     text(input.shiftId, 'Shift');
     text(input.idempotencyKey, 'Idempotency key');
     validSequence(input.clientSequence);
-    assertMoney(input.closingCash, 'Closing cash');
+    assertMoneyAmount(input.closingCash, 'Closing cash');
 
     const hash = requestHash({ ...input });
     const existingOperation = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
@@ -125,7 +140,7 @@ export class ShiftService {
     const operationId = randomUUID();
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      return await runSerializable(() => this.prisma.$transaction(async (tx) => {
         const shift = await tx.shift.findUnique({ where: { id: input.shiftId }, select: { id: true, branchId: true, userId: true, deviceId: true, status: true, openingCash: true, openedAt: true } });
         if (!shift) throw new Error('Shift not found');
         assertBranchAccess(context, shift.branchId);
@@ -133,7 +148,7 @@ export class ShiftService {
         if (context.deviceId && context.deviceId !== shift.deviceId) throw new Error('Shift device does not match the authenticated device');
         assertShiftCanClose({ ...shift, cashierId: shift.userId, openingCash: Number(shift.openingCash) });
 
-        const payments = await tx.payment.findMany({ where: { shiftId: shift.id }, select: { amount: true, method: true, adjustments: { select: { amount: true, type: true } } } });
+        const payments = await tx.payment.findMany({ where: { shiftId: shift.id }, select: { amount: true, method: true, status: true, adjustments: { select: { amount: true, type: true } } } });
         let cashNet = 0;
         for (const payment of payments) {
           if (payment.method !== 'CASH' || payment.status === 'VOIDED') continue;
@@ -150,7 +165,7 @@ export class ShiftService {
         await tx.auditLog.create({ data: { id: randomUUID(), actorUserId: context.userId, branchId: shift.branchId, action: 'SHIFT_CLOSED', entityType: 'SHIFT', entityId: shift.id, metadata: { operationId, expectedCash, actualCash, variance } } });
         await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: shift.deviceId, branchId: shift.branchId, operation: 'SHIFT_CLOSED', entityType: 'SHIFT', entityId: shift.id, idempotencyKey: input.idempotencyKey, clientSequence: input.clientSequence, occurredAt: new Date(), payload: { shiftId: shift.id, closingCash: actualCash, expectedCash, variance }, requestHash: hash, status: 'APPLIED', result, updatedAt: new Date() } });
         return result;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
       if (isUnique(error)) {
         const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
