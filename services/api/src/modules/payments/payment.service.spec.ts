@@ -8,7 +8,7 @@ import type { PrismaService } from '../../database/prisma.service.js';
 const context: AuthContext = {
   userId: 'user-1', branchId: 'branch-1', deviceId: 'device-1', roles: [], permissions: [PERMISSIONS.PAYMENT_CREATE],
 };
-type AsyncMock = jest.Mock<Promise<unknown>, any[]>;
+type AsyncMock = jest.Mock<unknown>;
 
 function buildPrisma() {
   const tx = {
