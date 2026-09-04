@@ -52,13 +52,6 @@ export class PaymentService {
       throw new Error('clientSequence must be a non-negative integer');
     }
 
-    const request = validateSplitPayment({
-      orderId: input.orderId,
-      shiftId: input.shiftId,
-      totalDue: 0,
-      allocations: input.allocations,
-    });
-
     const requestHash = createHash('sha256')
       .update(JSON.stringify({ ...input, allocations: input.allocations }))
       .digest('hex');
@@ -97,7 +90,7 @@ export class PaymentService {
 
       const existingPayments = await tx.payment.findMany({
         where: { orderId: input.orderId },
-        select: { id: true, amount: true, idempotencyKey: true },
+        select: { id: true },
       });
       if (existingPayments.length > 0) {
         throw new Error('Order already has payments; use the refund/void flow instead of charging again');
@@ -130,10 +123,13 @@ export class PaymentService {
         });
       }
 
-      await tx.order.updateMany({
+      const transition = await tx.order.updateMany({
         where: { id: input.orderId, version: order.version, status: 'CONFIRMED' },
         data: { status: 'CLOSED', version: { increment: 1 } },
       });
+      if (transition.count !== 1) {
+        throw new Error('Order was changed by another operation before payment could be finalized');
+      }
 
       await tx.orderEvent.create({
         data: {
