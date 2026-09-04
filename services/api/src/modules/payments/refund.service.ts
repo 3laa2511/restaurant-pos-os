@@ -40,7 +40,7 @@ export class RefundService {
   constructor(private readonly prisma: PrismaService) {}
 
   async adjustPayment(context: AuthContext, input: PaymentAdjustmentInput): Promise<PaymentAdjustmentResult> {
-    assertPermission(context, PERMISSIONS.PAYMENT_REFUND);
+    assertPermission(context, input.type === 'VOID' ? PERMISSIONS.PAYMENT_VOID : PERMISSIONS.PAYMENT_REFUND);
     requireText(input.paymentId, 'Payment');
     requireText(input.shiftId, 'Shift');
     requireText(input.reason, 'Refund reason');
@@ -162,6 +162,7 @@ export class RefundService {
   async refundPayment(context: AuthContext, input: Omit<PaymentAdjustmentInput, 'type'>): Promise<PaymentAdjustmentResult> {
     return this.adjustPayment(context, { ...input, type: 'REFUND' });
   }
+
   async voidPayment(context: AuthContext, input: Omit<PaymentAdjustmentInput, 'type'>): Promise<PaymentAdjustmentResult> {
     return this.adjustPayment(context, { ...input, type: 'VOID' });
   }
