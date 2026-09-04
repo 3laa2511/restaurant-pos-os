@@ -3,7 +3,7 @@ import { RefundService } from './refund.service.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 
-type AsyncMock = jest.Mock<unknown>;
+type AsyncMock = jest.Mock<(...args: any[]) => Promise<unknown>>;
 
 function context(...permissions: AuthContext['permissions']): AuthContext {
   return { userId: 'user-1', branchId: 'branch-1', deviceId: 'device-1', roles: [], permissions };
