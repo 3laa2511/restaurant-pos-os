@@ -7,4 +7,10 @@ export default tseslint.config(
   {
     ignores: ['dist/**', 'node_modules/**', 'jest.config.cjs'],
   },
+  {
+    files: ['**/*.spec.ts', '**/*.test.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
 );
