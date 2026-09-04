@@ -1,16 +1,19 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { AuthService, hashPassword } from './auth.service.js';
 
+type MockArgs = Record<string, unknown>;
+type MockResult = Promise<any>;
+
 const mockPrisma = () => ({
-  user: { findUnique: jest.fn<() => Promise<any>>() },
-  branch: { findUnique: jest.fn<() => Promise<any>>() },
-  device: { findUnique: jest.fn<() => Promise<any>>() },
+  user: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
+  branch: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
+  device: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
   session: {
-    create: jest.fn<() => Promise<any>>(),
-    findUnique: jest.fn<() => Promise<any>>(),
-    updateMany: jest.fn<() => Promise<any>>(),
+    create: jest.fn<(args: MockArgs) => MockResult>(),
+    findUnique: jest.fn<(args: MockArgs) => MockResult>(),
+    updateMany: jest.fn<(args: MockArgs) => MockResult>(),
   },
-  auditLog: { create: jest.fn<() => Promise<any>>() },
+  auditLog: { create: jest.fn<(args: MockArgs) => MockResult>() },
 });
 
 describe('auth service', () => {
