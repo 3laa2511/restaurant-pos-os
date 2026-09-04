@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
+import type { AuthContext } from '../auth/authorization.types.js';
 import { SyncService } from './sync.service.js';
 
 const envelope = {
@@ -12,6 +13,14 @@ const envelope = {
   clientSequence: 1,
   occurredAt: '2026-09-02T08:01:00.000Z',
   payload: { id: 'order-1', total: 100 },
+};
+
+const authContext: AuthContext = {
+  userId: 'user-1',
+  branchId: 'BR01',
+  deviceId: 'POS01',
+  roles: ['CASHIER'],
+  permissions: ['order.create'],
 };
 
 function createPrismaMock() {
@@ -34,19 +43,19 @@ describe('SyncService', () => {
     const prisma = createPrismaMock();
     const service = new SyncService(prisma as never);
 
-    const result = await service.submit(envelope);
+    const result = await service.submit(authContext, envelope);
 
     expect(result.status).toBe('ACCEPTED');
     expect(result.operationId).toBeTruthy();
-    expect(await service.pending()).toHaveLength(1);
+    expect(await service.pending(authContext)).toHaveLength(1);
   });
 
   it('returns duplicate for the exact same idempotent request', async () => {
     const prisma = createPrismaMock();
     const service = new SyncService(prisma as never);
 
-    const first = await service.submit(envelope);
-    const second = await service.submit(envelope);
+    const first = await service.submit(authContext, envelope);
+    const second = await service.submit(authContext, envelope);
 
     expect(first.status).toBe('ACCEPTED');
     expect(second).toEqual({ status: 'ACCEPTED', operationId: first.operationId });
@@ -56,8 +65,8 @@ describe('SyncService', () => {
     const prisma = createPrismaMock();
     const service = new SyncService(prisma as never);
 
-    const first = await service.submit(envelope);
-    const conflict = await service.submit({ ...envelope, payload: { id: 'order-2', total: 200 } });
+    const first = await service.submit(authContext, envelope);
+    const conflict = await service.submit(authContext, { ...envelope, payload: { id: 'order-2', total: 200 } });
 
     expect(conflict).toEqual({
       status: 'CONFLICT',
@@ -70,8 +79,26 @@ describe('SyncService', () => {
     const prisma = createPrismaMock();
     const service = new SyncService(prisma as never);
 
-    await expect(service.submit({ ...envelope, idempotencyKey: 'short' })).rejects.toThrow(
+    await expect(service.submit(authContext, { ...envelope, idempotencyKey: 'short' })).rejects.toThrow(
       'A valid idempotency key is required',
+    );
+  });
+
+  it('rejects an operation from another branch', async () => {
+    const prisma = createPrismaMock();
+    const service = new SyncService(prisma as never);
+
+    await expect(service.submit(authContext, { ...envelope, branchId: 'BR02' })).rejects.toThrow(
+      'Forbidden: branch access denied',
+    );
+  });
+
+  it('rejects an operation from another device', async () => {
+    const prisma = createPrismaMock();
+    const service = new SyncService(prisma as never);
+
+    await expect(service.submit(authContext, { ...envelope, deviceId: 'POS99' })).rejects.toThrow(
+      'Forbidden: device access denied',
     );
   });
 });
