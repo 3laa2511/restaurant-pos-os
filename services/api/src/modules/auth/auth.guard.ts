@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import type { AuthenticatedRequest } from './auth.service.js';
 
@@ -14,7 +14,7 @@ export class AuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedHttpRequest>();
     const authorization = request.header('authorization');
     const match = authorization?.match(/^Bearer\s+(.+)$/i);
-    if (!match) return false;
+    if (!match) throw new UnauthorizedException('Authentication required');
 
     const authenticated = await this.auth.authenticate(match[1]);
     request.authContext = authenticated.context;
