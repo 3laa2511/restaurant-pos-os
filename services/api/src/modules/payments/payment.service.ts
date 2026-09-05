@@ -10,7 +10,10 @@ export interface PersistSplitPaymentInput { orderId: string; shiftId: string; al
 export interface PersistSplitPaymentResult { operationId: string; orderId: string; status: 'PAID'; totalPaid: number; change: number; paymentIds: string[]; }
 const money = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 const requireText = (value: string, field: string): void => { if (!value.trim()) throw new Error(`${field} is required`); };
-const isUniqueConstraintError = (error: unknown): boolean => error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+const isUniqueConstraintError = (error: unknown): boolean => {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) return error.code === 'P2002';
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 'P2002';
+};
 const jsonValue = (value: unknown): ReturnType<typeof JSON.parse> => JSON.parse(JSON.stringify(value));
 
 @Injectable()
