@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/index.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
@@ -57,7 +58,7 @@ export class RefundService {
       return await this.prisma.$transaction(async (tx) => {
         const payment = await tx.payment.findUnique({
           where: { id: input.paymentId },
-          select: { id: true, orderId: true, shiftId: true, amount: true, status: true, order: { select: { id: true, branchId: true, status: true } } },
+          select: { id: true, orderId: true, shiftId: true, amount: true, method: true, status: true, order: { select: { id: true, branchId: true, status: true } } },
         });
         if (!payment) throw new Error('Payment not found');
         assertBranchAccess(context, payment.order.branchId);
@@ -66,9 +67,10 @@ export class RefundService {
         if (input.type === 'VOID' && payment.status !== 'PAID') throw new Error('A partially refunded payment cannot be voided');
         if (payment.order.status === 'CANCELLED' || payment.order.status === 'VOIDED') throw new Error(`Order cannot be financially adjusted from status ${payment.order.status}`);
 
-        const shift = await tx.shift.findUnique({ where: { id: input.shiftId }, select: { id: true, branchId: true, status: true } });
+        const shift = await tx.shift.findUnique({ where: { id: input.shiftId }, select: { id: true, branchId: true, deviceId: true, status: true } });
         if (!shift) throw new Error('Shift not found');
         if (shift.branchId !== payment.order.branchId) throw new Error('Shift does not belong to the payment branch');
+        if (shift.deviceId !== input.deviceId) throw new Error('Adjustment device does not match the shift device');
         if (shift.status !== 'OPEN') throw new Error('Shift is not open');
 
         const adjustments = await tx.paymentAdjustment.findMany({ where: { paymentId: payment.id }, select: { amount: true } });
@@ -95,6 +97,21 @@ export class RefundService {
           },
         });
         await tx.payment.update({ where: { id: payment.id }, data: { status: nextPaymentStatus } });
+
+        if (payment.method === 'CASH') {
+          const drawer = await tx.cashDrawer.findUnique({ where: { deviceId: shift.deviceId }, select: { id: true, branchId: true, active: true } });
+          if (!drawer || !drawer.active || drawer.branchId !== payment.order.branchId) throw new Error('An active cash drawer is required for cash refunds');
+          await tx.cashDrawerMovement.create({
+            data: {
+              id: randomUUID(), drawerId: drawer.id, branchId: payment.order.branchId, deviceId: shift.deviceId,
+              shiftId: shift.id, userId: context.userId, type: input.type === 'VOID' ? 'REFUND' : 'REFUND', direction: 'OUT',
+              amount: input.amount.toFixed(2), reason: `${input.type === 'VOID' ? 'Cash void' : 'Cash refund'} for order ${payment.orderId}`,
+              sourceType: 'PAYMENT_ADJUSTMENT', sourceId: adjustmentId,
+              idempotencyKey: `${input.idempotencyKey}:drawer:refund`, operationId: `${operationId}:refund`,
+              metadata: jsonValue({ orderId: payment.orderId, paymentId: payment.id, adjustmentId, adjustmentType: input.type }), occurredAt: new Date(),
+            },
+          });
+        }
 
         let orderStatus = payment.order.status;
         if (nextPaymentStatus === 'REFUNDED' || nextPaymentStatus === 'VOIDED') {
