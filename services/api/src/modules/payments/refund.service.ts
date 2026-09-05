@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '../../generated/prisma/index.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
@@ -104,7 +103,7 @@ export class RefundService {
           await tx.cashDrawerMovement.create({
             data: {
               id: randomUUID(), drawerId: drawer.id, branchId: payment.order.branchId, deviceId: shift.deviceId,
-              shiftId: shift.id, userId: context.userId, type: input.type === 'VOID' ? 'REFUND' : 'REFUND', direction: 'OUT',
+              shiftId: shift.id, userId: context.userId, type: 'REFUND', direction: 'OUT',
               amount: input.amount.toFixed(2), reason: `${input.type === 'VOID' ? 'Cash void' : 'Cash refund'} for order ${payment.orderId}`,
               sourceType: 'PAYMENT_ADJUSTMENT', sourceId: adjustmentId,
               idempotencyKey: `${input.idempotencyKey}:drawer:refund`, operationId: `${operationId}:refund`,
