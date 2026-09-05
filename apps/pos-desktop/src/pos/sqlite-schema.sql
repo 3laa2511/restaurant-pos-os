@@ -17,6 +17,15 @@ CREATE TABLE IF NOT EXISTS device_sequences (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS menu_categories (
+  id TEXT PRIMARY KEY,
+  name_ar TEXT NOT NULL,
+  name_en TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY,
   sku TEXT NOT NULL UNIQUE,
@@ -109,6 +118,8 @@ CREATE TABLE IF NOT EXISTS sync_queue (
   updated_at TEXT NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_menu_categories_sort ON menu_categories(active, sort_order);
+CREATE INDEX IF NOT EXISTS idx_products_category_active ON products(category_id, active);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_status_sequence ON sync_queue(status, client_sequence);
