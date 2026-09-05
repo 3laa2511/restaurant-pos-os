@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { CurrentAuth } from '../auth/auth.decorators.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { PermissionGuard } from '../auth/permission.guard.js';
@@ -11,6 +11,12 @@ import { ShiftService, type CloseShiftInput, type OpenShiftInput } from './shift
 @UseGuards(AuthGuard, PermissionGuard)
 export class ShiftController {
   constructor(private readonly shifts: ShiftService) {}
+
+  @Get('current')
+  @RequirePermission(PERMISSIONS.SHIFT_OPEN)
+  current(@CurrentAuth() context: AuthContext) {
+    return this.shifts.current(context);
+  }
 
   @Post('open')
   @RequirePermission(PERMISSIONS.SHIFT_OPEN)
