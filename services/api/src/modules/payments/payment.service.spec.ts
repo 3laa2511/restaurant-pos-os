@@ -28,7 +28,7 @@ function buildPrisma() {
   };
   tx.order.findUnique.mockResolvedValue({ id: 'order-1', branchId: 'branch-1', status: 'CONFIRMED', total: { toString: () => '250.00' }, version: 3 });
   tx.order.updateMany.mockResolvedValue({ count: 1 });
-  tx.shift.findUnique.mockResolvedValue({ id: 'shift-1', branchId: 'branch-1', status: 'OPEN' });
+  tx.shift.findUnique.mockResolvedValue({ id: 'shift-1', branchId: 'branch-1', deviceId: 'device-1', status: 'OPEN' });
   tx.payment.findMany.mockResolvedValue([]);
   tx.payment.create.mockResolvedValue({});
   tx.orderEvent.create.mockResolvedValue({});
