@@ -103,7 +103,7 @@ export function createOrder(input: { id: string; orderNumber: string; branchId: 
       nameAr: item.product.nameAr,
       nameEn: item.product.nameEn,
       sku: item.product.sku,
-      unitPrice: item.product.price,
+      unitPrice: Number((item.product.price + modifiers.reduce((sum, modifier) => sum + modifier.priceDelta, 0)).toFixed(2)),
       quantity: item.quantity,
       note: item.note || null,
       modifiers,
