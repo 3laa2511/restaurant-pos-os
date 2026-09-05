@@ -32,7 +32,7 @@ describe('ShiftService hardening', () => {
         findFirst: jest.fn().mockResolvedValue({ id: 'existing-shift', userId: 'cashier-1', deviceId: 'device-1' }),
         create,
       },
-    };
+    } as any;
     const prisma = {
       syncOperation: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(async (callback: any) => callback(tx)),
@@ -51,7 +51,7 @@ describe('ShiftService hardening', () => {
         id: 'shift-1', branchId: 'branch-2', userId: 'cashier-1', deviceId: 'device-1',
         status: 'OPEN', openingCash: '100.00', openedAt: new Date(),
       }) },
-    };
+    } as any;
     const prisma = {
       syncOperation: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(async (callback: any) => callback(tx)),
@@ -69,7 +69,7 @@ describe('ShiftService hardening', () => {
         id: 'shift-1', branchId: 'branch-1', userId: 'cashier-1', deviceId: 'device-1',
         status: 'CLOSED', openingCash: '100.00', openedAt: new Date(),
       }) },
-    };
+    } as any;
     const prisma = {
       syncOperation: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(async (callback: any) => callback(tx)),
