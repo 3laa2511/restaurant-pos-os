@@ -4,7 +4,6 @@ import type { SyncQueueItem, SyncTransport } from './sync-contract.js';
 import { ExponentialRetryPolicy } from './retry-policy.js';
 
 export type { SyncQueueItem, SyncTransport } from './sync-contract.js';
-
 export interface SyncWorkerOptions { batchSize?: number; maxRetries?: number; baseDelayMs?: number; maxDelayMs?: number; workerId?: string; leaseMs?: number; }
 export interface SyncWorkerRuntimeOptions extends SyncWorkerOptions { repository: SyncRepository; transport: SyncTransport; intervalMs?: number; }
 export interface SyncWorkerRuntime { stop(): void; }
@@ -44,16 +43,29 @@ function requireNonEmptyString(value: unknown, field: string): string {
   return value.trim();
 }
 
-export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetch = fetch, accessTokenProvider: () => string | null = () => null): SyncTransport {
+function sessionRuntime(): { accessToken: string | null; branchId: string | null; deviceId: string | null } {
+  try {
+    const token = sessionStorage.getItem('pos_access_token');
+    const raw = sessionStorage.getItem('pos_session');
+    if (!raw) return { accessToken: token, branchId: null, deviceId: null };
+    const session = JSON.parse(raw) as { user?: { branchId?: string | null }; deviceId?: string | null };
+    return { accessToken: token, branchId: session.user?.branchId ?? null, deviceId: session.deviceId ?? null };
+  } catch {
+    return { accessToken: null, branchId: null, deviceId: null };
+  }
+}
+
+export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetch = fetch, accessTokenProvider?: () => string | null): SyncTransport {
   const base = apiBaseUrl.replace(/\/$/, '');
   return {
     async push(item: SyncQueueItem): Promise<void> {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
-      const deviceId = requireNonEmptyString(payload.deviceId, 'deviceId');
-      const branchId = requireNonEmptyString(payload.branchId, 'branchId');
-      const token = accessTokenProvider();
-      const headers: Record<string, string> = { 'content-type': 'application/json' };
-      if (token) headers.Authorization = `Bearer ${token}`;
+      const runtime = sessionRuntime();
+      const deviceId = requireNonEmptyString(runtime.deviceId ?? payload.deviceId, 'deviceId');
+      const branchId = requireNonEmptyString(runtime.branchId ?? payload.branchId, 'branchId');
+      const token = accessTokenProvider?.() ?? runtime.accessToken;
+      if (!token) throw new Error('Sync requires an authenticated desktop session');
+      const headers: Record<string, string> = { 'content-type': 'application/json', Authorization: `Bearer ${token}` };
       const response = await fetcher(`${base}/api/sync/operations`, {
         method: 'POST', headers,
         body: JSON.stringify({ id: item.id, deviceId, branchId, operation: item.operation, entityType: item.entity_type, entityId: item.entity_id, idempotencyKey: item.idempotency_key, clientSequence: item.client_sequence, occurredAt: payload.createdAt ?? item.created_at, payload }),
