@@ -7,17 +7,83 @@ datasource db {
   provider = "postgresql"
 }
 
-enum UserStatus { ACTIVE INACTIVE SUSPENDED }
-enum OrderSource { POS CALL_CENTER MOBILE WEB QR AGGREGATOR }
-enum OrderType { DINE_IN TAKEAWAY DELIVERY }
-enum OrderStatus { DRAFT CONFIRMED SENT_TO_KITCHEN PREPARING READY ASSIGNED OUT_FOR_DELIVERY DELIVERED CLOSED CANCELLED VOIDED REFUNDED FAILED }
-enum PaymentStatus { PENDING PAID PARTIALLY_REFUNDED REFUNDED VOIDED FAILED }
-enum PaymentAdjustmentType { REFUND VOID }
-enum ShiftStatus { OPEN CLOSED }
-enum DeviceStatus { ACTIVE INACTIVE BLOCKED }
-enum RoleCode { CASHIER CALL_CENTER_OPERATOR CALL_CENTER_SUPERVISOR KITCHEN DISPATCHER BRANCH_MANAGER CENTRAL_ADMIN OWNER }
-enum CashDrawerMovementType { OPENING_FLOAT SALE CASH_CHANGE REFUND PAY_IN PAY_OUT ADJUSTMENT }
-enum CashDrawerDirection { IN OUT }
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+enum OrderSource {
+  POS
+  CALL_CENTER
+  MOBILE
+  WEB
+  QR
+  AGGREGATOR
+}
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+}
+enum OrderStatus {
+  DRAFT
+  CONFIRMED
+  SENT_TO_KITCHEN
+  PREPARING
+  READY
+  ASSIGNED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CLOSED
+  CANCELLED
+  VOIDED
+  REFUNDED
+  FAILED
+}
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  VOIDED
+  FAILED
+}
+enum PaymentAdjustmentType {
+  REFUND
+  VOID
+}
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+enum DeviceStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+enum RoleCode {
+  CASHIER
+  CALL_CENTER_OPERATOR
+  CALL_CENTER_SUPERVISOR
+  KITCHEN
+  DISPATCHER
+  BRANCH_MANAGER
+  CENTRAL_ADMIN
+  OWNER
+}
+enum CashDrawerMovementType {
+  OPENING_FLOAT
+  SALE
+  CASH_CHANGE
+  REFUND
+  PAY_IN
+  PAY_OUT
+  ADJUSTMENT
+}
+enum CashDrawerDirection {
+  IN
+  OUT
+}
 
 model Branch {
   id String @id @default(cuid())
@@ -90,6 +156,7 @@ model Device {
   userId String?
   user User? @relation(fields: [userId], references: [id])
   shifts Shift[]
+  sessions Session[]
   cashDrawer CashDrawer?
   cashDrawerMovements CashDrawerMovement[]
   createdAt DateTime @default(now())
@@ -103,6 +170,7 @@ model Session {
   branchId String?
   branch Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
   deviceId String?
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   expiresAt DateTime
   revokedAt DateTime?
   lastSeenAt DateTime @default(now())
