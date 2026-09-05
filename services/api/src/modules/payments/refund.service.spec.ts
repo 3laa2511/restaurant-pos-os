@@ -14,6 +14,8 @@ function prismaMock() {
     payment: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
     shift: { findUnique: jest.fn() },
     paymentAdjustment: { findMany: jest.fn(), create: jest.fn() },
+    cashDrawer: { findUnique: jest.fn() },
+    cashDrawerMovement: { create: jest.fn() },
     order: { update: jest.fn() },
     orderEvent: { create: jest.fn() },
     auditLog: { create: jest.fn() },
@@ -22,6 +24,8 @@ function prismaMock() {
     payment: { findUnique: AsyncMock; update: AsyncMock; findMany: AsyncMock };
     shift: { findUnique: AsyncMock };
     paymentAdjustment: { findMany: AsyncMock; create: AsyncMock };
+    cashDrawer: { findUnique: AsyncMock };
+    cashDrawerMovement: { create: AsyncMock };
     order: { update: AsyncMock };
     orderEvent: { create: AsyncMock };
     auditLog: { create: AsyncMock };
@@ -44,11 +48,13 @@ function setupPayment(tx: ReturnType<typeof prismaMock>['tx'], status: string = 
   tx.shift.findUnique.mockResolvedValue({ id: 'shift-1', branchId: 'branch-1', deviceId: 'device-1', status: 'OPEN' });
   tx.paymentAdjustment.findMany.mockResolvedValue([]);
   tx.paymentAdjustment.create.mockResolvedValue({ id: 'adjustment-1' });
+  tx.cashDrawer.findUnique.mockResolvedValue({ id: 'drawer-1', branchId: 'branch-1', active: true });
+  tx.cashDrawerMovement.create.mockResolvedValue({ id: 'movement-1' });
   tx.syncOperation.create.mockResolvedValue({});
 }
 
 describe('RefundService', () => {
-  it('persists a partial refund as an immutable adjustment and updates payment status', async () => {
+  it('persists a partial cash refund and records the immutable drawer movement', async () => {
     const { prisma, tx } = prismaMock();
     setupPayment(tx);
     tx.payment.findMany.mockResolvedValue([{ amount: '100.00', status: 'PARTIALLY_REFUNDED', adjustments: [{ amount: '40.00' }] }]);
@@ -57,6 +63,7 @@ describe('RefundService', () => {
     expect(result.paymentStatus).toBe('PARTIALLY_REFUNDED');
     expect(result.orderStatus).toBe('CLOSED');
     expect(tx.paymentAdjustment.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ paymentId: 'payment-1', amount: '40.00', type: 'REFUND', actorUserId: 'user-1' }) }));
+    expect(tx.cashDrawerMovement.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ drawerId: 'drawer-1', type: 'REFUND', direction: 'OUT', amount: '40.00', sourceType: 'PAYMENT_ADJUSTMENT', sourceId: 'adjustment-1' }) }));
     expect(tx.payment.update).toHaveBeenCalledWith({ where: { id: 'payment-1' }, data: { status: 'PARTIALLY_REFUNDED' } });
   });
 
