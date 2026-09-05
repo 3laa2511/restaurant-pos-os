@@ -1,5 +1,5 @@
 export type SyncQueueStatus = 'PENDING' | 'SYNCING' | 'SYNCED' | 'FAILED';
-export type SyncOperation = 'CREATE' | 'UPDATE' | 'DELETE';
+export type SyncOperation = 'CREATE' | 'UPDATE' | 'DELETE' | 'CHECKOUT';
 
 export interface SyncQueueItem {
   id: string;
