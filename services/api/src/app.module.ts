@@ -7,8 +7,9 @@ import { PaymentModule } from './modules/payments/payment.module.js';
 import { ShiftModule } from './modules/shifts/shift.module.js';
 import { CashDrawerModule } from './modules/cash-drawer/cash-drawer.module.js';
 import { SyncModule } from './modules/sync/sync.module.js';
+import { MenuModule } from './modules/menu/menu.module.js';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, HealthModule, OrderModule, PaymentModule, ShiftModule, CashDrawerModule, SyncModule],
+  imports: [DatabaseModule, AuthModule, HealthModule, OrderModule, PaymentModule, ShiftModule, CashDrawerModule, SyncModule, MenuModule],
 })
 export class AppModule {}
