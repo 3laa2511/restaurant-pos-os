@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '../../generated/prisma/index.js';
+import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
@@ -28,7 +28,7 @@ export class ShiftService {
     if (context.deviceId !== input.deviceId) throw new Error('Shift device does not match the authenticated device');
     const hash = requestHash({ ...input });
     const existingOperation = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-    if (existingOperation) { if (existingOperation.requestHash !== hash) throw new Error('Idempotency key was reused with a different operation'); if (existingOperation.result) return existingOperation.result as ShiftResult; }
+    if (existingOperation) { if (existingOperation.requestHash !== hash) throw new Error('Idempotency key was reused with a different operation'); if (existingOperation.result) return existingOperation.result as unknown as ShiftResult; }
     const operationId = randomUUID();
     try {
       return await runSerializable(() => this.prisma.$transaction(async (tx) => {
@@ -38,27 +38,18 @@ export class ShiftService {
         if (!device || device.branchId !== input.branchId || device.status !== 'ACTIVE') throw new Error('Device is not active in the selected branch');
         const openShift = await tx.shift.findFirst({ where: { status: 'OPEN', OR: [{ deviceId: input.deviceId }, { userId: context.userId }] }, select: { id: true, userId: true, deviceId: true } });
         if (openShift) { if (openShift.deviceId === input.deviceId) throw new Error(`Device already has an open shift (${openShift.id})`); throw new Error(`Cashier already has an open shift (${openShift.id})`); }
-
         let shift;
         try { shift = await tx.shift.create({ data: { id: randomUUID(), branchId: input.branchId, userId: context.userId, deviceId: input.deviceId, openingCash: input.openingCash.toFixed(2), status: 'OPEN' } }); }
         catch (error) { if (isUnique(error)) throw new Error('Cashier or device already has an open shift'); throw error; }
-
-        // Every open shift gets a deterministic device drawer and an immutable opening-float ledger entry.
         const drawer = await tx.cashDrawer.upsert({ where: { deviceId: input.deviceId }, update: { active: true }, create: { id: randomUUID(), branchId: input.branchId, deviceId: input.deviceId, name: `${device.name} Cash Drawer`, active: true } });
-        await tx.cashDrawerMovement.create({ data: {
-          id: randomUUID(), drawerId: drawer.id, branchId: input.branchId, deviceId: input.deviceId, shiftId: shift.id, userId: context.userId,
-          type: 'OPENING_FLOAT', direction: 'IN', amount: input.openingCash.toFixed(2), reason: `Opening float for shift ${shift.id}`,
-          sourceType: 'SHIFT', sourceId: shift.id, idempotencyKey: `${input.idempotencyKey}:drawer:opening`, operationId: `${operationId}:opening`,
-          metadata: { shiftId: shift.id }, occurredAt: new Date(),
-        } });
-
+        await tx.cashDrawerMovement.create({ data: { id: randomUUID(), drawerId: drawer.id, branchId: input.branchId, deviceId: input.deviceId, shiftId: shift.id, userId: context.userId, type: 'OPENING_FLOAT', direction: 'IN', amount: input.openingCash.toFixed(2), reason: `Opening float for shift ${shift.id}`, sourceType: 'SHIFT', sourceId: shift.id, idempotencyKey: `${input.idempotencyKey}:drawer:opening`, operationId: `${operationId}:opening`, metadata: { shiftId: shift.id }, occurredAt: new Date() } });
         await tx.auditLog.create({ data: { id: randomUUID(), actorUserId: context.userId, branchId: input.branchId, action: 'SHIFT_OPENED', entityType: 'SHIFT', entityId: shift.id, metadata: { operationId, openingCash: input.openingCash, deviceId: input.deviceId, drawerId: drawer.id } } });
         const result: ShiftResult = { operationId, shiftId: shift.id, status: 'OPEN' };
-        await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: input.deviceId, branchId: input.branchId, operation: 'SHIFT_OPENED', entityType: 'SHIFT', entityId: shift.id, idempotencyKey: input.idempotencyKey, clientSequence: input.clientSequence, occurredAt: new Date(), payload: { shiftId: shift.id, openingCash: input.openingCash, drawerId: drawer.id }, requestHash: hash, status: 'APPLIED', result, updatedAt: new Date() } });
+        await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: input.deviceId, branchId: input.branchId, operation: 'SHIFT_OPENED', entityType: 'SHIFT', entityId: shift.id, idempotencyKey: input.idempotencyKey, clientSequence: input.clientSequence, occurredAt: new Date(), payload: { shiftId: shift.id, openingCash: input.openingCash, drawerId: drawer.id }, requestHash: hash, status: 'APPLIED', result: result as unknown as object, updatedAt: new Date() } });
         return result;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
-      if (isUnique(error)) { const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }); if (winner) { if (winner.requestHash !== hash) throw new Error('Idempotency key was reused with a different operation'); if (winner.result) return winner.result as ShiftResult; } }
+      if (isUnique(error)) { const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }); if (winner) { if (winner.requestHash !== hash) throw new Error('Idempotency key was reused with a different operation'); if (winner.result) return winner.result as unknown as ShiftResult; } }
       throw error;
     }
   }
@@ -67,7 +58,7 @@ export class ShiftService {
     assertPermission(context, PERMISSIONS.SHIFT_CLOSE); text(input.shiftId, 'Shift'); text(input.idempotencyKey, 'Idempotency key'); validSequence(input.clientSequence); assertMoneyAmount(input.closingCash, 'Closing cash');
     const hash = requestHash({ ...input });
     const existingOperation = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-    if (existingOperation) { if (existingOperation.requestHash !== hash) throw new Error('Idempotency key was reused with a different operation'); if (existingOperation.result) return existingOperation.result as ShiftResult; }
+    if (existingOperation) { if (existingOperation.requestHash !== hash) throw new Error('Idempotency key was reused with a different operation'); if (existingOperation.result) return existingOperation.result as unknown as ShiftResult; }
     const operationId = randomUUID();
     try {
       return await runSerializable(() => this.prisma.$transaction(async (tx) => {
@@ -77,22 +68,20 @@ export class ShiftService {
         if (context.userId !== shift.userId && !context.permissions.includes(PERMISSIONS.REPORT_VIEW_FINANCIAL)) throw new Error('Only the shift owner or financial manager can close this shift');
         if (context.deviceId && context.deviceId !== shift.deviceId) throw new Error('Shift device does not match the authenticated device');
         assertShiftCanClose({ ...shift, cashierId: shift.userId, openingCash: Number(shift.openingCash) });
-
         const movements = await tx.cashDrawerMovement.findMany({ where: { shiftId: shift.id }, select: { amount: true, direction: true } });
         if (movements.length === 0) throw new Error('Shift has no cash drawer ledger; cannot close safely');
         const expectedCash = money(movements.reduce((total, movement) => total + (movement.direction === 'IN' ? Number(movement.amount) : -Number(movement.amount)), 0));
         const actualCash = money(input.closingCash);
         const variance = money(actualCash - expectedCash);
-
         const updated = await tx.shift.updateMany({ where: { id: shift.id, status: 'OPEN' }, data: { status: 'CLOSED', closingCash: actualCash.toFixed(2), closedAt: new Date() } });
         if (updated.count !== 1) throw new Error('Shift was closed by another operation');
         const result: ShiftResult = { operationId, shiftId: shift.id, status: 'CLOSED', expectedCash, actualCash, variance };
         await tx.auditLog.create({ data: { id: randomUUID(), actorUserId: context.userId, branchId: shift.branchId, action: 'SHIFT_CLOSED', entityType: 'SHIFT', entityId: shift.id, metadata: { operationId, expectedCash, actualCash, variance, ledgerMovementCount: movements.length } } });
-        await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: shift.deviceId, branchId: shift.branchId, operation: 'SHIFT_CLOSED', entityType: 'SHIFT', entityId: shift.id, idempotencyKey: input.idempotencyKey, clientSequence: input.clientSequence, occurredAt: new Date(), payload: { shiftId: shift.id, closingCash: actualCash, expectedCash, variance }, requestHash: hash, status: 'APPLIED', result, updatedAt: new Date() } });
+        await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: shift.deviceId, branchId: shift.branchId, operation: 'SHIFT_CLOSED', entityType: 'SHIFT', entityId: shift.id, idempotencyKey: input.idempotencyKey, clientSequence: input.clientSequence, occurredAt: new Date(), payload: { shiftId: shift.id, closingCash: actualCash, expectedCash, variance }, requestHash: hash, status: 'APPLIED', result: result as unknown as object, updatedAt: new Date() } });
         return result;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     } catch (error) {
-      if (isUnique(error)) { const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }); if (winner) { if (winner.requestHash !== hash) throw new Error('Idempotency key was reused with a different operation'); if (winner.result) return winner.result as ShiftResult; } }
+      if (isUnique(error)) { const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }); if (winner) { if (winner.requestHash !== hash) throw new Error('Idempotency key was reused with a different operation'); if (winner.result) return winner.result as unknown as ShiftResult; } }
       throw error;
     }
   }
