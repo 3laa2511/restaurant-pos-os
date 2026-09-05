@@ -5,21 +5,8 @@ import { ExponentialRetryPolicy } from './retry-policy.js';
 
 export type { SyncQueueItem, SyncTransport } from './sync-contract.js';
 
-export interface SyncWorkerOptions {
-  batchSize?: number;
-  maxRetries?: number;
-  baseDelayMs?: number;
-  maxDelayMs?: number;
-  workerId?: string;
-  leaseMs?: number;
-}
-
-export interface SyncWorkerRuntimeOptions extends SyncWorkerOptions {
-  repository: SyncRepository;
-  transport: SyncTransport;
-  intervalMs?: number;
-}
-
+export interface SyncWorkerOptions { batchSize?: number; maxRetries?: number; baseDelayMs?: number; maxDelayMs?: number; workerId?: string; leaseMs?: number; }
+export interface SyncWorkerRuntimeOptions extends SyncWorkerOptions { repository: SyncRepository; transport: SyncTransport; intervalMs?: number; }
 export interface SyncWorkerRuntime { stop(): void; }
 
 export class OfflineSyncWorker {
@@ -27,27 +14,19 @@ export class OfflineSyncWorker {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly orchestrator: SyncOrchestrator;
   private readonly retryPolicy: ExponentialRetryPolicy;
-
   constructor(repository: SyncRepository, transport: SyncTransport, options: SyncWorkerOptions = {}) {
     this.orchestrator = new SyncOrchestrator(repository, transport, options);
     this.retryPolicy = new ExponentialRetryPolicy({ baseDelayMs: options.baseDelayMs, maxDelayMs: options.maxDelayMs });
   }
-
   async runOnce(): Promise<number> {
     if (this.running) return 0;
     this.running = true;
     try {
       const result = await this.orchestrator.runOnce();
-      const failedAttempts = result.failedAttempts;
-      if (typeof failedAttempts === 'number') {
-        await new Promise((resolve) => setTimeout(resolve, this.retryPolicy.delayFor(failedAttempts)));
-      }
+      if (typeof result.failedAttempts === 'number') await new Promise((resolve) => setTimeout(resolve, this.retryPolicy.delayFor(result.failedAttempts)));
       return result.synced;
-    } finally {
-      this.running = false;
-    }
+    } finally { this.running = false; }
   }
-
   start(intervalMs = 2000): () => void {
     let stopped = false;
     const tick = async (): Promise<void> => {
@@ -65,28 +44,19 @@ function requireNonEmptyString(value: unknown, field: string): string {
   return value.trim();
 }
 
-export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetch = fetch): SyncTransport {
+export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetch = fetch, accessTokenProvider: () => string | null = () => null): SyncTransport {
   const base = apiBaseUrl.replace(/\/$/, '');
   return {
     async push(item: SyncQueueItem): Promise<void> {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
       const deviceId = requireNonEmptyString(payload.deviceId, 'deviceId');
       const branchId = requireNonEmptyString(payload.branchId, 'branchId');
+      const token = accessTokenProvider();
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const response = await fetcher(`${base}/api/sync/operations`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          id: item.id,
-          deviceId,
-          branchId,
-          operation: item.operation,
-          entityType: item.entity_type,
-          entityId: item.entity_id,
-          idempotencyKey: item.idempotency_key,
-          clientSequence: item.client_sequence,
-          occurredAt: payload.createdAt ?? item.created_at,
-          payload,
-        }),
+        method: 'POST', headers,
+        body: JSON.stringify({ id: item.id, deviceId, branchId, operation: item.operation, entityType: item.entity_type, entityId: item.entity_id, idempotencyKey: item.idempotency_key, clientSequence: item.client_sequence, occurredAt: payload.createdAt ?? item.created_at, payload }),
       });
       if (!response.ok) throw new Error(`Sync HTTP ${response.status}`);
       const result = await response.json().catch(() => null) as { status?: string } | null;
