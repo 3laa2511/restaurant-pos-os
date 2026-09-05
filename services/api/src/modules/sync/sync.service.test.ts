@@ -39,26 +39,26 @@ function createPrismaMock() {
 }
 
 describe('SyncService', () => {
-  it('accepts the first operation and persists a durable receipt', async () => {
+  it('rejects legacy CREATE operations and persists a durable rejection', async () => {
     const prisma = createPrismaMock();
     const service = new SyncService(prisma as never);
 
     const result = await service.submit(authContext, envelope);
 
-    expect(result.status).toBe('ACCEPTED');
+    expect(result.status).toBe('REJECTED');
     expect(result.operationId).toBeTruthy();
-    expect(await service.pending(authContext)).toHaveLength(1);
+    expect(await service.pending(authContext)).toHaveLength(0);
   });
 
-  it('returns duplicate for the exact same idempotent request', async () => {
+  it('returns the stored result for an exact idempotent retry of a rejected operation', async () => {
     const prisma = createPrismaMock();
     const service = new SyncService(prisma as never);
 
     const first = await service.submit(authContext, envelope);
     const second = await service.submit(authContext, envelope);
 
-    expect(first.status).toBe('ACCEPTED');
-    expect(second).toEqual({ status: 'ACCEPTED', operationId: first.operationId });
+    expect(first.status).toBe('REJECTED');
+    expect(second).toEqual(first);
   });
 
   it('returns conflict when an idempotency key is reused with different content', async () => {
