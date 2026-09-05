@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '../../generated/prisma/index.js';
+import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
@@ -36,7 +36,6 @@ export class PaymentService {
         const validated = validateSplitPayment({ orderId: input.orderId, shiftId: input.shiftId, totalDue: Number(order.total.toString()), allocations: input.allocations });
         const existingPayments = await tx.payment.findMany({ where: { orderId: input.orderId }, select: { id: true } });
         if (existingPayments.length > 0) throw new Error('Order already has payments; use the refund/void flow instead of charging again');
-
         const cashAllocations = input.allocations.filter((allocation) => allocation.method === 'CASH');
         const cashReceived = money(cashAllocations.reduce((sum, allocation) => sum + (allocation.receivedCash ?? allocation.amount), 0));
         const cashSale = money(cashAllocations.reduce((sum, allocation) => sum + allocation.amount, 0));
@@ -46,7 +45,6 @@ export class PaymentService {
           drawer = await tx.cashDrawer.findUnique({ where: { deviceId: input.deviceId }, select: { id: true, branchId: true, deviceId: true, active: true } });
           if (!drawer || !drawer.active || drawer.branchId !== order.branchId) throw new Error('An active cash drawer is required for cash payments');
         }
-
         const paymentIds: string[] = [];
         for (const [index, allocation] of input.allocations.entries()) {
           const paymentId = randomUUID(); paymentIds.push(paymentId);
@@ -54,12 +52,10 @@ export class PaymentService {
           const changeAmount = allocation.method === 'CASH' ? money(Math.max(0, (receivedAmount ?? allocation.amount) - allocation.amount)) : 0;
           await tx.payment.create({ data: { id: paymentId, orderId: input.orderId, shiftId: input.shiftId, amount: allocation.amount.toFixed(2), method: allocation.method, reference: allocation.reference?.trim() || null, receivedAmount: receivedAmount === null ? null : receivedAmount.toFixed(2), changeAmount: changeAmount.toFixed(2), status: 'PAID', idempotencyKey: `${input.idempotencyKey}:payment:${index}` } });
         }
-
         if (drawer) {
           if (cashSale > 0) await tx.cashDrawerMovement.create({ data: { id: randomUUID(), drawerId: drawer.id, branchId: order.branchId, deviceId: input.deviceId, shiftId: input.shiftId, userId: context.userId, type: 'SALE', direction: 'IN', amount: cashSale.toFixed(2), reason: `Cash sale for order ${order.id}`, sourceType: 'PAYMENT_OPERATION', sourceId: operationId, idempotencyKey: `${input.idempotencyKey}:drawer:sale`, operationId: `${operationId}:sale`, metadata: jsonValue({ orderId: order.id, paymentIds }), occurredAt: new Date() } });
           if (cashChange > 0) await tx.cashDrawerMovement.create({ data: { id: randomUUID(), drawerId: drawer.id, branchId: order.branchId, deviceId: input.deviceId, shiftId: input.shiftId, userId: context.userId, type: 'CASH_CHANGE', direction: 'OUT', amount: cashChange.toFixed(2), reason: `Change for order ${order.id}`, sourceType: 'PAYMENT_OPERATION', sourceId: operationId, idempotencyKey: `${input.idempotencyKey}:drawer:change`, operationId: `${operationId}:change`, metadata: jsonValue({ orderId: order.id, paymentIds }), occurredAt: new Date() } });
         }
-
         const transition = await tx.order.updateMany({ where: { id: input.orderId, version: order.version, status: 'CONFIRMED' }, data: { status: 'CLOSED', version: { increment: 1 } } });
         if (transition.count !== 1) throw new Error('Order was changed by another operation before payment could be finalized');
         const eventPayload = { operationId, totalPaid: validated.totalAllocated, paymentCount: input.allocations.length, paymentIds, change: validated.change };
