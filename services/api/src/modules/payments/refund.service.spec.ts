@@ -40,8 +40,8 @@ const baseInput = {
 };
 
 function setupPayment(tx: ReturnType<typeof prismaMock>['tx'], status: string = 'PAID') {
-  tx.payment.findUnique.mockResolvedValue({ id: 'payment-1', orderId: 'order-1', shiftId: 'shift-1', amount: '100.00', status, order: { id: 'order-1', branchId: 'branch-1', status: 'CLOSED' } });
-  tx.shift.findUnique.mockResolvedValue({ id: 'shift-1', branchId: 'branch-1', status: 'OPEN' });
+  tx.payment.findUnique.mockResolvedValue({ id: 'payment-1', orderId: 'order-1', shiftId: 'shift-1', amount: '100.00', status, method: 'CASH', order: { id: 'order-1', branchId: 'branch-1', status: 'CLOSED' } });
+  tx.shift.findUnique.mockResolvedValue({ id: 'shift-1', branchId: 'branch-1', deviceId: 'device-1', status: 'OPEN' });
   tx.paymentAdjustment.findMany.mockResolvedValue([]);
   tx.paymentAdjustment.create.mockResolvedValue({ id: 'adjustment-1' });
   tx.syncOperation.create.mockResolvedValue({});
