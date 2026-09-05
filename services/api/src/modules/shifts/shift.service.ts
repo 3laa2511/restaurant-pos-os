@@ -9,6 +9,7 @@ import { assertMoneyAmount, assertShiftCanClose, validateOpenShift } from './shi
 export interface OpenShiftInput { branchId: string; deviceId: string; openingCash: number; idempotencyKey: string; clientSequence: number; }
 export interface CloseShiftInput { shiftId: string; closingCash: number; idempotencyKey: string; clientSequence: number; }
 export interface ShiftResult { operationId: string; shiftId: string; status: 'OPEN' | 'CLOSED'; expectedCash?: number; actualCash?: number; variance?: number; }
+export interface CurrentShiftResult { shiftId: string; branchId: string; deviceId: string; cashierId: string; status: 'OPEN'; openingCash: number; openedAt: string; }
 
 const money = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 const text = (value: string, field: string): void => { if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required`); };
@@ -21,6 +22,15 @@ const runSerializable = async <T>(operation: () => Promise<T>): Promise<T> => { 
 @Injectable()
 export class ShiftService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async current(context: AuthContext): Promise<CurrentShiftResult | null> {
+    if (!context.branchId || !context.deviceId) throw new Error('Authenticated branch and device are required');
+    assertBranchAccess(context, context.branchId);
+    const shift = await this.prisma.shift.findFirst({ where: { branchId: context.branchId, deviceId: context.deviceId, status: 'OPEN' }, select: { id: true, branchId: true, deviceId: true, userId: true, status: true, openingCash: true, openedAt: true } });
+    if (!shift) return null;
+    if (shift.userId !== context.userId && !context.permissions.includes(PERMISSIONS.REPORT_VIEW_FINANCIAL)) throw new Error('The active shift belongs to another cashier');
+    return { shiftId: shift.id, branchId: shift.branchId, deviceId: shift.deviceId, cashierId: shift.userId, status: 'OPEN', openingCash: Number(shift.openingCash), openedAt: shift.openedAt.toISOString() };
+  }
 
   async open(context: AuthContext, input: OpenShiftInput): Promise<ShiftResult> {
     assertPermission(context, PERMISSIONS.SHIFT_OPEN); text(input.branchId, 'Branch'); text(input.deviceId, 'Device'); text(input.idempotencyKey, 'Idempotency key'); validSequence(input.clientSequence); assertMoneyAmount(input.openingCash, 'Opening cash');
