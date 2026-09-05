@@ -6,6 +6,7 @@ import { assertIdempotencyKey } from '../../../../services/api/src/modules/order
 
 type SqlStatement = { sql: string; params: unknown[] };
 type ExistingSyncRecord = { entity_id: string; payload: string };
+type SyncCheckoutPayload = Order & { payment?: PaymentInput & { paymentId: string } };
 
 export interface CheckoutPersistenceInput {
   db: LocalDatabaseBridge;
@@ -52,7 +53,7 @@ function buildPrintStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlS
     sql: `INSERT INTO print_jobs (
       id, order_id, order_number, station, copies, payload, status,
       attempts, last_error, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     params: [
       job.id, job.orderId, job.orderNumber, job.station, job.copies, job.payload,
       job.status, job.attempts, job.lastError, job.createdAt, input.now ?? job.createdAt,
@@ -60,16 +61,17 @@ function buildPrintStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlS
   }));
 }
 
-function buildSyncStatement(input: Omit<CheckoutPersistenceInput, 'db'>): SqlStatement {
+function buildSyncStatement(input: Omit<CheckoutPersistenceInput, 'db'>, payment?: PaymentInput & { paymentId: string }): SqlStatement {
   const now = input.now ?? input.order.createdAt;
+  const payload: SyncCheckoutPayload = payment ? { ...input.order, payment } : input.order;
   return {
     sql: `INSERT INTO sync_queue (
       id, entity_type, entity_id, operation, idempotency_key, client_sequence,
       payload, status, attempts, last_error, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     params: [
-      `${input.order.id}:sync`, 'ORDER', input.order.id, 'CREATE', input.idempotencyKey,
-      input.clientSequence, JSON.stringify(input.order), 'PENDING', 0, null, now, now,
+      `${input.order.id}:sync`, 'ORDER', input.order.id, payment ? 'CHECKOUT' : 'CREATE', input.idempotencyKey,
+      input.clientSequence, JSON.stringify(payload), 'PENDING', 0, null, now, now,
     ],
   };
 }
@@ -94,7 +96,7 @@ export function buildCompletedCheckoutStatements(
       ],
     },
     ...buildPrintStatements(input),
-    buildSyncStatement(input),
+    buildSyncStatement(input, { ...input.payment, paymentId: input.paymentId }),
   ];
 }
 
@@ -115,9 +117,12 @@ async function assertNotAlreadyCommitted(input: CheckoutPersistenceInput): Promi
     [input.idempotencyKey],
   );
   if (!rows.length) return false;
-  const expectedPayload = JSON.stringify(input.order);
-  if (rows[0].entity_id !== input.order.id || rows[0].payload !== expectedPayload) {
+  const stored = JSON.parse(rows[0].payload) as SyncCheckoutPayload;
+  if (rows[0].entity_id !== input.order.id || stored.id !== input.order.id) {
     throw new Error('Checkout idempotency key was reused with a different order');
+  }
+  if (stored.total !== input.order.total || stored.orderNumber !== input.order.orderNumber) {
+    throw new Error('Checkout idempotency key was reused with a different order payload');
   }
   return true;
 }
