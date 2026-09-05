@@ -1,4 +1,4 @@
-export type SyncOperationType = 'CREATE' | 'UPDATE' | 'CANCEL' | 'PAYMENT' | 'SHIFT';
+export type SyncOperationType = 'CREATE' | 'UPDATE' | 'CANCEL' | 'PAYMENT' | 'SHIFT' | 'CHECKOUT';
 
 export type JsonValue =
   | string
@@ -25,6 +25,7 @@ export interface SyncEnvelope {
 
 export type SyncResult =
   | { status: 'ACCEPTED'; operationId: string }
+  | { status: 'APPLIED'; operationId: string }
   | { status: 'DUPLICATE'; operationId: string }
   | { status: 'CONFLICT'; operationId: string; reason: string }
   | { status: 'REJECTED'; operationId: string; reason: string };
