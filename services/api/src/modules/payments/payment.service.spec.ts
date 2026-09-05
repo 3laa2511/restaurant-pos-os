@@ -15,6 +15,8 @@ function buildPrisma() {
     order: { findUnique: jest.fn(), updateMany: jest.fn() },
     shift: { findUnique: jest.fn() },
     payment: { findMany: jest.fn(), create: jest.fn() },
+    cashDrawer: { findUnique: jest.fn() },
+    cashDrawerMovement: { create: jest.fn() },
     orderEvent: { create: jest.fn() },
     auditLog: { create: jest.fn() },
     syncOperation: { create: jest.fn() },
@@ -22,6 +24,8 @@ function buildPrisma() {
     order: { findUnique: AsyncMock; updateMany: AsyncMock };
     shift: { findUnique: AsyncMock };
     payment: { findMany: AsyncMock; create: AsyncMock };
+    cashDrawer: { findUnique: AsyncMock };
+    cashDrawerMovement: { create: AsyncMock };
     orderEvent: { create: AsyncMock };
     auditLog: { create: AsyncMock };
     syncOperation: { create: AsyncMock };
@@ -31,6 +35,8 @@ function buildPrisma() {
   tx.shift.findUnique.mockResolvedValue({ id: 'shift-1', branchId: 'branch-1', deviceId: 'device-1', status: 'OPEN' });
   tx.payment.findMany.mockResolvedValue([]);
   tx.payment.create.mockResolvedValue({});
+  tx.cashDrawer.findUnique.mockResolvedValue({ id: 'drawer-1', branchId: 'branch-1', deviceId: 'device-1', active: true });
+  tx.cashDrawerMovement.create.mockResolvedValue({});
   tx.orderEvent.create.mockResolvedValue({});
   tx.auditLog.create.mockResolvedValue({});
   tx.syncOperation.create.mockResolvedValue({});
@@ -57,6 +63,7 @@ describe('PaymentService.settleSplitPayment', () => {
     expect(result.change).toBe(20);
     expect(result.paymentIds).toHaveLength(2);
     expect(tx.payment.create).toHaveBeenCalledTimes(2);
+    expect(tx.cashDrawerMovement.create).toHaveBeenCalledTimes(2);
     expect(tx.order.updateMany).toHaveBeenCalledWith({ where: { id: 'order-1', version: 3, status: 'CONFIRMED' }, data: { status: 'CLOSED', version: { increment: 1 } } });
     expect(tx.orderEvent.create).toHaveBeenCalledTimes(1);
     expect(tx.auditLog.create).toHaveBeenCalledTimes(1);
