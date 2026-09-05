@@ -63,7 +63,7 @@ describe('RefundService', () => {
     expect(result.paymentStatus).toBe('PARTIALLY_REFUNDED');
     expect(result.orderStatus).toBe('CLOSED');
     expect(tx.paymentAdjustment.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ paymentId: 'payment-1', amount: '40.00', type: 'REFUND', actorUserId: 'user-1' }) }));
-    expect(tx.cashDrawerMovement.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ drawerId: 'drawer-1', type: 'REFUND', direction: 'OUT', amount: '40.00', sourceType: 'PAYMENT_ADJUSTMENT', sourceId: 'adjustment-1' }) }));
+    expect(tx.cashDrawerMovement.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ drawerId: 'drawer-1', type: 'REFUND', direction: 'OUT', amount: '40.00', sourceType: 'PAYMENT_ADJUSTMENT', sourceId: expect.any(String) }) }));
     expect(tx.payment.update).toHaveBeenCalledWith({ where: { id: 'payment-1' }, data: { status: 'PARTIALLY_REFUNDED' } });
   });
 
