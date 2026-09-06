@@ -33,7 +33,7 @@ export async function openLocalShift(db: LocalDatabaseBridge, shift: Shift): Pro
   return existing;
 }
 
-export async function closeLocalShift(db: LocalDatabaseBridge, shiftId: string, closingCash: number, closedAt: string): Promise<Shift> {
+export async function closeLocalShift(db: LocalDatabaseBridge, shiftId: string, closedAt: string, closingCash?: number): Promise<Shift> {
   const scoped = getPosRuntimeIdentity();
   const rows = await db.query<ShiftRow>(`SELECT id, branch_id, device_id, cashier_id, status, opening_cash, closing_cash, expected_cash, variance, opened_at, closed_at FROM shifts WHERE id = ? AND branch_id = ? AND device_id = ? AND cashier_id = ? AND status = 'OPEN' LIMIT 1`, [shiftId, scoped.branchId, scoped.deviceId, scoped.cashierId]);
   if (!rows.length) throw new Error('Shift is not open for the authenticated POS session');
