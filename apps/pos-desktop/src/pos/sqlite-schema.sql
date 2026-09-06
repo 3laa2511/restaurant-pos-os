@@ -71,8 +71,28 @@ CREATE TABLE IF NOT EXISTS shifts (
   device_id TEXT NOT NULL,
   cashier_id TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('OPEN','CLOSED')),
+  opening_cash REAL NOT NULL DEFAULT 0 CHECK(opening_cash >= 0),
   opened_at TEXT NOT NULL,
-  closed_at TEXT
+  closed_at TEXT,
+  closing_cash REAL,
+  expected_cash REAL,
+  variance REAL
+);
+
+CREATE TABLE IF NOT EXISTS cash_drawer_movements (
+  id TEXT PRIMARY KEY,
+  branch_id TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  shift_id TEXT NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+  cashier_id TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('OPENING_FLOAT','SALE','CASH_CHANGE','REFUND','PAY_IN','PAY_OUT','ADJUSTMENT')),
+  direction TEXT NOT NULL CHECK(direction IN ('IN','OUT')),
+  amount REAL NOT NULL CHECK(amount > 0),
+  source_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  reason TEXT,
+  occurred_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS payments (
@@ -122,6 +142,7 @@ CREATE INDEX IF NOT EXISTS idx_menu_categories_sort ON menu_categories(active, s
 CREATE INDEX IF NOT EXISTS idx_products_category_active ON products(category_id, active);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_cash_drawer_shift ON cash_drawer_movements(shift_id, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_status_sequence ON sync_queue(status, client_sequence);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status_created ON print_jobs(status, created_at);
