@@ -1,4 +1,5 @@
 import type { LocalDatabaseBridge } from './tauri-bridge.js';
+import { getPosRuntimeIdentity } from './runtime-identity.js';
 import type { Shift } from './shift.js';
 
 interface ShiftRow {
@@ -23,17 +24,28 @@ function mapShift(row: ShiftRow): Shift {
   };
 }
 
+type ShiftIdentity = Pick<Shift, 'branchId' | 'deviceId' | 'cashierId'>;
+
+function assertRuntimeIdentity(identity: ShiftIdentity): ShiftIdentity {
+  const runtime = getPosRuntimeIdentity();
+  if (identity.branchId !== runtime.branchId || identity.deviceId !== runtime.deviceId || identity.cashierId !== runtime.cashierId) {
+    throw new Error('Shift identity does not match the authenticated POS session');
+  }
+  return runtime;
+}
+
 export async function getOpenShift(
   db: LocalDatabaseBridge,
-  identity: Pick<Shift, 'branchId' | 'deviceId' | 'cashierId'>,
+  identity?: ShiftIdentity,
 ): Promise<Shift | null> {
+  const scoped = identity ? assertRuntimeIdentity(identity) : getPosRuntimeIdentity();
   const rows = await db.query<ShiftRow>(
     `SELECT id, branch_id, device_id, cashier_id, status, opened_at, closed_at
      FROM shifts
      WHERE branch_id = ? AND device_id = ? AND cashier_id = ? AND status = 'OPEN'
      ORDER BY opened_at DESC
      LIMIT 1`,
-    [identity.branchId, identity.deviceId, identity.cashierId],
+    [scoped.branchId, scoped.deviceId, scoped.cashierId],
   );
   return rows.length ? mapShift(rows[0]) : null;
 }
@@ -42,6 +54,7 @@ export async function openLocalShift(
   db: LocalDatabaseBridge,
   shift: Shift,
 ): Promise<Shift> {
+  const scoped = assertRuntimeIdentity(shift);
   await db.transaction([
     {
       sql: `INSERT INTO shifts (
@@ -54,18 +67,18 @@ export async function openLocalShift(
       )`,
       params: [
         shift.id,
-        shift.branchId,
-        shift.deviceId,
-        shift.cashierId,
+        scoped.branchId,
+        scoped.deviceId,
+        scoped.cashierId,
         shift.openedAt,
-        shift.branchId,
-        shift.deviceId,
-        shift.cashierId,
+        scoped.branchId,
+        scoped.deviceId,
+        scoped.cashierId,
       ],
     },
   ]);
 
-  const existing = await getOpenShift(db, shift);
+  const existing = await getOpenShift(db);
   if (!existing) throw new Error('Failed to open cashier shift');
   return existing;
 }
@@ -75,14 +88,19 @@ export async function closeLocalShift(
   shiftId: string,
   closedAt: string,
 ): Promise<void> {
+  const scoped = getPosRuntimeIdentity();
   const rows = await db.query<{ id: string }>(
-    `SELECT id FROM shifts WHERE id = ? AND status = 'OPEN' LIMIT 1`,
-    [shiftId],
+    `SELECT id FROM shifts
+     WHERE id = ? AND branch_id = ? AND device_id = ? AND cashier_id = ? AND status = 'OPEN'
+     LIMIT 1`,
+    [shiftId, scoped.branchId, scoped.deviceId, scoped.cashierId],
   );
-  if (!rows.length) throw new Error('Shift is not open');
+  if (!rows.length) throw new Error('Shift is not open for the authenticated POS session');
 
   await db.execute(
-    `UPDATE shifts SET status = 'CLOSED', closed_at = ? WHERE id = ? AND status = 'OPEN'`,
-    [closedAt, shiftId],
+    `UPDATE shifts
+     SET status = 'CLOSED', closed_at = ?
+     WHERE id = ? AND branch_id = ? AND device_id = ? AND cashier_id = ? AND status = 'OPEN'`,
+    [closedAt, shiftId, scoped.branchId, scoped.deviceId, scoped.cashierId],
   );
 }
