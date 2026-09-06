@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { createHash } from 'node:crypto';
+import { Prisma } from '../../generated/prisma/client.js';
 import { PaymentService } from './payment.service.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
@@ -101,8 +102,9 @@ describe('PaymentService.settleSplitPayment', () => {
     const stored = { operationId: 'operation-winner', orderId: 'order-1', status: 'PAID', totalPaid: 250, change: 0, paymentIds: ['payment-winner'] };
     const input = { orderId: 'order-1', shiftId: 'shift-1', allocations: [{ method: 'CASH' as const, amount: 250 }], idempotencyKey: 'checkout-race', deviceId: 'device-1', clientSequence: 45 };
     const requestHash = createHash('sha256').update(JSON.stringify({ ...input, allocations: input.allocations })).digest('hex');
+    const uniqueError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: '7.10.0' });
     prisma.syncOperation.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ operationId: 'operation-winner', requestHash, result: stored });
-    tx.syncOperation.create.mockRejectedValueOnce({ code: 'P2002' });
+    tx.syncOperation.create.mockRejectedValueOnce(uniqueError);
     const service = new PaymentService(prisma as unknown as PrismaService);
     await expect(service.settleSplitPayment(context, input)).resolves.toEqual(stored);
     expect(prisma.syncOperation.findUnique).toHaveBeenCalledTimes(2);
