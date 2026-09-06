@@ -50,7 +50,7 @@ function Icon({ name }: { name: 'grid' | 'receipt' | 'clock' | 'box' | 'users' |
     plus: 'M12 5v14M5 12h14',
     trash: 'M5 7h14M10 11v6M14 11v6M8 7l1-3h6l1 3m-9 0 1 14h10l1-14',
     wallet: 'M4 7h15a1 1 0 0 1 1 1v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1M16 13h4',
-    globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9S9.5 5.5 12 3z',
+    globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-9 0-9s9.5 2.5 12 3z',
   };
   return <svg className="real-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]} /></svg>;
 }
@@ -59,10 +59,6 @@ async function createCheckoutIdentity(): Promise<CheckoutIdentity> {
   const token = crypto.randomUUID();
   const clientSequence = await nextDeviceSequence(db, DEVICE_ID);
   return { orderId: token, orderNumber: formatOrderNumber({ branchCode: BRANCH_ID, deviceCode: DEVICE_ID, sequence: clientSequence }), idempotencyKey: `${DEVICE_ID}:${token}`, clientSequence };
-}
-
-function categoryLabel(menu: LocalMenu, categoryId: string, language: Language): string {
-  return menu.categories.find((category) => category.id === categoryId)?.[language === 'ar' ? 'nameAr' : 'nameEn'] ?? categoryId;
 }
 
 export function RealPosApp() {
