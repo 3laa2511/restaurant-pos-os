@@ -1,5 +1,6 @@
 import type { LocalDatabaseBridge } from './tauri-bridge.js';
 import type { Product } from './types.js';
+import { getAccessToken } from './auth-client.js';
 
 export interface MenuCategory {
   id: string;
@@ -94,7 +95,11 @@ export async function loadMenu(db: LocalDatabaseBridge, apiBaseUrl: string): Pro
   const cached = await readLocal(db, 'CACHE');
 
   try {
-    const response = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/api/menu`, { headers: { Accept: 'application/json' } });
+    const token = getAccessToken();
+    if (!token) throw new Error('Authenticated POS session is required to load the remote menu');
+    const response = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/api/menu`, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+    });
     if (!response.ok) throw new Error(`menu request failed: ${response.status}`);
     const remote = (await response.json()) as RemoteCategory[];
     const categories: MenuCategory[] = [
