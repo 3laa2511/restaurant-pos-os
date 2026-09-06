@@ -13,15 +13,14 @@ import { closeLocalShift, getOpenShift, openLocalShift } from './pos/sqlite-shif
 import { loadMenu, type LocalMenu } from './pos/sqlite-menu.js';
 import { openShift, requestShiftClose } from './pos/shift.js';
 import { formatOrderNumber } from './pos/order-number.js';
+import { getPosRuntimeIdentity } from './pos/runtime-identity.js';
+import type { PosRuntimeIdentity } from './pos/runtime-identity.js';
 import type { Shift } from './pos/shift.js';
 import type { CartState, OrderType, Product } from './pos/types.js';
 import type { KitchenStation } from './pos/kitchen-routing.js';
 import type { PaymentInput } from '../../../services/api/src/modules/payments/payment-policy.js';
 import './real-pos.css';
 
-const BRANCH_ID = 'branch-01';
-const DEVICE_ID = 'POS-01';
-const CASHIER_ID = 'cashier-local';
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
 const db = createDatabaseBridge({ invoke });
 
@@ -50,19 +49,20 @@ function Icon({ name }: { name: 'grid' | 'receipt' | 'clock' | 'box' | 'users' |
     plus: 'M12 5v14M5 12h14',
     trash: 'M5 7h14M10 11v6M14 11v6M8 7l1-3h6l1 3m-9 0 1 14h10l1-14',
     wallet: 'M4 7h15a1 1 0 0 1 1 1v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1M16 13h4',
-    globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-9 0-9s9.5 2.5 12 3z',
+    globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.5 4 5.5 4 9s-1.5 6.5-4 9M12 3c-2.5 2.5-4 5.5-4 9s1.5 6.5 4 9',
   };
   return <svg className="real-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]} /></svg>;
 }
 
-async function createCheckoutIdentity(): Promise<CheckoutIdentity> {
+async function createCheckoutIdentity(identity: PosRuntimeIdentity): Promise<CheckoutIdentity> {
   const token = crypto.randomUUID();
-  const clientSequence = await nextDeviceSequence(db, DEVICE_ID);
-  return { orderId: token, orderNumber: formatOrderNumber({ branchCode: BRANCH_ID, deviceCode: DEVICE_ID, sequence: clientSequence }), idempotencyKey: `${DEVICE_ID}:${token}`, clientSequence };
+  const clientSequence = await nextDeviceSequence(db, identity.deviceId);
+  return { orderId: token, orderNumber: formatOrderNumber({ branchCode: identity.branchId, deviceCode: identity.deviceId, sequence: clientSequence }), idempotencyKey: `${identity.deviceId}:${token}`, clientSequence };
 }
 
 export function RealPosApp() {
   const [language, setLanguage] = useState<Language>('ar');
+  const [runtimeIdentity, setRuntimeIdentity] = useState<PosRuntimeIdentity | null>(null);
   const [menu, setMenu] = useState<LocalMenu | null>(null);
   const [cart, setCart] = useState<CartState>(emptyCart());
   const [query, setQuery] = useState('');
@@ -102,14 +102,17 @@ export function RealPosApp() {
     let syncRuntime: ReturnType<typeof createSyncWorkerRuntime> | null = null;
     void (async () => {
       try {
+        const identity = getPosRuntimeIdentity();
+        if (!active) return;
+        setRuntimeIdentity(identity);
         await db.initialize();
         const loaded = await loadMenu(db, API_BASE_URL);
         if (!active) return;
         setMenu(loaded);
-        setShift(await getOpenShift(db, { branchId: BRANCH_ID, deviceId: DEVICE_ID, cashierId: CASHIER_ID }));
+        setShift(await getOpenShift(db, identity));
         await refreshRecentOrders();
-        printRuntime = createPrintWorkerRuntime({ db, invoke, intervalMs: 1000, workerId: `print-worker:${DEVICE_ID}` });
-        syncRuntime = createSyncWorkerRuntime({ repository: createSqliteSyncRepository(db), transport: createHttpSyncTransport(API_BASE_URL), intervalMs: 2000, workerId: `sync-worker:${DEVICE_ID}`, leaseMs: 30_000 });
+        printRuntime = createPrintWorkerRuntime({ db, invoke, intervalMs: 1000, workerId: `print-worker:${identity.deviceId}` });
+        syncRuntime = createSyncWorkerRuntime({ repository: createSqliteSyncRepository(db), transport: createHttpSyncTransport(API_BASE_URL), intervalMs: 2000, workerId: `sync-worker:${identity.deviceId}`, leaseMs: 30_000 });
       } catch (error) {
         if (active) setMenuError(error instanceof Error ? error.message : t.error);
       }
@@ -120,7 +123,8 @@ export function RealPosApp() {
   async function handleOpenShift() {
     setShiftError('');
     try {
-      const opened = openShift({ id: `shift:${crypto.randomUUID()}`, branchId: BRANCH_ID, deviceId: DEVICE_ID, cashierId: CASHIER_ID });
+      const identity = runtimeIdentity ?? getPosRuntimeIdentity();
+      const opened = openShift({ id: `shift:${crypto.randomUUID()}`, branchId: identity.branchId, deviceId: identity.deviceId, cashierId: identity.cashierId });
       setShift(await openLocalShift(db, opened));
     } catch (error) { setShiftError(error instanceof Error ? error.message : t.error); }
   }
@@ -141,14 +145,15 @@ export function RealPosApp() {
     setCheckoutState('SAVING');
     setMessage('');
     try {
-      const identity = await createCheckoutIdentity();
-      const order = confirmOrder(createOrder({ id: identity.orderId, orderNumber: identity.orderNumber, branchId: shift.branchId, deviceId: shift.deviceId, cashierId: shift.cashierId, cart }));
+      const identity = runtimeIdentity ?? getPosRuntimeIdentity();
+      const checkoutIdentity = await createCheckoutIdentity(identity);
+      const order = confirmOrder(createOrder({ id: checkoutIdentity.orderId, orderNumber: checkoutIdentity.orderNumber, branchId: identity.branchId, deviceId: identity.deviceId, cashierId: identity.cashierId, cart }));
       const stationByProduct: Readonly<Record<string, KitchenStation>> = {};
       const stations = [...new Set(order.items.map((item) => stationByProduct[item.productId] ?? 'KITCHEN'))];
       const printJobs = stations.map((station, index) => createPrintJob({ id: `${order.id}:kitchen:${index}`, order: { ...order, items: order.items.filter((item) => (stationByProduct[item.productId] ?? 'KITCHEN') === station) }, station }));
       printJobs.push(createPrintJob({ id: `${order.id}:customer`, order, station: 'CUSTOMER' }));
       const payment: PaymentInput = { orderId: order.id, shiftId: shift.id, method: paymentMethod, amount: order.total, reference: paymentMethod === 'CARD' ? `POS:${order.id}` : null };
-      await persistCompletedCheckout({ db, order, printJobs, payment, paymentId: `${order.id}:payment`, idempotencyKey: identity.idempotencyKey, clientSequence: identity.clientSequence });
+      await persistCompletedCheckout({ db, order, printJobs, payment, paymentId: `${order.id}:payment`, idempotencyKey: checkoutIdentity.idempotencyKey, clientSequence: checkoutIdentity.clientSequence });
       setCart(emptyCart());
       setCheckoutState('SUCCESS');
       setMessage(t.success);
@@ -174,9 +179,9 @@ export function RealPosApp() {
     <main className="real-pos" dir={dir}>
       <aside className="real-sidebar">
         <div className="real-brand"><div className="real-brand-mark">POS</div><div><strong>Restaurant POS</strong><span>OPERATING SYSTEM</span></div></div>
-        <div className="real-branch"><span>{language === 'ar' ? 'الفرع' : 'Branch'}</span><strong>{language === 'ar' ? 'الفرع الرئيسي' : 'Main Branch'}</strong><small><i /> {DEVICE_ID} · {online ? t.online : t.offline}</small></div>
+        <div className="real-branch"><span>{language === 'ar' ? 'الفرع' : 'Branch'}</span><strong>{runtimeIdentity?.branchId ?? '—'}</strong><small><i /> {runtimeIdentity?.deviceId ?? '—'} · {online ? t.online : t.offline}</small></div>
         <nav>{nav.map(([icon, label], index) => <button key={label} className={index === 0 ? 'active' : ''} type="button"><Icon name={icon} /><span>{label}</span></button>)}</nav>
-        <div className="real-sidebar-bottom"><div className="real-sync"><i className={online ? 'online' : 'offline'} /><div><strong>{online ? t.online : t.offline}</strong><span>{menu ? (menu.source === 'SERVER' ? t.server : menu.source === 'CACHE' ? t.cache : t.bootstrap) : t.loading}</span></div></div><div className="real-user"><div className="real-avatar">CA</div><div><strong>{t.cashier}</strong><span>{CASHIER_ID}</span></div></div></div>
+        <div className="real-sidebar-bottom"><div className="real-sync"><i className={online ? 'online' : 'offline'} /><div><strong>{online ? t.online : t.offline}</strong><span>{menu ? (menu.source === 'SERVER' ? t.server : menu.source === 'CACHE' ? t.cache : t.bootstrap) : t.loading}</span></div></div><div className="real-user"><div className="real-avatar">{runtimeIdentity?.displayName?.slice(0, 2).toUpperCase() ?? 'CA'}</div><div><strong>{runtimeIdentity?.displayName ?? t.cashier}</strong><span>{runtimeIdentity?.username ?? '—'}</span></div></div></div>
       </aside>
 
       <section className="real-main">
