@@ -16,9 +16,12 @@ interface ShiftMutationResponse {
   operationId: string;
   shiftId: string;
   status: 'OPEN' | 'CLOSED';
+  openingCash?: number;
   expectedCash?: number;
   actualCash?: number;
   variance?: number;
+  openedAt?: string;
+  closedAt?: string;
 }
 
 const normalizeBaseUrl = (apiBaseUrl: string) => apiBaseUrl.replace(/\/$/, '');
@@ -38,13 +41,37 @@ async function request<T>(apiBaseUrl: string, path: string, init?: RequestInit):
 export async function getCurrentShift(apiBaseUrl: string, identity: PosRuntimeIdentity): Promise<Shift | null> {
   const result = await request<CurrentShiftResponse>(apiBaseUrl, '/api/shifts/current');
   if (result.branchId !== identity.branchId || result.deviceId !== identity.deviceId || result.cashierId !== identity.cashierId) throw new Error('Server returned a shift outside the authenticated POS scope');
-  return { id: result.shiftId, branchId: result.branchId, deviceId: result.deviceId, cashierId: result.cashierId, status: 'OPEN', openedAt: result.openedAt, closedAt: null };
+  return {
+    id: result.shiftId,
+    branchId: result.branchId,
+    deviceId: result.deviceId,
+    cashierId: result.cashierId,
+    status: 'OPEN',
+    openingCash: result.openingCash,
+    closingCash: null,
+    expectedCash: null,
+    variance: null,
+    openedAt: result.openedAt,
+    closedAt: null,
+  };
 }
 
 export async function openServerShift(apiBaseUrl: string, identity: PosRuntimeIdentity, openingCash: number, clientSequence: number, idempotencyKey: string): Promise<Shift> {
   const result = await request<ShiftMutationResponse>(apiBaseUrl, '/api/shifts/open', { method: 'POST', body: JSON.stringify({ branchId: identity.branchId, deviceId: identity.deviceId, openingCash, idempotencyKey, clientSequence }) });
   if (result.status !== 'OPEN') throw new Error('Server did not open the shift');
-  return { id: result.shiftId, branchId: identity.branchId, deviceId: identity.deviceId, cashierId: identity.cashierId, status: 'OPEN', openedAt: new Date().toISOString(), closedAt: null };
+  return {
+    id: result.shiftId,
+    branchId: identity.branchId,
+    deviceId: identity.deviceId,
+    cashierId: identity.cashierId,
+    status: 'OPEN',
+    openingCash: result.openingCash ?? openingCash,
+    closingCash: null,
+    expectedCash: null,
+    variance: null,
+    openedAt: result.openedAt ?? new Date().toISOString(),
+    closedAt: null,
+  };
 }
 
 export async function closeServerShift(apiBaseUrl: string, shiftId: string, closingCash: number, clientSequence: number, idempotencyKey: string): Promise<ShiftMutationResponse> {
