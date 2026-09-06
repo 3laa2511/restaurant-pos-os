@@ -1,8 +1,10 @@
 import type { Order } from './order.js';
 import type { PrintJob } from './print-job.js';
 import type { LocalDatabaseBridge } from './tauri-bridge.js';
+import type { PosRuntimeIdentity } from './runtime-identity.js';
 import type { PaymentInput } from '../../../../services/api/src/modules/payments/payment-policy.js';
 import { assertIdempotencyKey } from '../../../../services/api/src/modules/orders/idempotency.js';
+import { getPosRuntimeIdentity } from './runtime-identity.js';
 
 type SqlStatement = { sql: string; params: unknown[] };
 type ExistingSyncRecord = { entity_id: string; payload: string };
@@ -20,6 +22,7 @@ export interface CheckoutPersistenceInput {
 export interface CompletedCheckoutPersistenceInput extends CheckoutPersistenceInput {
   payment: PaymentInput;
   paymentId: string;
+  runtimeIdentity?: PosRuntimeIdentity;
 }
 
 function buildOrderStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlStatement[] {
@@ -76,14 +79,32 @@ function buildSyncStatement(input: Omit<CheckoutPersistenceInput, 'db'>, payment
   };
 }
 
+function buildCashSaleStatement(input: CompletedCheckoutPersistenceInput, identity: PosRuntimeIdentity): SqlStatement | null {
+  if (input.payment.method !== 'CASH') return null;
+  const now = input.now ?? input.order.createdAt;
+  return {
+    sql: `INSERT INTO cash_drawer_movements (
+      id, branch_id, device_id, shift_id, cashier_id, type, direction, amount,
+      source_type, source_id, idempotency_key, reason, occurred_at
+    ) VALUES (?, ?, ?, ?, ?, 'SALE', 'IN', ?, 'ORDER', ?, ?, ?, ?)`,
+    params: [
+      `${input.order.id}:cash-sale`, identity.branchId, identity.deviceId, input.payment.shiftId,
+      identity.cashierId, input.payment.amount, input.order.id, `${input.idempotencyKey}:cash-sale`,
+      `Cash sale for order ${input.order.orderNumber}`, now,
+    ],
+  };
+}
+
 export function buildCheckoutStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlStatement[] {
   return [...buildOrderStatements(input), ...buildPrintStatements(input), buildSyncStatement(input)];
 }
 
 export function buildCompletedCheckoutStatements(
   input: Omit<CompletedCheckoutPersistenceInput, 'db'>,
+  identity: PosRuntimeIdentity = getPosRuntimeIdentity(),
 ): SqlStatement[] {
   const now = input.now ?? input.order.createdAt;
+  const cashSale = buildCashSaleStatement(input as CompletedCheckoutPersistenceInput, identity);
   return [
     ...buildOrderStatements(input),
     {
@@ -95,6 +116,7 @@ export function buildCompletedCheckoutStatements(
         input.payment.amount, input.payment.reference ?? null, now,
       ],
     },
+    ...(cashSale ? [cashSale] : []),
     ...buildPrintStatements(input),
     buildSyncStatement(input, { ...input.payment, paymentId: input.paymentId }),
   ];
@@ -135,8 +157,13 @@ export async function persistCheckout(input: CheckoutPersistenceInput): Promise<
 
 export async function persistCompletedCheckout(input: CompletedCheckoutPersistenceInput): Promise<void> {
   validatePersistenceInput(input);
+  const identity = input.runtimeIdentity ?? getPosRuntimeIdentity();
   if (input.payment.orderId !== input.order.id) throw new Error('Payment order does not match checkout order');
   if (input.payment.amount !== input.order.total) throw new Error('Payment amount does not match checkout total');
+  if (input.order.branchId !== identity.branchId || input.order.deviceId !== identity.deviceId || input.order.cashierId !== identity.cashierId) {
+    throw new Error('Checkout identity does not match the authenticated POS session');
+  }
+  if (input.payment.shiftId === '') throw new Error('Cashier shift is required for completed checkout');
   if (await assertNotAlreadyCommitted(input)) return;
-  await input.db.transaction(buildCompletedCheckoutStatements(input));
+  await input.db.transaction(buildCompletedCheckoutStatements(input, identity));
 }
