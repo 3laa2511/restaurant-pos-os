@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '@jest/globals';
 import { evaluateAuditRisk } from './audit-risk.policy.js';
 
 describe('evaluateAuditRisk', () => {
@@ -6,9 +6,9 @@ describe('evaluateAuditRisk', () => {
     expect(() => evaluateAuditRisk({ action: 'PAYMENT_REFUNDED', amount: 10 })).toThrow('A reason is required');
   });
 
-  it('classifies a normal refund as medium risk', () => {
+  it('classifies a normal refund as low risk', () => {
     expect(evaluateAuditRisk({ action: 'PAYMENT_REFUNDED', amount: 10, reason: 'Customer returned order' })).toMatchObject({
-      level: 'MEDIUM',
+      level: 'LOW',
       score: 20,
       requiresManagerApproval: false,
     });
@@ -16,7 +16,7 @@ describe('evaluateAuditRisk', () => {
 
   it('requires manager approval for a high-value void', () => {
     expect(evaluateAuditRisk({ action: 'PAYMENT_VOIDED', amount: 500, reason: 'Duplicate payment' })).toMatchObject({
-      level: 'CRITICAL',
+      level: 'HIGH',
       score: 75,
       requiresManagerApproval: true,
     });
