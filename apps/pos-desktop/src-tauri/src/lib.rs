@@ -22,7 +22,7 @@ struct SqlStatement {
 }
 
 const SCHEMA: &str = include_str!("../../src/pos/sqlite-schema.sql");
-const CURRENT_SCHEMA_VERSION: i64 = 4;
+const CURRENT_SCHEMA_VERSION: i64 = 5;
 
 fn column_exists(connection: &Connection, table: &str, column: &str) -> SqlResult<bool> {
     let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
@@ -75,10 +75,49 @@ fn migrate_schema(connection: &Connection) -> SqlResult<()> {
         connection.execute("UPDATE print_jobs SET updated_at = created_at WHERE updated_at IS NULL", [])?;
     }
 
+    // Shift reconciliation fields were added after the original schema shipped.
+    // ALTER only missing columns so existing installations keep all current data.
+    if !column_exists(connection, "shifts", "opening_cash")? {
+        connection.execute("ALTER TABLE shifts ADD COLUMN opening_cash REAL NOT NULL DEFAULT 0 CHECK(opening_cash >= 0)", [])?;
+    }
+    if !column_exists(connection, "shifts", "closed_at")? {
+        connection.execute("ALTER TABLE shifts ADD COLUMN closed_at TEXT", [])?;
+    }
+    if !column_exists(connection, "shifts", "closing_cash")? {
+        connection.execute("ALTER TABLE shifts ADD COLUMN closing_cash REAL", [])?;
+    }
+    if !column_exists(connection, "shifts", "expected_cash")? {
+        connection.execute("ALTER TABLE shifts ADD COLUMN expected_cash REAL", [])?;
+    }
+    if !column_exists(connection, "shifts", "variance")? {
+        connection.execute("ALTER TABLE shifts ADD COLUMN variance REAL", [])?;
+    }
+
+    connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS cash_drawer_movements (
+            id TEXT PRIMARY KEY,
+            branch_id TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            shift_id TEXT NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+            cashier_id TEXT NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('OPENING_FLOAT','SALE','CASH_CHANGE','REFUND','PAY_IN','PAY_OUT','ADJUSTMENT')),
+            direction TEXT NOT NULL CHECK(direction IN ('IN','OUT')),
+            amount REAL NOT NULL CHECK(amount > 0),
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL UNIQUE,
+            reason TEXT,
+            occurred_at TEXT NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS idx_cash_drawer_shift ON cash_drawer_movements(shift_id, occurred_at);
+         CREATE INDEX IF NOT EXISTS idx_cash_drawer_branch_device ON cash_drawer_movements(branch_id, device_id, occurred_at);
+         CREATE INDEX IF NOT EXISTS idx_cash_drawer_idempotency ON cash_drawer_movements(idempotency_key);",
+    )?;
+
     connection.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_print_jobs_status_created ON print_jobs(status, created_at);
          CREATE INDEX IF NOT EXISTS idx_print_jobs_lease ON print_jobs(status, locked_until);
-         INSERT INTO schema_meta(key, value) VALUES ('schema_version', '4')
+         INSERT INTO schema_meta(key, value) VALUES ('schema_version', '5')
          ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
     )?;
     connection.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
