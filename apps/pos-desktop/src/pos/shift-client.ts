@@ -38,6 +38,24 @@ async function request<T>(apiBaseUrl: string, path: string, init?: RequestInit):
   return body as T;
 }
 
+function toShift(identity: PosRuntimeIdentity, result: ShiftMutationResponse, fallbackOpeningCash: number): Shift {
+  const openingCash = result.openingCash ?? fallbackOpeningCash;
+  const actualCash = result.actualCash ?? null;
+  return {
+    id: result.shiftId,
+    branchId: identity.branchId,
+    deviceId: identity.deviceId,
+    cashierId: identity.cashierId,
+    status: result.status,
+    openingCash,
+    closingCash: actualCash,
+    expectedCash: result.expectedCash ?? null,
+    variance: result.variance ?? null,
+    openedAt: result.openedAt ?? new Date().toISOString(),
+    closedAt: result.closedAt ?? null,
+  };
+}
+
 export async function getCurrentShift(apiBaseUrl: string, identity: PosRuntimeIdentity): Promise<Shift | null> {
   const result = await request<CurrentShiftResponse>(apiBaseUrl, '/api/shifts/current');
   if (result.branchId !== identity.branchId || result.deviceId !== identity.deviceId || result.cashierId !== identity.cashierId) throw new Error('Server returned a shift outside the authenticated POS scope');
@@ -59,19 +77,7 @@ export async function getCurrentShift(apiBaseUrl: string, identity: PosRuntimeId
 export async function openServerShift(apiBaseUrl: string, identity: PosRuntimeIdentity, openingCash: number, clientSequence: number, idempotencyKey: string): Promise<Shift> {
   const result = await request<ShiftMutationResponse>(apiBaseUrl, '/api/shifts/open', { method: 'POST', body: JSON.stringify({ branchId: identity.branchId, deviceId: identity.deviceId, openingCash, idempotencyKey, clientSequence }) });
   if (result.status !== 'OPEN') throw new Error('Server did not open the shift');
-  return {
-    id: result.shiftId,
-    branchId: identity.branchId,
-    deviceId: identity.deviceId,
-    cashierId: identity.cashierId,
-    status: 'OPEN',
-    openingCash: result.openingCash ?? openingCash,
-    closingCash: null,
-    expectedCash: null,
-    variance: null,
-    openedAt: result.openedAt ?? new Date().toISOString(),
-    closedAt: null,
-  };
+  return toShift(identity, result, openingCash);
 }
 
 export async function closeServerShift(apiBaseUrl: string, shiftId: string, closingCash: number, clientSequence: number, idempotencyKey: string): Promise<ShiftMutationResponse> {
