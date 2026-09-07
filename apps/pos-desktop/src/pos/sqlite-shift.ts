@@ -29,16 +29,23 @@ export async function openLocalShift(db: LocalDatabaseBridge, shift: Shift): Pro
   await db.transaction([{ sql: `INSERT INTO shifts (id, branch_id, device_id, cashier_id, status, opening_cash, opened_at, closed_at, closing_cash, expected_cash, variance) SELECT ?, ?, ?, ?, 'OPEN', ?, ?, NULL, NULL, NULL, NULL WHERE NOT EXISTS (SELECT 1 FROM shifts WHERE branch_id = ? AND device_id = ? AND cashier_id = ? AND status = 'OPEN')`, params: [shift.id, scoped.branchId, scoped.deviceId, scoped.cashierId, shift.openingCash, shift.openedAt, scoped.branchId, scoped.deviceId, scoped.cashierId] }]);
   const existing = await getOpenShift(db);
   if (!existing) throw new Error('Failed to open cashier shift');
-  await recordCashDrawerMovement(db, scoped, { id: `${existing.id}:opening`, shiftId: existing.id, type: 'OPENING_FLOAT', direction: 'IN', amount: existing.openingCash, sourceType: 'SHIFT', sourceId: existing.id, idempotencyKey: `${existing.id}:opening`, reason: `Opening float for shift ${existing.id}`, occurredAt: existing.openedAt });
+
+  // A zero opening float is valid. Do not manufacture a zero-value ledger row because
+  // the cash-drawer table intentionally rejects non-positive movements.
+  if (existing.openingCash > 0) {
+    await recordCashDrawerMovement(db, scoped, { id: `${existing.id}:opening`, shiftId: existing.id, type: 'OPENING_FLOAT', direction: 'IN', amount: existing.openingCash, sourceType: 'SHIFT', sourceId: existing.id, idempotencyKey: `${existing.id}:opening`, reason: `Opening float for shift ${existing.id}`, occurredAt: existing.openedAt });
+  }
   return existing;
 }
 
 export async function closeLocalShift(db: LocalDatabaseBridge, shiftId: string, closedAt: string, closingCash?: number): Promise<Shift> {
   const scoped = getPosRuntimeIdentity();
+  if (closingCash === undefined || !Number.isFinite(closingCash) || closingCash < 0 || Math.abs(closingCash * 100 - Math.round(closingCash * 100)) > Number.EPSILON) {
+    throw new Error('Actual closing cash is required and must use at most 2 decimals');
+  }
   const rows = await db.query<ShiftRow>(`SELECT id, branch_id, device_id, cashier_id, status, opening_cash, closing_cash, expected_cash, variance, opened_at, closed_at FROM shifts WHERE id = ? AND branch_id = ? AND device_id = ? AND cashier_id = ? AND status = 'OPEN' LIMIT 1`, [shiftId, scoped.branchId, scoped.deviceId, scoped.cashierId]);
   if (!rows.length) throw new Error('Shift is not open for the authenticated POS session');
   const reconciliation = await reconcileLocalCashDrawer(db, shiftId, closingCash);
-  if (reconciliation.movementCount === 0) throw new Error('Shift has no cash drawer ledger; cannot close safely');
   await db.execute(`UPDATE shifts SET status = 'CLOSED', closed_at = ?, closing_cash = ?, expected_cash = ?, variance = ? WHERE id = ? AND branch_id = ? AND device_id = ? AND cashier_id = ? AND status = 'OPEN'`, [closedAt, reconciliation.actualCash, reconciliation.expectedCash, reconciliation.variance, shiftId, scoped.branchId, scoped.deviceId, scoped.cashierId]);
   const closed = await db.query<ShiftRow>(`SELECT id, branch_id, device_id, cashier_id, status, opening_cash, closing_cash, expected_cash, variance, opened_at, closed_at FROM shifts WHERE id = ? LIMIT 1`, [shiftId]);
   if (!closed.length) throw new Error('Closed shift could not be reloaded');
