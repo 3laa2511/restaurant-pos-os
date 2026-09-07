@@ -10,12 +10,14 @@ import { createHttpSyncTransport, createSyncWorkerRuntime } from './pos/sync-wor
 import { persistCompletedCheckout } from './pos/sqlite-checkout.js';
 import { nextDeviceSequence } from './pos/sqlite-sequence.js';
 import { closeLocalShift, getOpenShift, openLocalShift } from './pos/sqlite-shift.js';
+import { reconcileLocalCashDrawer } from './pos/sqlite-cash-drawer.js';
 import { loadMenu, type LocalMenu } from './pos/sqlite-menu.js';
 import { openShift, requestShiftClose } from './pos/shift.js';
 import { formatOrderNumber } from './pos/order-number.js';
 import { getPosRuntimeIdentity } from './pos/runtime-identity.js';
 import type { PosRuntimeIdentity } from './pos/runtime-identity.js';
 import type { Shift } from './pos/shift.js';
+import type { CashDrawerReconciliation } from './pos/sqlite-cash-drawer.js';
 import type { CartState, OrderType, Product } from './pos/types.js';
 import type { KitchenStation } from './pos/kitchen-routing.js';
 import type { PaymentInput } from '../../../services/api/src/modules/payments/payment-policy.js';
@@ -26,14 +28,13 @@ const db = createDatabaseBridge({ invoke });
 
 const money = (value: number) => `${value.toFixed(2)} ج.م`;
 const labels = {
-  ar: { pos: 'نقطة البيع', cashier: 'الكاشير', orders: 'الطلبات', shifts: 'الورديات', inventory: 'المخزون', customers: 'العملاء', settings: 'الإعدادات', openShift: 'فتح الوردية', closeShift: 'إغلاق الوردية', ready: 'جاهز لاستقبال الطلبات؟', openFirst: 'افتح الوردية أولًا لتفعيل البيع.', search: 'ابحث باسم المنتج أو SKU...', all: 'الكل', dine: 'داخل المطعم', takeaway: 'استلام', delivery: 'توصيل', currentOrder: 'الطلب الحالي', empty: 'لم تتم إضافة أصناف بعد', subtotal: 'الإجمالي الفرعي', discount: 'الخصم', deliveryFee: 'رسوم التوصيل', total: 'الإجمالي', checkout: 'تحصيل ودفع', cash: 'نقدي', card: 'بطاقة', cartCount: 'أصناف', noOrders: 'لا توجد طلبات محلية بعد', recent: 'آخر الطلبات', server: 'من السيرفر', cache: 'من التخزين المحلي', bootstrap: 'بيانات افتراضية', sync: 'المزامنة', online: 'متصل', offline: 'غير متصل', loading: 'جاري التحميل...', error: 'حدث خطأ', success: 'تم حفظ الطلب محليًا وإضافته للمزامنة', language: 'English' },
-  en: { pos: 'Point of Sale', cashier: 'Cashier', orders: 'Orders', shifts: 'Shifts', inventory: 'Inventory', customers: 'Customers', settings: 'Settings', openShift: 'Open Shift', closeShift: 'Close Shift', ready: 'Ready for orders?', openFirst: 'Open the shift first to enable sales.', search: 'Search product name or SKU...', all: 'All', dine: 'Dine In', takeaway: 'Takeaway', delivery: 'Delivery', currentOrder: 'Current Order', empty: 'No items added yet', subtotal: 'Subtotal', discount: 'Discount', deliveryFee: 'Delivery fee', total: 'Total', checkout: 'Collect & Pay', cash: 'Cash', card: 'Card', cartCount: 'items', noOrders: 'No local orders yet', recent: 'Recent Orders', server: 'Server', cache: 'Local cache', bootstrap: 'Bootstrap data', sync: 'Sync', online: 'Online', offline: 'Offline', loading: 'Loading...', error: 'Something went wrong', success: 'Order saved locally and queued for sync', language: 'العربية' },
+  ar: { pos: 'نقطة البيع', cashier: 'الكاشير', orders: 'الطلبات', shifts: 'الورديات', inventory: 'المخزون', customers: 'العملاء', settings: 'الإعدادات', openShift: 'فتح الوردية', closeShift: 'إغلاق الوردية', ready: 'جاهز لاستقبال الطلبات؟', openFirst: 'افتح الوردية أولًا لتفعيل البيع.', search: 'ابحث باسم المنتج أو SKU...', all: 'الكل', dine: 'داخل المطعم', takeaway: 'استلام', delivery: 'توصيل', currentOrder: 'الطلب الحالي', empty: 'لم تتم إضافة أصناف بعد', subtotal: 'الإجمالي الفرعي', discount: 'الخصم', deliveryFee: 'رسوم التوصيل', total: 'الإجمالي', checkout: 'تحصيل ودفع', cash: 'نقدي', card: 'بطاقة', cartCount: 'أصناف', noOrders: 'لا توجد طلبات محلية بعد', recent: 'آخر الطلبات', server: 'من السيرفر', cache: 'من التخزين المحلي', bootstrap: 'بيانات افتراضية', sync: 'المزامنة', online: 'متصل', offline: 'غير متصل', loading: 'جاري التحميل...', error: 'حدث خطأ', success: 'تم حفظ الطلب محليًا وإضافته للمزامنة', language: 'English', openingCash: 'رصيد افتتاحي', cashIn: 'نقدية داخلة', cashOut: 'نقدية خارجة', expectedCash: 'المتوقع في الدرج', actualCash: 'النقدية الفعلية', variance: 'الفرق', confirmClose: 'تأكيد إغلاق الوردية', cancel: 'إلغاء', enterActualCash: 'أدخل النقدية الموجودة فعليًا في الدرج', varianceWarning: 'يوجد فرق بين المتوقع والفعلي. راجع المبلغ قبل التأكيد.' },
+  en: { pos: 'Point of Sale', cashier: 'Cashier', orders: 'Orders', shifts: 'Shifts', inventory: 'Inventory', customers: 'Customers', settings: 'Settings', openShift: 'Open Shift', closeShift: 'Close Shift', ready: 'Ready for orders?', openFirst: 'Open the shift first to enable sales.', search: 'Search product name or SKU...', all: 'All', dine: 'Dine In', takeaway: 'Takeaway', delivery: 'Delivery', currentOrder: 'Current Order', empty: 'No items added yet', subtotal: 'Subtotal', discount: 'Discount', deliveryFee: 'Delivery fee', total: 'Total', checkout: 'Collect & Pay', cash: 'Cash', card: 'Card', cartCount: 'items', noOrders: 'No local orders yet', recent: 'Recent Orders', server: 'Server', cache: 'Local cache', bootstrap: 'Bootstrap data', sync: 'Sync', online: 'Online', offline: 'Offline', loading: 'Loading...', error: 'Something went wrong', success: 'Order saved locally and queued for sync', language: 'العربية', openingCash: 'Opening cash', cashIn: 'Cash in', cashOut: 'Cash out', expectedCash: 'Expected cash', actualCash: 'Actual cash', variance: 'Variance', confirmClose: 'Confirm shift close', cancel: 'Cancel', enterActualCash: 'Enter the cash physically counted in the drawer', varianceWarning: 'There is a variance between expected and actual cash. Review it before confirming.' },
 } as const;
 
 type Language = keyof typeof labels;
 type CheckoutState = 'IDLE' | 'SAVING' | 'SUCCESS' | 'ERROR';
 type RecentOrder = { order_number: string; type: string; total: number; status: string; created_at: string };
-
 type CheckoutIdentity = { orderId: string; orderNumber: string; idempotencyKey: string; clientSequence: number };
 
 function Icon({ name }: { name: 'grid' | 'receipt' | 'clock' | 'box' | 'users' | 'settings' | 'search' | 'bell' | 'plus' | 'trash' | 'wallet' | 'globe' }) {
@@ -76,6 +77,9 @@ export function RealPosApp() {
   const [shiftError, setShiftError] = useState('');
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [reconciliation, setReconciliation] = useState<CashDrawerReconciliation | null>(null);
+  const [actualCashInput, setActualCashInput] = useState('');
+  const [showCloseShift, setShowCloseShift] = useState(false);
 
   const t = labels[language];
   const dir = language === 'ar' ? 'rtl' : 'ltr';
@@ -86,6 +90,8 @@ export function RealPosApp() {
   }, [menu, query, category]);
   const totals = calculateCart(cart);
   const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+  const actualCash = Number(actualCashInput);
+  const previewVariance = reconciliation && Number.isFinite(actualCash) ? Math.round((actualCash - reconciliation.expectedCash) * 100) / 100 : null;
 
   async function refreshRecentOrders() {
     const rows = await db.query<RecentOrder>('SELECT order_number, type, total, status, created_at FROM orders ORDER BY created_at DESC LIMIT 8');
@@ -129,13 +135,32 @@ export function RealPosApp() {
     } catch (error) { setShiftError(error instanceof Error ? error.message : t.error); }
   }
 
-  async function handleCloseShift() {
+  async function handleCloseShiftRequest() {
     if (!shift || cart.items.length || checkoutState === 'SAVING') return;
     setShiftError('');
     try {
-      const closed = requestShiftClose(shift);
-      await closeLocalShift(db, closed.id, closed.closedAt!);
-      setShift(null);
+      const current = await reconcileLocalCashDrawer(db, shift.id);
+      setReconciliation(current);
+      setActualCashInput(current.expectedCash.toFixed(2));
+      setShowCloseShift(true);
+    } catch (error) { setShiftError(error instanceof Error ? error.message : t.error); }
+  }
+
+  async function handleCloseShiftConfirm() {
+    if (!shift || !reconciliation || !actualCashInput.trim()) return;
+    const countedCash = Number(actualCashInput);
+    if (!Number.isFinite(countedCash) || countedCash < 0 || Math.abs(countedCash * 100 - Math.round(countedCash * 100)) > Number.EPSILON) {
+      setShiftError(language === 'ar' ? 'النقدية الفعلية يجب أن تكون رقمًا صحيحًا حتى منزلتين عشريتين.' : 'Actual cash must be a valid amount with at most 2 decimals.');
+      return;
+    }
+    setShiftError('');
+    try {
+      const closed = requestShiftClose(shift, { expectedCash: reconciliation.expectedCash, actualCash: countedCash });
+      const saved = await closeLocalShift(db, closed.id, closed.closedAt!, countedCash);
+      setShift(saved);
+      setShowCloseShift(false);
+      setReconciliation(null);
+      setActualCashInput('');
       setMessage('');
     } catch (error) { setShiftError(error instanceof Error ? error.message : t.error); }
   }
@@ -187,7 +212,7 @@ export function RealPosApp() {
       <section className="real-main">
         <header className="real-topbar">
           <div><span className="real-eyebrow">{t.pos}</span><h1>{t.cashier}</h1></div>
-          <div className="real-top-actions"><button className="language-button" type="button" onClick={() => setLanguage((current) => current === 'ar' ? 'en' : 'ar')}><Icon name="globe" /> {t.language}</button><button className="notification-button" type="button"><Icon name="bell" /><i /></button>{shift ? <button className="shift-control open" type="button" disabled={Boolean(cart.items.length) || checkoutState === 'SAVING'} onClick={() => void handleCloseShift()}><i /> {t.closeShift}</button> : <button className="shift-control" type="button" onClick={() => void handleOpenShift()}>{t.openShift}</button>}</div>
+          <div className="real-top-actions"><button className="language-button" type="button" onClick={() => setLanguage((current) => current === 'ar' ? 'en' : 'ar')}><Icon name="globe" /> {t.language}</button><button className="notification-button" type="button"><Icon name="bell" /><i /></button>{shift ? <button className="shift-control open" type="button" disabled={Boolean(cart.items.length) || checkoutState === 'SAVING'} onClick={() => void handleCloseShiftRequest()}><i /> {t.closeShift}</button> : <button className="shift-control" type="button" onClick={() => void handleOpenShift()}>{t.openShift}</button>}</div>
         </header>
 
         <div className="real-workspace">
@@ -196,10 +221,8 @@ export function RealPosApp() {
             <div className="real-order-types">{([['DINE_IN', t.dine], ['TAKEAWAY', t.takeaway], ['DELIVERY', t.delivery]] as const).map(([type, label]) => <button key={type} type="button" disabled={!shift} className={orderType === type ? 'active' : ''} onClick={() => { setOrderType(type); setCart((current) => ({ ...current, orderType: type })); }}>{label}</button>)}</div>
             <div className="real-toolbar"><div className="real-search"><Icon name="search" /><input disabled={!shift} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.search} /></div><button type="button" className="real-clear" disabled={!shift || !cart.items.length} onClick={() => setCart(emptyCart())}><Icon name="plus" /> {language === 'ar' ? 'طلب جديد' : 'New Order'}</button></div>
             <div className="real-categories">{[{ id: 'all', nameAr: t.all, nameEn: t.all }, ...(menu?.categories.filter((item) => item.id !== 'all') ?? [])].map((item) => <button key={item.id} type="button" disabled={!shift} className={category === item.id ? 'active' : ''} onClick={() => setCategory(item.id)}>{language === 'ar' ? item.nameAr : item.nameEn}</button>)}</div>
-
             {menuError && <div className="real-error">{menuError}</div>}
             <div className="real-products">{products.map((product) => <button key={product.id} className="real-product" type="button" disabled={!shift} onClick={() => add(product)}><div className="product-art">{product.nameAr.slice(0, 1)}</div><div className="product-copy"><strong>{language === 'ar' ? product.nameAr : product.nameEn}</strong><span>{product.sku}</span></div><b>{money(product.price)}</b></button>)}</div>
-
             <div className="real-recent"><div className="real-section-title"><h3>{t.recent}</h3><span>{recentOrders.length}</span></div>{recentOrders.length === 0 ? <p>{t.noOrders}</p> : <div className="real-recent-list">{recentOrders.slice(0, 5).map((order) => <div key={order.order_number}><strong>{order.order_number}</strong><span>{order.status}</span><b>{money(order.total)}</b></div>)}</div>}</div>
           </section>
 
@@ -214,6 +237,24 @@ export function RealPosApp() {
           </aside>
         </div>
       </section>
+
+      {showCloseShift && reconciliation && (
+        <div role="presentation" onClick={(event) => { if (event.currentTarget === event.target) setShowCloseShift(false); }} style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(0,0,0,0.55)' }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="shift-close-title" style={{ width: 'min(560px, 100%)', borderRadius: 20, padding: 24, background: 'var(--real-panel, #fff)', boxShadow: '0 24px 80px rgba(0,0,0,.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'start' }}>
+              <div><span style={{ opacity: .65 }}>{t.shifts}</span><h2 id="shift-close-title" style={{ margin: '6px 0 4px' }}>{t.confirmClose}</h2><p style={{ margin: 0, opacity: .7 }}>{t.enterActualCash}</p></div>
+              <button type="button" onClick={() => setShowCloseShift(false)} aria-label={t.cancel} style={{ border: 0, background: 'transparent', fontSize: 24, cursor: 'pointer' }}>×</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 22 }}>
+              {[[t.openingCash, reconciliation.openingCash], [t.cashIn, reconciliation.cashIn], [t.cashOut, reconciliation.cashOut], [t.expectedCash, reconciliation.expectedCash]].map(([label, value]) => <div key={String(label)} style={{ padding: 14, borderRadius: 14, background: 'rgba(127,127,127,.08)' }}><span style={{ display: 'block', opacity: .65, fontSize: 12 }}>{label}</span><strong style={{ display: 'block', marginTop: 5, fontSize: 18 }}>{money(Number(value))}</strong></div>)}
+            </div>
+            <label style={{ display: 'block', marginTop: 18 }}><span style={{ display: 'block', marginBottom: 7, fontWeight: 600 }}>{t.actualCash}</span><input autoFocus inputMode="decimal" value={actualCashInput} onChange={(event) => setActualCashInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void handleCloseShiftConfirm(); }} style={{ width: '100%', boxSizing: 'border-box', padding: '14px 16px', borderRadius: 12, border: '1px solid rgba(127,127,127,.35)', fontSize: 20, fontWeight: 700 }} /></label>
+            <div style={{ marginTop: 14, padding: 15, borderRadius: 14, background: previewVariance === null || previewVariance === 0 ? 'rgba(16,185,129,.10)' : 'rgba(245,158,11,.12)' }}><span style={{ display: 'block', opacity: .65 }}>{t.variance}</span><strong style={{ display: 'block', marginTop: 4, fontSize: 24 }}>{previewVariance === null ? '—' : money(previewVariance)}</strong>{previewVariance !== null && previewVariance !== 0 && <small style={{ display: 'block', marginTop: 4, opacity: .75 }}>{t.varianceWarning}</small>}</div>
+            {shiftError && <div className="real-message error" style={{ marginTop: 12 }}>{shiftError}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}><button type="button" onClick={() => setShowCloseShift(false)} style={{ padding: '12px 18px', borderRadius: 12, border: '1px solid rgba(127,127,127,.35)', background: 'transparent', cursor: 'pointer' }}>{t.cancel}</button><button type="button" onClick={() => void handleCloseShiftConfirm()} disabled={!actualCashInput.trim()} style={{ padding: '12px 20px', borderRadius: 12, border: 0, cursor: 'pointer', fontWeight: 700 }}>{t.confirmClose}</button></div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
