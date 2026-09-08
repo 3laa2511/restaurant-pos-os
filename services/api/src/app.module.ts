@@ -8,8 +8,9 @@ import { ShiftModule } from './modules/shifts/shift.module.js';
 import { CashDrawerModule } from './modules/cash-drawer/cash-drawer.module.js';
 import { SyncModule } from './modules/sync/sync.module.js';
 import { MenuModule } from './modules/menu/menu.module.js';
+import { AuditModule } from './modules/audit/audit.module.js';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, HealthModule, OrderModule, PaymentModule, ShiftModule, CashDrawerModule, SyncModule, MenuModule],
+  imports: [DatabaseModule, AuthModule, HealthModule, OrderModule, PaymentModule, ShiftModule, CashDrawerModule, SyncModule, MenuModule, AuditModule],
 })
 export class AppModule {}
