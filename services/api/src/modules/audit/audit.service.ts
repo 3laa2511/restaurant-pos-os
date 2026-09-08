@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
@@ -63,6 +64,14 @@ export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
   async record(context: AuthContext, input: AuditEventInput): Promise<AuditEventResult> {
+    return this.recordWithClient(this.prisma, context, input);
+  }
+
+  async recordWithClient(
+    client: PrismaService | Prisma.TransactionClient,
+    context: AuthContext,
+    input: AuditEventInput,
+  ): Promise<AuditEventResult> {
     const branchId = cleanText(input.branchId ?? context.branchId);
     if (branchId) assertBranchAccess(context, branchId);
     const action = cleanText(input.action);
@@ -84,7 +93,7 @@ export class AuditService {
       after: input.after === undefined ? undefined : jsonValue(input.after),
     };
 
-    await this.prisma.auditLog.create({
+    await client.auditLog.create({
       data: {
         id,
         actorUserId: context.userId,
