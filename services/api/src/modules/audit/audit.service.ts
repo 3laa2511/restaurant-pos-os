@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
@@ -62,10 +63,8 @@ export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
   async record(context: AuthContext, input: AuditEventInput): Promise<AuditEventResult> {
-    assertPermission(context, PERMISSIONS.AUDIT_VIEW);
     const branchId = cleanText(input.branchId ?? context.branchId);
     if (branchId) assertBranchAccess(context, branchId);
-
     const action = cleanText(input.action);
     const entityType = cleanText(input.entityType);
     if (!action) throw new Error('Audit action is required');
@@ -74,8 +73,7 @@ export class AuditService {
     const reason = cleanText(input.reason);
     const baseScore = RISK_BY_ACTION[action] ?? 10;
     const score = Math.min(100, baseScore + (reason ? 0 : baseScore >= 60 ? 5 : 0));
-    const id = crypto.randomUUID();
-
+    const id = randomUUID();
     const metadata = {
       ...(input.metadata ?? {}),
       riskScore: score,
@@ -97,7 +95,6 @@ export class AuditService {
         metadata: jsonValue(metadata),
       },
     });
-
     return { id, riskScore: score, riskLevel: riskLevel(score) };
   }
 
@@ -109,7 +106,6 @@ export class AuditService {
     const branchId = cleanText(options.branchId ?? context.branchId);
     if (branchId) assertBranchAccess(context, branchId);
     const limit = Math.min(200, Math.max(1, options.limit ?? 50));
-
     const rows = await this.prisma.auditLog.findMany({
       where: {
         branchId: branchId ?? undefined,
@@ -118,24 +114,12 @@ export class AuditService {
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
-      select: {
-        id: true,
-        actorUserId: true,
-        branchId: true,
-        action: true,
-        entityType: true,
-        entityId: true,
-        metadata: true,
-        createdAt: true,
-      },
+      select: { id: true, actorUserId: true, branchId: true, action: true, entityType: true, entityId: true, metadata: true, createdAt: true },
     });
-
-    return rows
-      .map((row) => {
-        const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {};
-        const score = typeof metadata.riskScore === 'number' ? metadata.riskScore : Math.min(100, RISK_BY_ACTION[row.action] ?? 10);
-        return { ...row, riskScore: score, riskLevel: riskLevel(score) };
-      })
-      .filter((row) => !options.riskLevel || row.riskLevel === options.riskLevel);
+    return rows.map((row) => {
+      const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {};
+      const score = typeof metadata.riskScore === 'number' ? metadata.riskScore : Math.min(100, RISK_BY_ACTION[row.action] ?? 10);
+      return { ...row, riskScore: score, riskLevel: riskLevel(score) };
+    }).filter((row) => !options.riskLevel || row.riskLevel === options.riskLevel);
   }
 }
