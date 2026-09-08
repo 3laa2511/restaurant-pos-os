@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
+import { AuditService } from '../audit/audit.service.js';
 import { paymentStatusAfterAdjustment, validateRefund, type PaymentAdjustmentType } from './payment-refund-policy.js';
 
 export interface PaymentAdjustmentInput {
@@ -37,7 +38,7 @@ function jsonValue(value: unknown): ReturnType<typeof JSON.parse> { return JSON.
 
 @Injectable()
 export class RefundService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly audit: AuditService) {}
 
   async adjustPayment(context: AuthContext, input: PaymentAdjustmentInput): Promise<PaymentAdjustmentResult> {
     assertPermission(context, input.type === 'VOID' ? PERMISSIONS.PAYMENT_VOID : PERMISSIONS.PAYMENT_REFUND);
@@ -66,6 +67,10 @@ export class RefundService {
         if (input.type === 'VOID' && payment.status !== 'PAID') throw new Error('A partially refunded payment cannot be voided');
         if (payment.order.status === 'CANCELLED' || payment.order.status === 'VOIDED') throw new Error(`Order cannot be financially adjusted from status ${payment.order.status}`);
 
+        const before = {
+          payment: { id: payment.id, amount: money(Number(payment.amount.toString())), status: payment.status, method: payment.method },
+          order: { id: payment.order.id, status: payment.order.status },
+        };
         const shift = await tx.shift.findUnique({ where: { id: input.shiftId }, select: { id: true, branchId: true, deviceId: true, status: true } });
         if (!shift) throw new Error('Shift not found');
         if (shift.branchId !== payment.order.branchId) throw new Error('Shift does not belong to the payment branch');
@@ -80,36 +85,14 @@ export class RefundService {
         const nextPaymentStatus = paymentStatusAfterAdjustment(paymentAmount, alreadyRefunded, input.amount, input.type);
         const adjustmentId = randomUUID();
         await tx.paymentAdjustment.create({
-          data: {
-            id: adjustmentId,
-            paymentId: payment.id,
-            orderId: payment.orderId,
-            shiftId: input.shiftId,
-            type: input.type,
-            amount: input.amount.toFixed(2),
-            reason: input.reason.trim(),
-            reference: input.reference?.trim() || null,
-            actorUserId: context.userId,
-            deviceId: context.deviceId ?? input.deviceId,
-            idempotencyKey: `${input.idempotencyKey}:adjustment`,
-            operationId,
-          },
+          data: { id: adjustmentId, paymentId: payment.id, orderId: payment.orderId, shiftId: input.shiftId, type: input.type, amount: input.amount.toFixed(2), reason: input.reason.trim(), reference: input.reference?.trim() || null, actorUserId: context.userId, deviceId: context.deviceId ?? input.deviceId, idempotencyKey: `${input.idempotencyKey}:adjustment`, operationId },
         });
         await tx.payment.update({ where: { id: payment.id }, data: { status: nextPaymentStatus } });
 
         if (payment.method === 'CASH') {
           const drawer = await tx.cashDrawer.findUnique({ where: { deviceId: shift.deviceId }, select: { id: true, branchId: true, active: true } });
           if (!drawer || !drawer.active || drawer.branchId !== payment.order.branchId) throw new Error('An active cash drawer is required for cash refunds');
-          await tx.cashDrawerMovement.create({
-            data: {
-              id: randomUUID(), drawerId: drawer.id, branchId: payment.order.branchId, deviceId: shift.deviceId,
-              shiftId: shift.id, userId: context.userId, type: 'REFUND', direction: 'OUT',
-              amount: input.amount.toFixed(2), reason: `${input.type === 'VOID' ? 'Cash void' : 'Cash refund'} for order ${payment.orderId}`,
-              sourceType: 'PAYMENT_ADJUSTMENT', sourceId: adjustmentId,
-              idempotencyKey: `${input.idempotencyKey}:drawer:refund`, operationId: `${operationId}:refund`,
-              metadata: jsonValue({ orderId: payment.orderId, paymentId: payment.id, adjustmentId, adjustmentType: input.type }), occurredAt: new Date(),
-            },
-          });
+          await tx.cashDrawerMovement.create({ data: { id: randomUUID(), drawerId: drawer.id, branchId: payment.order.branchId, deviceId: shift.deviceId, shiftId: shift.id, userId: context.userId, type: 'REFUND', direction: 'OUT', amount: input.amount.toFixed(2), reason: `${input.type === 'VOID' ? 'Cash void' : 'Cash refund'} for order ${payment.orderId}`, sourceType: 'PAYMENT_ADJUSTMENT', sourceId: adjustmentId, idempotencyKey: `${input.idempotencyKey}:drawer:refund`, operationId: `${operationId}:refund`, metadata: jsonValue({ orderId: payment.orderId, paymentId: payment.id, adjustmentId, adjustmentType: input.type }), occurredAt: new Date() } });
         }
 
         let orderStatus = payment.order.status;
@@ -127,43 +110,13 @@ export class RefundService {
         }
 
         const eventType = input.type === 'VOID' ? 'PAYMENT_VOIDED' : 'PAYMENT_REFUNDED';
-        const eventPayload = {
-          operationId,
-          adjustmentId,
-          paymentId: payment.id,
-          type: input.type,
-          amount: input.amount,
-          reason: input.reason.trim(),
-          reference: input.reference?.trim() || null,
-          paymentStatus: nextPaymentStatus,
-          orderStatus,
-        };
-        await tx.orderEvent.create({
-          data: {
-            id: randomUUID(), eventId: randomUUID(), orderId: payment.orderId, type: eventType,
-            actorUserId: context.userId, deviceId: context.deviceId ?? input.deviceId,
-            payload: jsonValue(eventPayload), occurredAt: new Date(),
-          },
-        });
-        await tx.auditLog.create({
-          data: {
-            id: randomUUID(), actorUserId: context.userId, branchId: payment.order.branchId,
-            action: eventType, entityType: 'PAYMENT', entityId: payment.id, metadata: jsonValue(eventPayload),
-          },
-        });
+        const eventPayload = { operationId, adjustmentId, paymentId: payment.id, type: input.type, amount: input.amount, reason: input.reason.trim(), reference: input.reference?.trim() || null, paymentStatus: nextPaymentStatus, orderStatus };
+        await tx.orderEvent.create({ data: { id: randomUUID(), eventId: randomUUID(), orderId: payment.orderId, type: eventType, actorUserId: context.userId, deviceId: context.deviceId ?? input.deviceId, payload: jsonValue(eventPayload), occurredAt: new Date() } });
+        const after = { payment: { id: payment.id, amount: money(Number(payment.amount.toString())), status: nextPaymentStatus }, order: { id: payment.orderId, status: orderStatus } };
+        await this.audit.recordWithClient(tx, context, { action: eventType, entityType: 'PAYMENT', entityId: payment.id, branchId: payment.order.branchId, deviceId: context.deviceId ?? input.deviceId, reason: input.reason, before, after, metadata: { operationId, adjustmentId, type: input.type, amount: input.amount } });
 
-        const result: PaymentAdjustmentResult = {
-          operationId, paymentId: payment.id, orderId: payment.orderId, type: input.type,
-          amount: input.amount, paymentStatus: nextPaymentStatus, orderStatus,
-        };
-        await tx.syncOperation.create({
-          data: {
-            id: randomUUID(), operationId, deviceId: input.deviceId, branchId: payment.order.branchId,
-            operation: input.type === 'VOID' ? 'PAYMENT_VOIDED' : 'PAYMENT_REFUNDED', entityType: 'PAYMENT', entityId: payment.id,
-            idempotencyKey: input.idempotencyKey, clientSequence: input.clientSequence, occurredAt: new Date(),
-            payload: jsonValue(input), requestHash, status: 'APPLIED', result: jsonValue(result), updatedAt: new Date(),
-          },
-        });
+        const result: PaymentAdjustmentResult = { operationId, paymentId: payment.id, orderId: payment.orderId, type: input.type, amount: input.amount, paymentStatus: nextPaymentStatus, orderStatus };
+        await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: input.deviceId, branchId: payment.order.branchId, operation: input.type === 'VOID' ? 'PAYMENT_VOIDED' : 'PAYMENT_REFUNDED', entityType: 'PAYMENT', entityId: payment.id, idempotencyKey: input.idempotencyKey, clientSequence: input.clientSequence, occurredAt: new Date(), payload: jsonValue(input), requestHash, status: 'APPLIED', result: jsonValue(result), updatedAt: new Date() } });
         return result;
       });
     } catch (error) {
@@ -175,21 +128,14 @@ export class RefundService {
     }
   }
 
-  async refundPayment(context: AuthContext, input: Omit<PaymentAdjustmentInput, 'type'>): Promise<PaymentAdjustmentResult> {
-    return this.adjustPayment(context, { ...input, type: 'REFUND' });
-  }
-
-  async voidPayment(context: AuthContext, input: Omit<PaymentAdjustmentInput, 'type'>): Promise<PaymentAdjustmentResult> {
-    return this.adjustPayment(context, { ...input, type: 'VOID' });
-  }
+  async refundPayment(context: AuthContext, input: Omit<PaymentAdjustmentInput, 'type'>): Promise<PaymentAdjustmentResult> { return this.adjustPayment(context, { ...input, type: 'REFUND' }); }
+  async voidPayment(context: AuthContext, input: Omit<PaymentAdjustmentInput, 'type'>): Promise<PaymentAdjustmentResult> { return this.adjustPayment(context, { ...input, type: 'VOID' }); }
 
   private existingResult(result: unknown, storedHash: string, requestHash: string, operationId: string): PaymentAdjustmentResult {
     if (storedHash !== requestHash) throw new Error('Idempotency key was reused with a different payment adjustment request');
     if (!result || typeof result !== 'object') throw new Error('Existing payment adjustment has no recoverable result');
     const value = result as Partial<PaymentAdjustmentResult>;
-    if (value.operationId !== operationId || value.paymentId === undefined || value.orderId === undefined || value.type === undefined || value.amount === undefined || value.paymentStatus === undefined || value.orderStatus === undefined) {
-      throw new Error('Existing payment adjustment has an invalid result');
-    }
+    if (value.operationId !== operationId || value.paymentId === undefined || value.orderId === undefined || value.type === undefined || value.amount === undefined || value.paymentStatus === undefined || value.orderStatus === undefined) throw new Error('Existing payment adjustment has an invalid result');
     return { operationId, paymentId: value.paymentId, orderId: value.orderId, type: value.type, amount: value.amount, paymentStatus: value.paymentStatus, orderStatus: value.orderStatus };
   }
 }
