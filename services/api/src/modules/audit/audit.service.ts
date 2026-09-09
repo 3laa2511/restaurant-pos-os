@@ -55,8 +55,9 @@ function cleanText(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-function jsonValue(value: unknown): unknown {
-  return JSON.parse(JSON.stringify(value));
+function jsonValue(value: unknown): Prisma.InputJsonValue {
+  if (value === null) return null;
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
 @Injectable()
@@ -83,15 +84,15 @@ export class AuditService {
     const baseScore = RISK_BY_ACTION[action] ?? 10;
     const score = Math.min(100, baseScore + (reason ? 0 : baseScore >= 60 ? 5 : 0));
     const id = randomUUID();
-    const metadata = {
+    const metadata: Prisma.InputJsonObject = {
       ...(input.metadata ?? {}),
       riskScore: score,
       riskLevel: riskLevel(score),
       deviceId: cleanText(input.deviceId ?? context.deviceId),
       reason,
-      before: input.before === undefined ? undefined : jsonValue(input.before),
-      after: input.after === undefined ? undefined : jsonValue(input.after),
     };
+    if (input.before !== undefined) metadata.before = jsonValue(input.before);
+    if (input.after !== undefined) metadata.after = jsonValue(input.after);
 
     await client.auditLog.create({
       data: {
@@ -101,7 +102,7 @@ export class AuditService {
         action,
         entityType,
         entityId: cleanText(input.entityId),
-        metadata: jsonValue(metadata),
+        metadata,
       },
     });
     return { id, riskScore: score, riskLevel: riskLevel(score) };
