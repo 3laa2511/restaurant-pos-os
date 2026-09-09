@@ -12,10 +12,12 @@ const context = (overrides: Partial<AuthContext> = {}): AuthContext => ({
   ...overrides,
 });
 
+const auditMock = () => ({ recordWithClient: jest.fn() });
+
 describe('CashDrawerService', () => {
   it('rejects over-precision movement amounts before persistence', async () => {
     const prisma = { syncOperation: { findUnique: jest.fn() } } as any;
-    const service = new CashDrawerService(prisma);
+    const service = new CashDrawerService(prisma, auditMock() as any);
 
     await expect(service.recordMovement(context(), {
       drawerId: 'drawer-1', shiftId: 'shift-1', deviceId: 'device-1', type: 'PAY_IN', amount: 10.001,
@@ -26,7 +28,7 @@ describe('CashDrawerService', () => {
 
   it('requires an explicit direction for ADJUSTMENT', async () => {
     const prisma = { syncOperation: { findUnique: jest.fn() } } as any;
-    const service = new CashDrawerService(prisma);
+    const service = new CashDrawerService(prisma, auditMock() as any);
 
     await expect(service.recordMovement(context(), {
       drawerId: 'drawer-1', shiftId: 'shift-1', deviceId: 'device-1', type: 'ADJUSTMENT', amount: 5,
@@ -36,7 +38,7 @@ describe('CashDrawerService', () => {
 
   it('does not allow manual creation of system sale/change/refund movements', async () => {
     const prisma = { syncOperation: { findUnique: jest.fn() } } as any;
-    const service = new CashDrawerService(prisma);
+    const service = new CashDrawerService(prisma, auditMock() as any);
 
     for (const type of ['SALE', 'CASH_CHANGE', 'REFUND'] as const) {
       await expect(service.recordMovement(context(), {
