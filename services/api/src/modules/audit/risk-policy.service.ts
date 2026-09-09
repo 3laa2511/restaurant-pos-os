@@ -1,18 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import { PERMISSIONS, type PermissionCode } from '../auth/rbac.constants.js';
 
 export interface RiskPolicyResolution {
   baseScore: number;
   requiresReason: boolean;
   requiresApproval: boolean;
-  approvalPermission: string | null;
+  approvalPermission: PermissionCode | null;
   amountThreshold: number | null;
   varianceThreshold: number | null;
   policyId: string | null;
 }
 
 const DEFAULT_SCORE = 10;
+
+function permissionCode(value: string | null): PermissionCode | null {
+  if (!value) return null;
+  const allowed = Object.values(PERMISSIONS) as readonly string[];
+  if (!allowed.includes(value)) {
+    throw new Error(`Invalid risk policy approval permission: ${value}`);
+  }
+  return value as PermissionCode;
+}
 
 @Injectable()
 export class RiskPolicyService {
@@ -57,7 +67,7 @@ export class RiskPolicyService {
       baseScore: Math.min(100, Math.max(0, policy.baseScore)),
       requiresReason: policy.requiresReason,
       requiresApproval: policy.requiresApproval,
-      approvalPermission: policy.approvalPermission,
+      approvalPermission: permissionCode(policy.approvalPermission),
       amountThreshold: policy.amountThreshold === null ? null : Number(policy.amountThreshold),
       varianceThreshold: policy.varianceThreshold === null ? null : Number(policy.varianceThreshold),
       policyId: policy.id,
