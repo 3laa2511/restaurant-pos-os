@@ -4,6 +4,7 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
+import { RiskPolicyService } from './risk-policy.service.js';
 
 export type AuditRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
@@ -14,6 +15,8 @@ export interface AuditEventInput {
   branchId?: string | null;
   deviceId?: string | null;
   reason?: string | null;
+  amount?: number | null;
+  variance?: number | null;
   before?: unknown;
   after?: unknown;
   metadata?: Record<string, unknown> | null;
@@ -24,24 +27,6 @@ export interface AuditEventResult {
   riskScore: number;
   riskLevel: AuditRiskLevel;
 }
-
-const RISK_BY_ACTION: Record<string, number> = {
-  PAYMENT_VOIDED: 80,
-  PAYMENT_REFUNDED: 70,
-  ORDER_VOIDED: 75,
-  ORDER_CANCELLED: 60,
-  ORDER_ITEM_VOIDED: 65,
-  DISCOUNT_APPLIED: 45,
-  CASH_DRAWER_ADJUSTED: 70,
-  CASH_DRAWER_PAY_OUT: 60,
-  CASH_DRAWER_PAY_IN: 35,
-  SHIFT_CLOSED: 40,
-  SHIFT_VARIANCE: 65,
-  USER_ROLE_CHANGED: 90,
-  USER_DISABLED: 85,
-  DEVICE_BLOCKED: 95,
-  OFFLINE_CHECKOUT_APPLIED: 20,
-};
 
 function riskLevel(score: number): AuditRiskLevel {
   if (score >= 90) return 'CRITICAL';
@@ -59,9 +44,18 @@ function jsonValue(value: unknown): Prisma.JsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.JsonValue;
 }
 
+function finiteMoney(value: number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  if (!Number.isFinite(value) || value < 0) throw new Error('Audit amount must be a finite non-negative number');
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 @Injectable()
 export class AuditService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly riskPolicies: RiskPolicyService,
+  ) {}
 
   async record(context: AuthContext, input: AuditEventInput): Promise<AuditEventResult> {
     return this.recordWithClient(this.prisma, context, input);
@@ -79,16 +73,32 @@ export class AuditService {
     if (!action) throw new Error('Audit action is required');
     if (!entityType) throw new Error('Audit entity type is required');
 
+    const policy = await this.riskPolicies.resolve(client, action, branchId);
     const reason = cleanText(input.reason);
-    const baseScore = RISK_BY_ACTION[action] ?? 10;
-    const score = Math.min(100, baseScore + (reason ? 0 : baseScore >= 60 ? 5 : 0));
+    if (policy.requiresReason && !reason) {
+      throw new Error(`Audit reason is required for ${action}`);
+    }
+    if (policy.requiresApproval && policy.approvalPermission) {
+      assertPermission(context, policy.approvalPermission);
+    }
+
+    const amount = finiteMoney(input.amount);
+    const variance = finiteMoney(input.variance);
+    let score = policy.baseScore;
+    if (amount !== null && policy.amountThreshold !== null && amount >= policy.amountThreshold) score += 15;
+    if (variance !== null && policy.varianceThreshold !== null && Math.abs(variance) >= policy.varianceThreshold) score += 15;
+    score = Math.min(100, score + (!reason && policy.baseScore >= 60 ? 5 : 0));
+
     const id = randomUUID();
     const metadata: Record<string, unknown> = {
       ...(input.metadata ?? {}),
       riskScore: score,
       riskLevel: riskLevel(score),
+      riskPolicyId: policy.policyId,
       deviceId: cleanText(input.deviceId ?? context.deviceId),
       reason,
+      amount,
+      variance,
     };
     if (input.before !== undefined) metadata.before = jsonValue(input.before);
     if (input.after !== undefined) metadata.after = jsonValue(input.after);
@@ -131,7 +141,7 @@ export class AuditService {
     return rows
       .map((row) => {
         const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {};
-        const score = typeof metadata.riskScore === 'number' ? metadata.riskScore : Math.min(100, RISK_BY_ACTION[row.action] ?? 10);
+        const score = typeof metadata.riskScore === 'number' ? metadata.riskScore : 10;
         return { ...row, riskScore: score, riskLevel: riskLevel(score) };
       })
       .filter((row) => !options.riskLevel || row.riskLevel === options.riskLevel);
