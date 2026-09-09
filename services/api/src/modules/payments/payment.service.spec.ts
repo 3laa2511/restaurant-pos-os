@@ -17,7 +17,7 @@ function buildPrisma() {
     shift: { findUnique: jest.fn() },
     payment: { findMany: jest.fn(), create: jest.fn() },
     cashDrawer: { findUnique: jest.fn() },
-    cashDrawerMovement: { create: jest.fn() },
+    cashDrawerMovement: { findMany: jest.fn(), create: jest.fn() },
     orderEvent: { create: jest.fn() },
     auditLog: { create: jest.fn() },
     syncOperation: { create: jest.fn() },
@@ -26,7 +26,7 @@ function buildPrisma() {
     shift: { findUnique: AsyncMock };
     payment: { findMany: AsyncMock; create: AsyncMock };
     cashDrawer: { findUnique: AsyncMock };
-    cashDrawerMovement: { create: AsyncMock };
+    cashDrawerMovement: { findMany: AsyncMock; create: AsyncMock };
     orderEvent: { create: AsyncMock };
     auditLog: { create: AsyncMock };
     syncOperation: { create: AsyncMock };
@@ -37,6 +37,7 @@ function buildPrisma() {
   tx.payment.findMany.mockResolvedValue([]);
   tx.payment.create.mockResolvedValue({});
   tx.cashDrawer.findUnique.mockResolvedValue({ id: 'drawer-1', branchId: 'branch-1', deviceId: 'device-1', active: true });
+  tx.cashDrawerMovement.findMany.mockResolvedValue([{ amount: { toString: () => '1000.00' }, direction: 'IN' }]);
   tx.cashDrawerMovement.create.mockResolvedValue({});
   tx.orderEvent.create.mockResolvedValue({});
   tx.auditLog.create.mockResolvedValue({});
