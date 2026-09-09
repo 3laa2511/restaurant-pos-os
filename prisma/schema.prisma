@@ -46,7 +46,6 @@ enum PaymentStatus {
   PARTIALLY_REFUNDED
   REFUNDED
   VOIDED
-  FAILED
 }
 enum PaymentAdjustmentType {
   REFUND
@@ -98,6 +97,7 @@ model Branch {
   sessions Session[]
   cashDrawers CashDrawer[]
   cashDrawerMovements CashDrawerMovement[]
+  riskPolicies RiskPolicy[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -377,6 +377,25 @@ model AuditLog {
   createdAt DateTime @default(now())
   @@index([entityType, entityId])
   @@index([actorUserId, createdAt])
+}
+model RiskPolicy {
+  id String @id @default(cuid())
+  action String
+  branchId String?
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  baseScore Int
+  amountThreshold Decimal? @db.Decimal(12, 2)
+  varianceThreshold Decimal? @db.Decimal(12, 2)
+  requiresReason Boolean @default(false)
+  requiresApproval Boolean @default(false)
+  approvalPermission String?
+  effectiveFrom DateTime @default(now())
+  effectiveTo DateTime?
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([action, branchId, enabled])
+  @@index([effectiveFrom, effectiveTo])
 }
 model SyncOperation {
   id String @id @default(cuid())
