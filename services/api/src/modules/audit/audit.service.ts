@@ -55,9 +55,8 @@ function cleanText(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-function jsonValue(value: unknown): Prisma.InputJsonValue {
-  if (value === null) return null;
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+function jsonValue(value: unknown): Prisma.JsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.JsonValue;
 }
 
 @Injectable()
@@ -84,7 +83,7 @@ export class AuditService {
     const baseScore = RISK_BY_ACTION[action] ?? 10;
     const score = Math.min(100, baseScore + (reason ? 0 : baseScore >= 60 ? 5 : 0));
     const id = randomUUID();
-    const metadata: Prisma.InputJsonObject = {
+    const metadata: Record<string, unknown> = {
       ...(input.metadata ?? {}),
       riskScore: score,
       riskLevel: riskLevel(score),
@@ -102,7 +101,7 @@ export class AuditService {
         action,
         entityType,
         entityId: cleanText(input.entityId),
-        metadata,
+        metadata: metadata as Prisma.InputJsonObject,
       },
     });
     return { id, riskScore: score, riskLevel: riskLevel(score) };
@@ -116,20 +115,25 @@ export class AuditService {
     const branchId = cleanText(options.branchId ?? context.branchId);
     if (branchId) assertBranchAccess(context, branchId);
     const limit = Math.min(200, Math.max(1, options.limit ?? 50));
+    const where: Prisma.AuditLogWhereInput = {};
+    if (branchId) where.branchId = branchId;
+    const action = cleanText(options.action);
+    if (action) where.action = action;
+    const entityType = cleanText(options.entityType);
+    if (entityType) where.entityType = entityType;
+
     const rows = await this.prisma.auditLog.findMany({
-      where: {
-        branchId: branchId ?? undefined,
-        action: cleanText(options.action) ?? undefined,
-        entityType: cleanText(options.entityType) ?? undefined,
-      },
+      where,
       orderBy: { createdAt: 'desc' },
       take: limit,
       select: { id: true, actorUserId: true, branchId: true, action: true, entityType: true, entityId: true, metadata: true, createdAt: true },
     });
-    return rows.map((row) => {
-      const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {};
-      const score = typeof metadata.riskScore === 'number' ? metadata.riskScore : Math.min(100, RISK_BY_ACTION[row.action] ?? 10);
-      return { ...row, riskScore: score, riskLevel: riskLevel(score) };
-    }).filter((row) => !options.riskLevel || row.riskLevel === options.riskLevel);
+    return rows
+      .map((row) => {
+        const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {};
+        const score = typeof metadata.riskScore === 'number' ? metadata.riskScore : Math.min(100, RISK_BY_ACTION[row.action] ?? 10);
+        return { ...row, riskScore: score, riskLevel: riskLevel(score) };
+      })
+      .filter((row) => !options.riskLevel || row.riskLevel === options.riskLevel);
   }
 }
