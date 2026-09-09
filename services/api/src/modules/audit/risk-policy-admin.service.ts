@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS, type PermissionCode } from '../auth/rbac.constants.js';
@@ -18,8 +17,8 @@ export interface RiskPolicyWriteInput {
   enabled?: boolean;
 }
 
-const MONEY_SCALE = 2;
 const MAX_SCORE = 100;
+const MAX_MONEY = 9_999_999_999.99;
 
 function text(value: string | null | undefined, field: string): string | null {
   const result = value?.trim() ?? null;
@@ -29,8 +28,8 @@ function text(value: string | null | undefined, field: string): string | null {
 
 function money(value: number | null | undefined, field: string): number | null {
   if (value === null || value === undefined) return null;
-  if (!Number.isFinite(value) || value < 0 || Math.round(value * 100) !== value * 100) {
-    throw new Error(`${field} must be a finite non-negative amount with at most 2 decimals`);
+  if (!Number.isFinite(value) || value < 0 || value > MAX_MONEY || Math.round(value * 100) !== value * 100) {
+    throw new Error(`${field} must be a finite amount from 0 to ${MAX_MONEY} with at most 2 decimals`);
   }
   return Math.round(value * 100) / 100;
 }
@@ -46,10 +45,11 @@ function date(value: string | Date | null | undefined, field: string, fallback?:
 }
 
 function permission(value: string | null | undefined): PermissionCode | null {
-  if (!value) return null;
+  const normalized = value?.trim() || null;
+  if (!normalized) return null;
   const allowed = Object.values(PERMISSIONS) as readonly string[];
-  if (!allowed.includes(value)) throw new Error(`Invalid approval permission: ${value}`);
-  return value as PermissionCode;
+  if (!allowed.includes(normalized)) throw new Error(`Invalid approval permission: ${normalized}`);
+  return normalized as PermissionCode;
 }
 
 @Injectable()
@@ -108,7 +108,7 @@ export class RiskPolicyAdminService {
   async create(context: AuthContext, input: RiskPolicyWriteInput) {
     this.authorize(context, input.branchId);
     const data = this.normalize(input);
-    const result = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const created = await tx.riskPolicy.create({ data });
       await tx.auditLog.create({
         data: {
@@ -117,12 +117,11 @@ export class RiskPolicyAdminService {
           action: 'RISK_POLICY_CREATED',
           entityType: 'RiskPolicy',
           entityId: created.id,
-          metadata: { after: created as unknown as Prisma.InputJsonValue },
+          metadata: { after: { ...data, id: created.id } },
         },
       });
       return created;
     });
-    return result;
   }
 
   async update(context: AuthContext, id: string, input: RiskPolicyWriteInput) {
@@ -130,7 +129,7 @@ export class RiskPolicyAdminService {
     if (!existing) throw new Error('Risk policy not found');
     this.authorize(context, input.branchId ?? existing.branchId);
     const data = this.normalize(input, existing.effectiveFrom);
-    const result = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const updated = await tx.riskPolicy.update({ where: { id }, data });
       await tx.auditLog.create({
         data: {
@@ -139,19 +138,21 @@ export class RiskPolicyAdminService {
           action: 'RISK_POLICY_UPDATED',
           entityType: 'RiskPolicy',
           entityId: id,
-          metadata: { before: existing as unknown as Prisma.InputJsonValue, after: updated as unknown as Prisma.InputJsonValue },
+          metadata: {
+            before: { id: existing.id, action: existing.action, branchId: existing.branchId, baseScore: existing.baseScore, amountThreshold: existing.amountThreshold?.toString() ?? null, varianceThreshold: existing.varianceThreshold?.toString() ?? null, requiresReason: existing.requiresReason, requiresApproval: existing.requiresApproval, approvalPermission: existing.approvalPermission, effectiveFrom: existing.effectiveFrom.toISOString(), effectiveTo: existing.effectiveTo?.toISOString() ?? null, enabled: existing.enabled },
+            after: { ...data, id },
+          },
         },
       });
       return updated;
     });
-    return result;
   }
 
   async setEnabled(context: AuthContext, id: string, enabled: boolean) {
     const existing = await this.prisma.riskPolicy.findUnique({ where: { id } });
     if (!existing) throw new Error('Risk policy not found');
     this.authorize(context, existing.branchId);
-    const updated = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const policy = await tx.riskPolicy.update({ where: { id }, data: { enabled } });
       await tx.auditLog.create({
         data: {
@@ -165,6 +166,5 @@ export class RiskPolicyAdminService {
       });
       return policy;
     });
-    return updated;
   }
 }
