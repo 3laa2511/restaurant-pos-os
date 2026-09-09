@@ -12,6 +12,7 @@ const permissions = [
   ['order.void_item', 'Void order items'],
   ['payment.create', 'Create payments'],
   ['payment.refund', 'Refund payments'],
+  ['payment.void', 'Void payments'],
   ['shift.open', 'Open shifts'],
   ['shift.close', 'Close shifts'],
   ['cash_drawer.view', 'View cash drawer'],
@@ -23,6 +24,7 @@ const permissions = [
   ['inventory.manage', 'Manage inventory'],
   ['driver.assign', 'Assign delivery drivers'],
   ['audit.view', 'View audit logs'],
+  ['audit.policy_manage', 'Manage audit risk policies'],
 ] as const;
 
 async function main() {
