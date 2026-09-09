@@ -14,14 +14,12 @@ const context = (overrides: Partial<AuthContext> = {}): AuthContext => ({
 
 type AnyMock = ReturnType<typeof jest.fn>;
 const mock = (): AnyMock => jest.fn();
+const auditMock = () => ({ recordWithClient: mock() });
 
-// The service receives PrismaService at runtime; these focused unit tests intentionally
-// provide only the transaction surface they exercise. Explicitly widening mock functions
-// keeps Jest 30's inferred `never` argument type from rejecting fixture values.
 describe('ShiftService hardening', () => {
   it('rejects over-precision opening cash before touching the database', async () => {
     const prisma = { syncOperation: { findUnique: mock() } } as any;
-    const service = new ShiftService(prisma);
+    const service = new ShiftService(prisma, auditMock() as any);
 
     await expect(service.open(context(), {
       branchId: 'branch-1', deviceId: 'device-1', openingCash: 10.001, idempotencyKey: 'open-1', clientSequence: 1,
@@ -46,7 +44,7 @@ describe('ShiftService hardening', () => {
     } as any;
     prisma.syncOperation.findUnique.mockResolvedValue(null);
     prisma.$transaction.mockImplementation(async (callback: any) => callback(tx));
-    const service = new ShiftService(prisma);
+    const service = new ShiftService(prisma, auditMock() as any);
 
     await expect(service.open(context(), {
       branchId: 'branch-1', deviceId: 'device-1', openingCash: 100, idempotencyKey: 'open-2', clientSequence: 2,
@@ -66,7 +64,7 @@ describe('ShiftService hardening', () => {
     } as any;
     prisma.syncOperation.findUnique.mockResolvedValue(null);
     prisma.$transaction.mockImplementation(async (callback: any) => callback(tx));
-    const service = new ShiftService(prisma);
+    const service = new ShiftService(prisma, auditMock() as any);
 
     await expect(service.close(context(), {
       shiftId: 'shift-1', closingCash: 100, idempotencyKey: 'close-1', clientSequence: 1,
@@ -85,7 +83,7 @@ describe('ShiftService hardening', () => {
     } as any;
     prisma.syncOperation.findUnique.mockResolvedValue(null);
     prisma.$transaction.mockImplementation(async (callback: any) => callback(tx));
-    const service = new ShiftService(prisma);
+    const service = new ShiftService(prisma, auditMock() as any);
 
     await expect(service.close(context(), {
       shiftId: 'shift-1', closingCash: 100, idempotencyKey: 'close-2', clientSequence: 2,
