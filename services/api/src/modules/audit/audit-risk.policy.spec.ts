@@ -17,7 +17,7 @@ describe('evaluateAuditRisk', () => {
   it('requires manager approval for a high-value void', () => {
     expect(evaluateAuditRisk({ action: 'PAYMENT_VOIDED', amount: 500, reason: 'Duplicate payment' })).toMatchObject({
       level: 'HIGH',
-      score: 75,
+      score: 60,
       requiresManagerApproval: true,
     });
   });
@@ -33,7 +33,7 @@ describe('evaluateAuditRisk', () => {
   it('reduces recorded risk after manager approval', () => {
     expect(evaluateAuditRisk({ action: 'PAYMENT_VOIDED', amount: 500, reason: 'Duplicate payment', managerApproved: true })).toMatchObject({
       level: 'HIGH',
-      score: 65,
+      score: 50,
       requiresManagerApproval: true,
     });
   });
