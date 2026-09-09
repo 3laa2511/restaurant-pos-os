@@ -22,12 +22,20 @@ export class AuditController {
     @Query('riskLevel') riskLevel?: AuditRiskLevel,
     @Query('limit') limit?: string,
   ) {
-    return this.audit.list(context, {
-      branchId,
-      action,
-      entityType,
-      riskLevel,
-      limit: limit === undefined ? undefined : Number(limit),
-    });
+    const options: {
+      branchId?: string;
+      action?: string;
+      entityType?: string;
+      riskLevel?: AuditRiskLevel;
+      limit?: number;
+    } = {};
+
+    if (branchId !== undefined) options.branchId = branchId;
+    if (action !== undefined) options.action = action;
+    if (entityType !== undefined) options.entityType = entityType;
+    if (riskLevel !== undefined) options.riskLevel = riskLevel;
+    if (limit !== undefined) options.limit = Number(limit);
+
+    return this.audit.list(context, options);
   }
 }
