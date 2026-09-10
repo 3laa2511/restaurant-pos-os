@@ -95,12 +95,8 @@ export class AuditService {
 
     const policy = await this.riskPolicies.resolve(client, action, branchId);
     const reason = cleanText(input.reason);
-    if (policy.requiresReason && !reason) {
-      throw new Error(`Audit reason is required for ${action}`);
-    }
-    if (policy.requiresApproval && policy.approvalPermission) {
-      assertPermission(context, policy.approvalPermission);
-    }
+    if (policy.requiresReason && !reason) throw new Error(`Audit reason is required for ${action}`);
+    if (policy.requiresApproval && policy.approvalPermission) assertPermission(context, policy.approvalPermission);
 
     const amount = finiteMoney(input.amount);
     const variance = finiteMoney(input.variance);
@@ -154,13 +150,13 @@ export class AuditService {
     if (entityType) where.entityType = entityType;
     const actorUserId = cleanText(options.actorUserId);
     if (actorUserId) where.actorUserId = actorUserId;
+
+    const metadataFilters: Prisma.AuditLogWhereInput[] = [];
     const deviceId = cleanText(options.deviceId);
-    if (deviceId) {
-      where.metadata = { path: ['deviceId'], equals: deviceId };
-    }
-    if (options.riskLevel) {
-      where.metadata = { path: ['riskLevel'], equals: options.riskLevel };
-    }
+    if (deviceId) metadataFilters.push({ metadata: { path: ['deviceId'], equals: deviceId } });
+    if (options.riskLevel) metadataFilters.push({ metadata: { path: ['riskLevel'], equals: options.riskLevel } });
+    if (metadataFilters.length > 0) where.AND = metadataFilters;
+
     if (from || to) {
       where.createdAt = {};
       if (from) where.createdAt.gte = from;
@@ -183,10 +179,6 @@ export class AuditService {
       return { ...row, riskScore: score, riskLevel: riskLevel(score) };
     });
 
-    return {
-      data,
-      nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
-      hasMore,
-    };
+    return { data, nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null, hasMore };
   }
 }
