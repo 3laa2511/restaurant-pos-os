@@ -19,23 +19,25 @@ export class AuditController {
     @Query('branchId') branchId?: string,
     @Query('action') action?: string,
     @Query('entityType') entityType?: string,
+    @Query('actorUserId') actorUserId?: string,
+    @Query('deviceId') deviceId?: string,
     @Query('riskLevel') riskLevel?: AuditRiskLevel,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
     @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
   ) {
-    const options: {
-      branchId?: string;
-      action?: string;
-      entityType?: string;
-      riskLevel?: AuditRiskLevel;
-      limit?: number;
-    } = {};
-
-    if (branchId !== undefined) options.branchId = branchId;
-    if (action !== undefined) options.action = action;
-    if (entityType !== undefined) options.entityType = entityType;
-    if (riskLevel !== undefined) options.riskLevel = riskLevel;
-    if (limit !== undefined) options.limit = Number(limit);
-
-    return this.audit.list(context, options);
+    return this.audit.list(context, {
+      ...(branchId !== undefined ? { branchId } : {}),
+      ...(action !== undefined ? { action } : {}),
+      ...(entityType !== undefined ? { entityType } : {}),
+      ...(actorUserId !== undefined ? { actorUserId } : {}),
+      ...(deviceId !== undefined ? { deviceId } : {}),
+      ...(riskLevel !== undefined ? { riskLevel } : {}),
+      ...(from !== undefined ? { from: new Date(from) } : {}),
+      ...(to !== undefined ? { to: new Date(to) } : {}),
+      ...(limit !== undefined ? { limit: Number(limit) } : {}),
+      ...(cursor !== undefined ? { cursor } : {}),
+    });
   }
 }
