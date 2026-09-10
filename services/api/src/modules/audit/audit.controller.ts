@@ -9,7 +9,7 @@ import { AuditService, type AuditRiskLevel } from './audit.service.js';
 
 const RISK_LEVELS: readonly AuditRiskLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 function parseLimit(value: string | undefined): number | undefined { if (value === undefined) return undefined; const parsed = Number(value); if (!Number.isInteger(parsed) || parsed < 1) throw new Error('limit must be a positive integer'); return parsed; }
-function parseRiskLevel(value: string | undefined): AuditRiskLevel | undefined { if (value === undefined) return undefined; if (!RISK_LEVELS.includes(value as AuditRiskLevel)) throw new Error('riskLevel must be LOW, MEDIUM, HIGH, or CRITICAL'); return value as AuditRiskLevel; }
+function parseRiskLevel(value: string): AuditRiskLevel { if (!RISK_LEVELS.includes(value as AuditRiskLevel)) throw new Error('riskLevel must be LOW, MEDIUM, HIGH, or CRITICAL'); return value as AuditRiskLevel; }
 function parseDateQuery(value: string | undefined, field: string): Date | undefined { if (value === undefined) return undefined; const date = new Date(value); if (Number.isNaN(date.getTime())) throw new Error(`${field} must be a valid date`); return date; }
 
 @Controller('audit')
