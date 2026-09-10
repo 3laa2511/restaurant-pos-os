@@ -28,6 +28,19 @@ export interface AuditEventResult {
   riskLevel: AuditRiskLevel;
 }
 
+export interface AuditListOptions {
+  branchId?: string;
+  action?: string;
+  entityType?: string;
+  actorUserId?: string;
+  deviceId?: string;
+  riskLevel?: AuditRiskLevel;
+  from?: Date;
+  to?: Date;
+  limit?: number;
+  cursor?: string;
+}
+
 function riskLevel(score: number): AuditRiskLevel {
   if (score >= 90) return 'CRITICAL';
   if (score >= 70) return 'HIGH';
@@ -48,6 +61,13 @@ function finiteMoney(value: number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   if (!Number.isFinite(value) || value < 0) throw new Error('Audit amount must be a finite non-negative number');
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function parseDate(value: Date | string | undefined, field: string): Date | undefined {
+  if (value === undefined) return undefined;
+  const result = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(result.getTime())) throw new Error(`${field} must be a valid date`);
+  return result;
 }
 
 @Injectable()
@@ -117,13 +137,14 @@ export class AuditService {
     return { id, riskScore: score, riskLevel: riskLevel(score) };
   }
 
-  async list(
-    context: AuthContext,
-    options: { branchId?: string; action?: string; entityType?: string; riskLevel?: AuditRiskLevel; limit?: number },
-  ) {
+  async list(context: AuthContext, options: AuditListOptions) {
     assertPermission(context, PERMISSIONS.AUDIT_VIEW);
     const branchId = cleanText(options.branchId ?? context.branchId);
     if (branchId) assertBranchAccess(context, branchId);
+    const from = parseDate(options.from, 'from');
+    const to = parseDate(options.to, 'to');
+    if (from && to && to <= from) throw new Error('to must be later than from');
+
     const limit = Math.min(200, Math.max(1, options.limit ?? 50));
     const where: Prisma.AuditLogWhereInput = {};
     if (branchId) where.branchId = branchId;
@@ -131,19 +152,41 @@ export class AuditService {
     if (action) where.action = action;
     const entityType = cleanText(options.entityType);
     if (entityType) where.entityType = entityType;
+    const actorUserId = cleanText(options.actorUserId);
+    if (actorUserId) where.actorUserId = actorUserId;
+    const deviceId = cleanText(options.deviceId);
+    if (deviceId) {
+      where.metadata = { path: ['deviceId'], equals: deviceId };
+    }
+    if (options.riskLevel) {
+      where.metadata = { path: ['riskLevel'], equals: options.riskLevel };
+    }
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = from;
+      if (to) where.createdAt.lt = to;
+    }
 
     const rows = await this.prisma.auditLog.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+      take: limit + 1,
       select: { id: true, actorUserId: true, branchId: true, action: true, entityType: true, entityId: true, metadata: true, createdAt: true },
     });
-    return rows
-      .map((row) => {
-        const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {};
-        const score = typeof metadata.riskScore === 'number' ? metadata.riskScore : 10;
-        return { ...row, riskScore: score, riskLevel: riskLevel(score) };
-      })
-      .filter((row) => !options.riskLevel || row.riskLevel === options.riskLevel);
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const data = page.map((row) => {
+      const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {};
+      const score = typeof metadata.riskScore === 'number' ? metadata.riskScore : 10;
+      return { ...row, riskScore: score, riskLevel: riskLevel(score) };
+    });
+
+    return {
+      data,
+      nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+      hasMore,
+    };
   }
 }
