@@ -71,3 +71,20 @@ test('failed print attempts are bounded by maxAttempts', () => {
   const claimed = claim(db, 'worker-a', 10, 3);
   assert.equal(claimed.length, 0);
 });
+
+test('print failure records reason and increments attempt count', () => {
+  const db = createDatabase();
+  claim(db, 'worker-a');
+  const result = db.prepare(`
+    UPDATE print_jobs
+    SET status='FAILED', attempts=attempts+1, locked_by=NULL, locked_until=NULL, last_error=?, updated_at=datetime('now')
+    WHERE id='print-1' AND status='PRINTING' AND locked_by='worker-a'
+    RETURNING id
+  `).get('printer offline');
+  assert.equal(result.id, 'print-1');
+  const row = db.prepare(`SELECT status, attempts, last_error, locked_by FROM print_jobs WHERE id='print-1'`).get();
+  assert.equal(row.status, 'FAILED');
+  assert.equal(Number(row.attempts), 1);
+  assert.equal(row.last_error, 'printer offline');
+  assert.equal(row.locked_by, null);
+});
