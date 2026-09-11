@@ -147,3 +147,4 @@ CREATE INDEX IF NOT EXISTS idx_sync_queue_status_sequence ON sync_queue(status, 
 CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status_created ON print_jobs(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_lease ON print_jobs(status, locked_until);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_open_shift_per_device ON shifts(device_id) WHERE status = 'OPEN';
