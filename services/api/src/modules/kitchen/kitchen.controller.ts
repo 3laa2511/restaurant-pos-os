@@ -8,10 +8,18 @@ import type { AuthContext } from '../auth/authorization.types.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 import { KitchenService } from './kitchen.service.js';
 
-const KITCHEN_STATUSES: readonly KitchenTicketStatus[] = ['QUEUED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'];
+const KITCHEN_STATUSES: readonly KitchenTicketStatus[] = [
+  'SENT_TO_KITCHEN',
+  'PREPARING',
+  'READY',
+  'COMPLETED',
+  'CANCELLED',
+];
 
 function parseTarget(value: string): KitchenTicketStatus {
-  if (!KITCHEN_STATUSES.includes(value as KitchenTicketStatus)) throw new Error('target must be QUEUED, PREPARING, READY, COMPLETED, or CANCELLED');
+  if (!KITCHEN_STATUSES.includes(value as KitchenTicketStatus)) {
+    throw new Error('target must be SENT_TO_KITCHEN, PREPARING, READY, COMPLETED, or CANCELLED');
+  }
   return value as KitchenTicketStatus;
 }
 
