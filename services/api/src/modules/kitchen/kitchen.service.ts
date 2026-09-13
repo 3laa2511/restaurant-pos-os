@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AuditService } from '../audit/audit.service.js';
 import { assertKitchenTicketTransition, type KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
-const ACTIVE_STATUSES: readonly string[] = ['SENT_TO_KITCHEN', 'PREPARING', 'READY'];
+const ACTIVE_STATUSES = ['SENT_TO_KITCHEN', 'PREPARING', 'READY'] as const;
 
 @Injectable()
 export class KitchenService {
@@ -24,7 +23,7 @@ export class KitchenService {
     const orders = await this.prisma.order.findMany({
       where: {
         ...(scopedBranchId ? { branchId: scopedBranchId } : {}),
-        status: { in: ACTIVE_STATUSES as Prisma.OrderWhereInput['status'] extends infer _ ? never : never },
+        status: { in: [...ACTIVE_STATUSES] },
       },
       orderBy: { updatedAt: 'asc' },
       select: {
@@ -62,7 +61,7 @@ export class KitchenService {
       const order = await tx.order.findUnique({ where: { id }, select: { id: true, orderNumber: true, branchId: true, status: true, version: true } });
       if (!order) throw new Error('Order not found');
       assertBranchAccess(context, order.branchId);
-      if (!ACTIVE_STATUSES.includes(order.status)) throw new Error(`Order is not active in kitchen: ${order.status}`);
+      if (!ACTIVE_STATUSES.includes(order.status as (typeof ACTIVE_STATUSES)[number])) throw new Error(`Order is not active in kitchen: ${order.status}`);
 
       const from = order.status as KitchenTicketStatus;
       assertKitchenTicketTransition(from, target);
