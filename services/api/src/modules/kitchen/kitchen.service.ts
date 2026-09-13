@@ -56,6 +56,7 @@ export class KitchenService {
     assertPermission(context, PERMISSIONS.KITCHEN_TICKET_MANAGE);
     const id = orderId.trim();
     if (!id) throw new Error('orderId is required');
+    const cleanReason = reason?.trim() || null;
 
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id }, select: { id: true, orderNumber: true, branchId: true, status: true, version: true } });
@@ -80,7 +81,7 @@ export class KitchenService {
           type: `KITCHEN_${target}`,
           actorUserId: context.userId,
           deviceId: context.deviceId ?? null,
-          payload: { from, to: target, reason: reason?.trim() || null },
+          payload: { from, to: target, reason: cleanReason },
           occurredAt: new Date(),
         },
       });
@@ -90,7 +91,7 @@ export class KitchenService {
         entityType: 'Order',
         entityId: order.id,
         branchId: order.branchId,
-        reason,
+        reason: cleanReason,
         before: { status: from, version: order.version },
         after: { status: target, version: order.version + 1 },
       });
