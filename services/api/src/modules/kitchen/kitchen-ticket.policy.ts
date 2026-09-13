@@ -1,7 +1,12 @@
-export type KitchenTicketStatus = 'QUEUED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
+export type KitchenTicketStatus =
+  | 'SENT_TO_KITCHEN'
+  | 'PREPARING'
+  | 'READY'
+  | 'COMPLETED'
+  | 'CANCELLED';
 
 const transitions: Record<KitchenTicketStatus, readonly KitchenTicketStatus[]> = {
-  QUEUED: ['PREPARING', 'CANCELLED'],
+  SENT_TO_KITCHEN: ['PREPARING', 'CANCELLED'],
   PREPARING: ['READY', 'CANCELLED'],
   READY: ['COMPLETED'],
   COMPLETED: [],
