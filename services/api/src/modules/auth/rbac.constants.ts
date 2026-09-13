@@ -32,6 +32,7 @@ export const PERMISSIONS = {
   DRIVER_ASSIGN: 'driver.assign',
   AUDIT_VIEW: 'audit.view',
   AUDIT_POLICY_MANAGE: 'audit.policy_manage',
+  KITCHEN_TICKET_MANAGE: 'kitchen.ticket_manage',
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
