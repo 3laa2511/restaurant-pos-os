@@ -25,6 +25,7 @@ const permissions = [
   ['driver.assign', 'Assign delivery drivers'],
   ['audit.view', 'View audit logs'],
   ['audit.policy_manage', 'Manage audit risk policies'],
+  ['kitchen.ticket_manage', 'Manage kitchen tickets'],
 ] as const;
 
 async function main() {
@@ -51,9 +52,9 @@ async function main() {
   const cashier = ['order.create', 'order.view', 'order.confirm', 'order.send_to_kitchen', 'payment.create', 'shift.open', 'shift.close', 'cash_drawer.view', 'report.view_operational', 'driver.assign'];
   const callCenter = ['order.create', 'order.view', 'order.confirm', 'order.send_to_kitchen'];
   const supervisor = [...callCenter, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_operational', 'report.view_financial', 'driver.assign', 'audit.view', 'cash_drawer.view'];
-  const kitchen = ['order.view'];
+  const kitchen = ['order.view', 'kitchen.ticket_manage'];
   const dispatcher = ['order.view', 'driver.assign'];
-  const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'audit.view', 'cash_drawer.manage'];
+  const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'audit.view', 'cash_drawer.manage', 'kitchen.ticket_manage'];
   const matrix: Record<RoleCode, readonly string[]> = { CASHIER: cashier, CALL_CENTER_OPERATOR: callCenter, CALL_CENTER_SUPERVISOR: supervisor, KITCHEN: kitchen, DISPATCHER: dispatcher, BRANCH_MANAGER: manager, CENTRAL_ADMIN: fullAccess, OWNER: fullAccess };
 
   for (const [roleCode, permissionCodes] of Object.entries(matrix) as [RoleCode, readonly string[]][]) {
