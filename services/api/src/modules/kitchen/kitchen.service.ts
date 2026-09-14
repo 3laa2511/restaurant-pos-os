@@ -5,6 +5,7 @@ import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AuditService } from '../audit/audit.service.js';
 import { routeOrderItems } from './kitchen-routing.js';
+import { deriveOrderStatusFromKitchenTickets, shouldAdvanceOrderStatus } from './kitchen-order-projection.js';
 import { assertKitchenTicketTransition, type KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
 const ACTIVE_STATUSES = ['SENT_TO_KITCHEN', 'PREPARING', 'READY'] as const;
@@ -164,7 +165,7 @@ export class KitchenService {
           station: true,
           status: true,
           version: true,
-          order: { select: { orderNumber: true } },
+          order: { select: { orderNumber: true, status: true, version: true } },
         },
       });
       if (!ticket) throw new Error('Kitchen ticket not found');
@@ -192,6 +193,54 @@ export class KitchenService {
       });
       if (updated.count !== 1) throw new Error('Kitchen ticket changed concurrently; reload and retry');
 
+      const siblingTickets = await tx.kitchenTicket.findMany({
+        where: { orderId: ticket.orderId },
+        select: { status: true },
+      });
+      const projectedOrderStatus = deriveOrderStatusFromKitchenTickets(
+        siblingTickets.map((sibling) => sibling.status as KitchenTicketStatus),
+      );
+
+      let orderVersion = ticket.order.version;
+      if (shouldAdvanceOrderStatus(ticket.order.status, projectedOrderStatus)) {
+        const orderUpdated = await tx.order.updateMany({
+          where: { id: ticket.orderId, version: ticket.order.version, status: ticket.order.status },
+          data: { status: projectedOrderStatus, version: { increment: 1 } },
+        });
+        if (orderUpdated.count !== 1) throw new Error('Kitchen order changed concurrently; reload and retry');
+        orderVersion += 1;
+
+        const orderEventId = randomUUID();
+        await tx.orderEvent.create({
+          data: {
+            id: orderEventId,
+            eventId: orderEventId,
+            orderId: ticket.orderId,
+            type: `KITCHEN_ORDER_${projectedOrderStatus}`,
+            actorUserId: context.userId,
+            deviceId: context.deviceId ?? null,
+            payload: {
+              source: 'KITCHEN_TICKET_PROJECTION',
+              ticketId: ticket.id,
+              from: ticket.order.status,
+              to: projectedOrderStatus,
+              version: orderVersion,
+            },
+            occurredAt: now,
+          },
+        });
+
+        await this.audit.recordWithClient(tx, context, {
+          action: `KITCHEN_ORDER_${projectedOrderStatus}`,
+          entityType: 'Order',
+          entityId: ticket.orderId,
+          branchId: ticket.branchId,
+          reason: cleanReason,
+          before: { status: ticket.order.status, version: ticket.order.version },
+          after: { status: projectedOrderStatus, version: orderVersion },
+        });
+      }
+
       const eventId = randomUUID();
       await tx.orderEvent.create({
         data: {
@@ -208,6 +257,7 @@ export class KitchenService {
             to: target,
             reason: cleanReason,
             version: ticket.version + 1,
+            orderStatus: projectedOrderStatus,
           },
           occurredAt: now,
         },
@@ -230,6 +280,8 @@ export class KitchenService {
         station: ticket.station,
         status: target,
         version: ticket.version + 1,
+        orderStatus: projectedOrderStatus,
+        orderVersion,
       };
     });
   }
