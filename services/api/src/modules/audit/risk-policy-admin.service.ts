@@ -61,7 +61,7 @@ export class RiskPolicyAdminService {
     if (branchId) assertBranchAccess(context, branchId);
   }
 
-  private normalize(input: RiskPolicyWriteInput, existingEffectiveFrom?: Date) {
+  private normalize(input: RiskPolicyWriteInput, existingEffectiveFrom?: Date, existingEffectiveTo?: Date | null) {
     const action = text(input.action, 'action')!;
     const baseScore = input.baseScore;
     if (!Number.isInteger(baseScore) || baseScore < 0 || baseScore > MAX_SCORE) {
@@ -75,7 +75,13 @@ export class RiskPolicyAdminService {
     if (!requiresApproval && approvalPermission) throw new Error('approvalPermission must be omitted when requiresApproval is false');
 
     const effectiveFrom = date(input.effectiveFrom, 'effectiveFrom', existingEffectiveFrom ?? new Date());
-    const effectiveTo = input.effectiveTo === null ? null : date(input.effectiveTo, 'effectiveTo');
+    // Omitted effectiveTo means "no end date" on create and preserves the existing
+    // value on update. Explicit null intentionally clears the end date.
+    const effectiveTo = input.effectiveTo === undefined
+      ? (existingEffectiveTo ?? null)
+      : input.effectiveTo === null
+        ? null
+        : date(input.effectiveTo, 'effectiveTo');
     if (effectiveTo && effectiveTo <= effectiveFrom) throw new Error('effectiveTo must be later than effectiveFrom');
 
     return {
@@ -128,7 +134,7 @@ export class RiskPolicyAdminService {
     const existing = await this.prisma.riskPolicy.findUnique({ where: { id } });
     if (!existing) throw new Error('Risk policy not found');
     this.authorize(context, input.branchId ?? existing.branchId);
-    const data = this.normalize(input, existing.effectiveFrom);
+    const data = this.normalize(input, existing.effectiveFrom, existing.effectiveTo);
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.riskPolicy.update({ where: { id }, data });
       await tx.auditLog.create({
