@@ -46,7 +46,7 @@ export class KitchenController {
     return this.kitchen.materializeTickets(context, orderId);
   }
 
-  @Patch('tickets/:ticketId/status')
+  @Patch('ticket/:ticketId/status')
   @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
   transitionTicket(
     @CurrentAuth() context: AuthContext,
@@ -64,8 +64,8 @@ export class KitchenController {
   }
 
   /**
-   * Compatibility endpoint: keeps the existing order-level kitchen lifecycle intact.
-   * New KDS clients should use /kitchen/tickets/:ticketId/status.
+   * Compatibility endpoint: preserves the existing order-level kitchen lifecycle.
+   * New KDS clients should use /kitchen/ticket/:ticketId/status.
    */
   @Patch('tickets/:orderId/status')
   @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
