@@ -1,4 +1,4 @@
-import { getDesktopSession, type DesktopSession } from './auth-client.js';
+import { getDesktopSession, type DesktopSession, type KitchenStation } from './auth-client.js';
 
 export interface PosRuntimeIdentity {
   userId: string;
@@ -7,6 +7,7 @@ export interface PosRuntimeIdentity {
   deviceId: string;
   username: string;
   displayName: string;
+  kitchenStation: KitchenStation | null;
   roles: readonly string[];
   permissions: readonly string[];
 }
@@ -25,6 +26,7 @@ export function getPosRuntimeIdentity(session: DesktopSession | null = getDeskto
     deviceId,
     username: session.user.username,
     displayName: session.user.displayName,
+    kitchenStation: session.user.kitchenStation ?? null,
     roles: session.user.roles,
     permissions: session.user.permissions,
   };
