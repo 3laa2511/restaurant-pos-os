@@ -4,6 +4,7 @@ import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AuditService } from '../audit/audit.service.js';
+import { routeOrderItems } from './kitchen-routing.js';
 import { assertKitchenTicketTransition, type KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
 const ACTIVE_STATUSES = ['SENT_TO_KITCHEN', 'PREPARING', 'READY'] as const;
@@ -50,6 +51,185 @@ export class KitchenService {
         nameAr: item.product.nameAr,
       })),
     }));
+  }
+
+  async listTickets(context: AuthContext, branchId?: string) {
+    assertPermission(context, PERMISSIONS.ORDER_VIEW);
+    const scopedBranchId = (branchId ?? context.branchId)?.trim();
+    if (scopedBranchId) assertBranchAccess(context, scopedBranchId);
+
+    return this.prisma.kitchenTicket.findMany({
+      where: scopedBranchId ? { branchId: scopedBranchId } : undefined,
+      orderBy: [{ status: 'asc' }, { sentAt: 'asc' }],
+      include: {
+        order: { select: { orderNumber: true, type: true } },
+        items: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+  }
+
+  async materializeTickets(context: AuthContext, orderId: string) {
+    assertPermission(context, PERMISSIONS.KITCHEN_TICKET_MANAGE);
+    const id = orderId.trim();
+    if (!id) throw new Error('orderId is required');
+
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          orderNumber: true,
+          branchId: true,
+          status: true,
+          items: {
+            select: {
+              id: true,
+              quantity: true,
+              notes: true,
+              productId: true,
+              product: { select: { name: true, kitchenStation: true } },
+            },
+          },
+        },
+      });
+      if (!order) throw new Error('Order not found');
+      assertBranchAccess(context, order.branchId);
+      if (!['SENT_TO_KITCHEN', 'PREPARING', 'READY'].includes(order.status)) {
+        throw new Error(`Order is not active in kitchen: ${order.status}`);
+      }
+      if (order.items.length === 0) throw new Error('Order has no items');
+
+      const drafts = routeOrderItems(
+        order.items.map((item) => ({
+          id: item.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          station: item.product.kitchenStation,
+          nameSnapshot: item.product.name,
+          note: item.notes,
+        })),
+      );
+
+      const tickets = [];
+      for (const draft of drafts) {
+        const ticket = await tx.kitchenTicket.upsert({
+          where: { orderId_station_sequence: { orderId: order.id, station: draft.station, sequence: 1 } },
+          create: {
+            orderId: order.id,
+            branchId: order.branchId,
+            station: draft.station,
+            sequence: 1,
+            status: 'SENT_TO_KITCHEN',
+            items: {
+              create: draft.items.map((item) => ({
+                orderItemId: item.orderItemId,
+                nameSnapshot: item.name,
+                quantity: item.quantity,
+                note: item.note,
+              })),
+            },
+          },
+          update: {},
+          include: { items: true },
+        });
+        tickets.push(ticket);
+      }
+
+      return { orderId: order.id, orderNumber: order.orderNumber, tickets };
+    });
+  }
+
+  async transitionTicket(
+    context: AuthContext,
+    ticketId: string,
+    target: KitchenTicketStatus,
+    reason?: string,
+    expectedVersion?: number,
+  ) {
+    assertPermission(context, PERMISSIONS.KITCHEN_TICKET_MANAGE);
+    const id = ticketId.trim();
+    if (!id) throw new Error('ticketId is required');
+    const cleanReason = reason?.trim() || null;
+    if (target === 'CANCELLED' && !cleanReason) throw new Error('Cancellation reason is required');
+
+    return this.prisma.$transaction(async (tx) => {
+      const ticket = await tx.kitchenTicket.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          orderId: true,
+          branchId: true,
+          station: true,
+          status: true,
+          version: true,
+          order: { select: { orderNumber: true } },
+        },
+      });
+      if (!ticket) throw new Error('Kitchen ticket not found');
+      assertBranchAccess(context, ticket.branchId);
+      if (expectedVersion !== undefined && (!Number.isInteger(expectedVersion) || expectedVersion < 1)) {
+        throw new Error('expectedVersion must be a positive integer');
+      }
+      if (expectedVersion !== undefined && expectedVersion !== ticket.version) {
+        throw new Error('Kitchen ticket changed concurrently; reload and retry');
+      }
+
+      const from = ticket.status as KitchenTicketStatus;
+      assertKitchenTicketTransition(from, target);
+      const now = new Date();
+      const updated = await tx.kitchenTicket.updateMany({
+        where: { id, version: ticket.version, status: ticket.status },
+        data: {
+          status: target,
+          version: { increment: 1 },
+          ...(target === 'PREPARING' ? { preparingAt: now } : {}),
+          ...(target === 'READY' ? { readyAt: now } : {}),
+          ...(target === 'COMPLETED' ? { completedAt: now } : {}),
+          ...(target === 'CANCELLED' ? { cancelledAt: now, cancellationReason: cleanReason } : {}),
+        },
+      });
+      if (updated.count !== 1) throw new Error('Kitchen ticket changed concurrently; reload and retry');
+
+      const eventId = randomUUID();
+      await tx.orderEvent.create({
+        data: {
+          id: eventId,
+          eventId,
+          orderId: ticket.orderId,
+          type: `KITCHEN_TICKET_${target}`,
+          actorUserId: context.userId,
+          deviceId: context.deviceId ?? null,
+          payload: {
+            ticketId: ticket.id,
+            station: ticket.station,
+            from,
+            to: target,
+            reason: cleanReason,
+            version: ticket.version + 1,
+          },
+          occurredAt: now,
+        },
+      });
+
+      await this.audit.recordWithClient(tx, context, {
+        action: `KITCHEN_TICKET_${target}`,
+        entityType: 'KitchenTicket',
+        entityId: ticket.id,
+        branchId: ticket.branchId,
+        reason: cleanReason,
+        before: { status: from, version: ticket.version, station: ticket.station },
+        after: { status: target, version: ticket.version + 1, station: ticket.station },
+      });
+
+      return {
+        ticketId: ticket.id,
+        orderId: ticket.orderId,
+        orderNumber: ticket.order.orderNumber,
+        station: ticket.station,
+        status: target,
+        version: ticket.version + 1,
+      };
+    });
   }
 
   async transition(context: AuthContext, orderId: string, target: KitchenTicketStatus, reason?: string) {
