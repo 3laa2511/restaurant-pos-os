@@ -83,6 +83,18 @@ enum CashDrawerDirection {
   IN
   OUT
 }
+enum KitchenStation {
+  KITCHEN
+  BEVERAGE
+  PACKING
+}
+enum KitchenTicketStatus {
+  SENT_TO_KITCHEN
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
 
 model Branch {
   id String @id @default(cuid())
@@ -98,6 +110,7 @@ model Branch {
   cashDrawers CashDrawer[]
   cashDrawerMovements CashDrawerMovement[]
   riskPolicies RiskPolicy[]
+  kitchenTickets KitchenTicket[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -194,6 +207,7 @@ model Product {
   nameAr String?
   price Decimal @db.Decimal(12, 2)
   active Boolean @default(true)
+  kitchenStation KitchenStation @default(KITCHEN)
   categoryId String
   category Category @relation(fields: [categoryId], references: [id])
   orderItems OrderItem[]
@@ -217,6 +231,7 @@ model Order {
   payments Payment[]
   paymentAdjustments PaymentAdjustment[]
   events OrderEvent[]
+  kitchenTickets KitchenTicket[]
   total Decimal @db.Decimal(12, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -247,6 +262,42 @@ model OrderEvent {
   occurredAt DateTime
   createdAt DateTime @default(now())
   @@index([orderId, occurredAt])
+}
+model KitchenTicket {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  station KitchenStation
+  status KitchenTicketStatus @default(SENT_TO_KITCHEN)
+  version Int @default(1)
+  sequence Int @default(1)
+  sentAt DateTime @default(now())
+  preparingAt DateTime?
+  readyAt DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+  cancellationReason String?
+  items KitchenTicketItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([orderId, station, sequence])
+  @@index([branchId, status, updatedAt])
+  @@index([orderId, status])
+}
+model KitchenTicketItem {
+  id String @id @default(cuid())
+  ticketId String
+  ticket KitchenTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  orderItemId String
+  nameSnapshot String
+  quantity Int
+  note String?
+  modifiers Json?
+  createdAt DateTime @default(now())
+  @@unique([ticketId, orderItemId])
+  @@index([orderItemId])
 }
 model Customer {
   id String @id @default(cuid())
