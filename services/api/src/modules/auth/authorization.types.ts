@@ -1,3 +1,4 @@
+import type { KitchenStation } from '../../generated/prisma/enums.js';
 import type { PermissionCode, RoleCode } from './rbac.constants.js';
 
 export interface AuthContext {
@@ -6,6 +7,7 @@ export interface AuthContext {
   deviceId: string | null;
   roles: readonly RoleCode[];
   permissions: readonly PermissionCode[];
+  kitchenStation: KitchenStation | null;
 }
 
 export function hasPermission(context: AuthContext, permission: PermissionCode): boolean {
@@ -21,5 +23,14 @@ export function assertPermission(context: AuthContext, permission: PermissionCod
 export function assertBranchAccess(context: AuthContext, branchId: string): void {
   if (context.branchId !== null && context.branchId !== branchId) {
     throw new Error('Forbidden: branch access denied');
+  }
+}
+
+export function assertKitchenStationAccess(
+  context: AuthContext,
+  station: KitchenStation,
+): void {
+  if (context.kitchenStation !== null && context.kitchenStation !== station) {
+    throw new Error('Forbidden: kitchen station access denied');
   }
 }
