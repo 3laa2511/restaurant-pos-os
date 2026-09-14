@@ -23,14 +23,19 @@ function ticket(overrides: Record<string, unknown> = {}) {
     station: 'KITCHEN',
     status: 'PREPARING',
     version: 3,
-    order: { orderNumber: 'ORD-1001' },
+    order: { orderNumber: 'ORD-1001', status: 'PREPARING', version: 10 },
     ...overrides,
   };
 }
 
 function buildPrisma() {
   const tx = {
-    kitchenTicket: { findUnique: jest.fn() as AsyncMock, updateMany: jest.fn() as AsyncMock },
+    kitchenTicket: {
+      findUnique: jest.fn() as AsyncMock,
+      findMany: jest.fn() as AsyncMock,
+      updateMany: jest.fn() as AsyncMock,
+    },
+    order: { updateMany: jest.fn() as AsyncMock },
     orderEvent: { create: jest.fn() as AsyncMock },
   };
   const prisma = {
@@ -39,7 +44,9 @@ function buildPrisma() {
   };
 
   tx.kitchenTicket.findUnique.mockResolvedValue(ticket());
+  tx.kitchenTicket.findMany.mockResolvedValue([{ status: 'READY' }]);
   tx.kitchenTicket.updateMany.mockResolvedValue({ count: 1 });
+  tx.order.updateMany.mockResolvedValue({ count: 1 });
   tx.orderEvent.create.mockResolvedValue({});
   return { prisma, tx };
 }
@@ -61,7 +68,7 @@ describe('KitchenService.transitionTicket', () => {
     expect(tx.kitchenTicket.updateMany).not.toHaveBeenCalled();
   });
 
-  it('uses the ticket version in the atomic update and records transition metadata', async () => {
+  it('uses the ticket version in the atomic update and projects the order forward', async () => {
     const { prisma, tx } = buildPrisma();
     const audit = { recordWithClient: jest.fn() as AsyncMock };
     const service = new KitchenService(prisma as unknown as PrismaService, audit as any);
@@ -72,10 +79,14 @@ describe('KitchenService.transitionTicket', () => {
       where: { id: 'ticket-1', version: 3, status: 'PREPARING' },
       data: expect.objectContaining({ status: 'READY', version: { increment: 1 }, readyAt: expect.any(Date) }),
     }));
+    expect(tx.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'order-1', version: 10, status: 'PREPARING' },
+      data: { status: 'READY', version: { increment: 1 } },
+    });
     expect(tx.orderEvent.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         type: 'KITCHEN_TICKET_READY',
-        payload: expect.objectContaining({ ticketId: 'ticket-1', from: 'PREPARING', to: 'READY', version: 4, reason: 'pass quality check' }),
+        payload: expect.objectContaining({ ticketId: 'ticket-1', from: 'PREPARING', to: 'READY', version: 4, reason: 'pass quality check', orderStatus: 'READY' }),
         occurredAt: expect.any(Date),
       }),
     }));
@@ -86,12 +97,13 @@ describe('KitchenService.transitionTicket', () => {
       before: { status: 'PREPARING', version: 3, station: 'KITCHEN' },
       after: { status: 'READY', version: 4, station: 'KITCHEN' },
     }));
-    expect(result).toEqual(expect.objectContaining({ ticketId: 'ticket-1', status: 'READY', version: 4 }));
+    expect(result).toEqual(expect.objectContaining({ ticketId: 'ticket-1', status: 'READY', version: 4, orderStatus: 'READY', orderVersion: 11 }));
   });
 
   it('records cancellation reason and cancellation timestamp atomically', async () => {
     const { prisma, tx } = buildPrisma();
     tx.kitchenTicket.findUnique.mockResolvedValue(ticket({ status: 'PREPARING', version: 7 }));
+    tx.kitchenTicket.findMany.mockResolvedValue([{ status: 'CANCELLED' }]);
     const audit = { recordWithClient: jest.fn() as AsyncMock };
     const service = new KitchenService(prisma as unknown as PrismaService, audit as any);
 
@@ -102,10 +114,26 @@ describe('KitchenService.transitionTicket', () => {
     expect(update.data.version).toEqual({ increment: 1 });
     expect(update.data.cancelledAt).toBeInstanceOf(Date);
     expect(update.data.cancellationReason).toBe('customer cancelled');
+    expect(tx.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'order-1', version: 10, status: 'PREPARING' },
+      data: { status: 'CANCELLED', version: { increment: 1 } },
+    });
     expect(audit.recordWithClient).toHaveBeenCalledWith(tx, context, expect.objectContaining({
       reason: 'customer cancelled',
       after: { status: 'CANCELLED', version: 8, station: 'KITCHEN' },
     }));
+  });
+
+  it('does not regress an order when ticket projection is behind the authoritative order status', async () => {
+    const { prisma, tx } = buildPrisma();
+    tx.kitchenTicket.findMany.mockResolvedValue([{ status: 'PREPARING' }]);
+    tx.kitchenTicket.findUnique.mockResolvedValue(ticket({ status: 'READY', version: 8, order: { orderNumber: 'ORD-1001', status: 'READY', version: 12 } }));
+    const audit = { recordWithClient: jest.fn() as AsyncMock };
+    const service = new KitchenService(prisma as unknown as PrismaService, audit as any);
+
+    await service.transitionTicket(context, 'ticket-1', 'COMPLETED', undefined, 8);
+
+    expect(tx.order.updateMany).not.toHaveBeenCalled();
   });
 
   it('fails closed when the conditional update loses a race', async () => {
