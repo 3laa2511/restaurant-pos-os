@@ -58,14 +58,16 @@ export class KitchenService {
     const scopedBranchId = (branchId ?? context.branchId)?.trim();
     if (scopedBranchId) assertBranchAccess(context, scopedBranchId);
 
-    return this.prisma.kitchenTicket.findMany({
-      where: scopedBranchId ? { branchId: scopedBranchId } : undefined,
-      orderBy: [{ status: 'asc' }, { sentAt: 'asc' }],
+    const args = {
+      ...(scopedBranchId ? { where: { branchId: scopedBranchId } } : {}),
+      orderBy: [{ status: 'asc' as const }, { sentAt: 'asc' as const }],
       include: {
         order: { select: { orderNumber: true, type: true } },
-        items: { orderBy: { createdAt: 'asc' } },
+        items: { orderBy: { createdAt: 'asc' as const } },
       },
-    });
+    };
+
+    return this.prisma.kitchenTicket.findMany(args);
   }
 
   async materializeTickets(context: AuthContext, orderId: string) {
