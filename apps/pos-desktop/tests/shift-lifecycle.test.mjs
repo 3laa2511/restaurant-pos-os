@@ -63,6 +63,12 @@ test('closing shift records actual, expected and variance consistently', () => {
     INSERT INTO cash_drawer_movements (
       id, branch_id, device_id, shift_id, cashier_id, type, direction, amount,
       source_type, source_id, idempotency_key, occurred_at
+    ) VALUES ('opening', 'branch-1', 'device-1', 'shift-1', 'cashier-1', 'OPENING_FLOAT', 'IN', 100, 'SHIFT', 'shift-1', 'shift-1:opening', '2026-01-01T10:00:00Z')
+  `).run();
+  database.prepare(`
+    INSERT INTO cash_drawer_movements (
+      id, branch_id, device_id, shift_id, cashier_id, type, direction, amount,
+      source_type, source_id, idempotency_key, occurred_at
     ) VALUES ('sale', 'branch-1', 'device-1', 'shift-1', 'cashier-1', 'SALE', 'IN', 50, 'ORDER', 'order-1', 'order-1:sale', '2026-01-01T11:00:00Z')
   `).run();
 
