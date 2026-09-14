@@ -1,3 +1,5 @@
+export type KitchenStation = 'KITCHEN' | 'BEVERAGE' | 'PACKING';
+
 export interface DesktopSession {
   accessToken: string;
   expiresAt: string;
@@ -6,6 +8,7 @@ export interface DesktopSession {
     username: string;
     displayName: string;
     branchId: string | null;
+    kitchenStation: KitchenStation | null;
     roles: readonly string[];
     permissions: readonly string[];
   };
@@ -23,12 +26,19 @@ export function getDesktopSession(): DesktopSession | null {
   const raw = sessionStorage.getItem(SESSION_KEY);
   if (!raw) return null;
   try {
-    const session = JSON.parse(raw) as DesktopSession;
-    if (!session.accessToken || !session.expiresAt) return null;
-    if (Date.parse(session.expiresAt) <= Date.now()) {
+    const parsed = JSON.parse(raw) as DesktopSession;
+    if (!parsed.accessToken || !parsed.expiresAt) return null;
+    if (Date.parse(parsed.expiresAt) <= Date.now()) {
       clearDesktopSession();
       return null;
     }
+    const session: DesktopSession = {
+      ...parsed,
+      user: {
+        ...parsed.user,
+        kitchenStation: parsed.user?.kitchenStation ?? null,
+      },
+    };
     return session;
   } catch {
     clearDesktopSession();
@@ -64,7 +74,10 @@ export async function loginDesktop(
   const session: DesktopSession = {
     accessToken: body.accessToken,
     expiresAt: String(body.expiresAt),
-    user: body.user,
+    user: {
+      ...body.user,
+      kitchenStation: body.user.kitchenStation ?? null,
+    },
     deviceId: body.deviceId ?? null,
   };
   saveDesktopSession(session);
