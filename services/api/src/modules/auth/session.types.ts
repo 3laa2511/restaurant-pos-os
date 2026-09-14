@@ -1,3 +1,4 @@
+import type { KitchenStation } from '../../generated/prisma/enums.js';
 import type { AuthContext } from './authorization.types.js';
 
 export interface SessionRecord {
@@ -19,6 +20,7 @@ export function buildAuthContext(
   session: SessionRecord,
   roles: readonly AuthContext['roles'][number][],
   permissions: AuthContext['permissions'],
+  kitchenStation: KitchenStation | null = null,
 ): AuthContext {
   assertSessionActive(session);
   return {
@@ -27,5 +29,6 @@ export function buildAuthContext(
     deviceId: session.deviceId,
     roles,
     permissions,
+    kitchenStation,
   };
 }
