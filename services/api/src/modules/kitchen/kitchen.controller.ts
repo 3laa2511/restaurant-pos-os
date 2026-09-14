@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentAuth } from '../auth/auth.decorators.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { PermissionGuard } from '../auth/permission.guard.js';
@@ -23,6 +23,12 @@ function parseTarget(value: string): KitchenTicketStatus {
   return value as KitchenTicketStatus;
 }
 
+function parseExpectedVersion(value?: number): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 1) throw new Error('expectedVersion must be a positive integer');
+  return value;
+}
+
 @Controller('kitchen')
 @UseGuards(AuthGuard, PermissionGuard)
 export class KitchenController {
@@ -31,9 +37,36 @@ export class KitchenController {
   @Get('tickets')
   @RequirePermission(PERMISSIONS.ORDER_VIEW)
   tickets(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) {
-    return this.kitchen.list(context, branchId);
+    return this.kitchen.listTickets(context, branchId);
   }
 
+  @Post('orders/:orderId/tickets/materialize')
+  @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
+  materialize(@CurrentAuth() context: AuthContext, @Param('orderId') orderId: string) {
+    return this.kitchen.materializeTickets(context, orderId);
+  }
+
+  @Patch('tickets/:ticketId/status')
+  @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
+  transitionTicket(
+    @CurrentAuth() context: AuthContext,
+    @Param('ticketId') ticketId: string,
+    @Body() body: { target?: string; reason?: string; expectedVersion?: number },
+  ) {
+    if (!body.target) throw new Error('target is required');
+    return this.kitchen.transitionTicket(
+      context,
+      ticketId,
+      parseTarget(body.target),
+      body.reason,
+      parseExpectedVersion(body.expectedVersion),
+    );
+  }
+
+  /**
+   * Compatibility endpoint: keeps the existing order-level kitchen lifecycle intact.
+   * New KDS clients should use /kitchen/tickets/:ticketId/status.
+   */
   @Patch('tickets/:orderId/status')
   @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
   transition(
