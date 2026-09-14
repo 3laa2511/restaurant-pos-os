@@ -7,7 +7,12 @@ export interface AuthContext {
   deviceId: string | null;
   roles: readonly RoleCode[];
   permissions: readonly PermissionCode[];
-  kitchenStation: KitchenStation | null;
+  /**
+   * Assigned kitchen station. Undefined is retained for compatibility with
+   * legacy/in-memory auth contexts; authenticated production sessions should
+   * normalize this to null when the user has no station assignment.
+   */
+  kitchenStation?: KitchenStation | null;
 }
 
 export function hasPermission(context: AuthContext, permission: PermissionCode): boolean {
@@ -30,7 +35,7 @@ export function assertKitchenStationAccess(
   context: AuthContext,
   station: KitchenStation,
 ): void {
-  if (context.kitchenStation !== null && context.kitchenStation !== station) {
+  if (context.kitchenStation != null && context.kitchenStation !== station) {
     throw new Error('Forbidden: kitchen station access denied');
   }
 }
