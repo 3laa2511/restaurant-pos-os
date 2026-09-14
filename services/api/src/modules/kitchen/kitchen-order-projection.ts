@@ -1,4 +1,4 @@
-import type { OrderStatus } from '../orders/order-status.js';
+import { OrderStatus } from '../../generated/prisma/enums.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
 const FORWARD_ORDER_STATUS: Readonly<Record<'SENT_TO_KITCHEN' | 'PREPARING' | 'READY' | 'CLOSED', number>> = {
@@ -15,11 +15,11 @@ export function deriveOrderStatusFromKitchenTickets(
 
   const active = statuses.filter((status) => status !== 'CANCELLED' && status !== 'COMPLETED');
   if (active.length === 0) {
-    return statuses.every((status) => status === 'CANCELLED') ? 'CANCELLED' : 'CLOSED';
+    return statuses.every((status) => status === 'CANCELLED') ? OrderStatus.CANCELLED : OrderStatus.CLOSED;
   }
-  if (active.some((status) => status === 'PREPARING')) return 'PREPARING';
-  if (active.some((status) => status === 'SENT_TO_KITCHEN')) return 'SENT_TO_KITCHEN';
-  return 'READY';
+  if (active.some((status) => status === 'PREPARING')) return OrderStatus.PREPARING;
+  if (active.some((status) => status === 'SENT_TO_KITCHEN')) return OrderStatus.SENT_TO_KITCHEN;
+  return OrderStatus.READY;
 }
 
 export function shouldAdvanceOrderStatus(current: OrderStatus, projected: OrderStatus): boolean {
@@ -27,9 +27,11 @@ export function shouldAdvanceOrderStatus(current: OrderStatus, projected: OrderS
   const projectedRank = FORWARD_ORDER_STATUS[projected as keyof typeof FORWARD_ORDER_STATUS];
 
   if (current === projected) return false;
-  if (projected === 'CANCELLED') return current === 'SENT_TO_KITCHEN' || current === 'PREPARING' || current === 'READY';
-  if (current === 'CANCELLED' || current === 'CLOSED') return false;
+  if (projected === OrderStatus.CANCELLED) {
+    return current === OrderStatus.SENT_TO_KITCHEN || current === OrderStatus.PREPARING || current === OrderStatus.READY;
+  }
+  if (current === OrderStatus.CANCELLED || current === OrderStatus.CLOSED) return false;
   if (projectedRank === undefined) return false;
-  if (currentRank === undefined) return current === 'CONFIRMED';
+  if (currentRank === undefined) return current === OrderStatus.CONFIRMED;
   return projectedRank > currentRank;
 }
