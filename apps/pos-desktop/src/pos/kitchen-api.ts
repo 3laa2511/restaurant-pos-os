@@ -33,8 +33,14 @@ export interface KitchenTicket {
 }
 
 export interface KitchenTicketTransitionResult {
-  ticket: KitchenTicket;
-  orderStatus?: string;
+  ticketId: string;
+  orderId: string;
+  orderNumber: string;
+  station: KitchenStation;
+  status: KitchenTicketStatus;
+  version: number;
+  orderStatus: string;
+  orderVersion: number;
 }
 
 function buildUrl(apiBaseUrl: string, path: string): string {
@@ -88,7 +94,7 @@ export async function transitionKitchenTicket(
   reason?: string,
 ): Promise<KitchenTicketTransitionResult> {
   if (!ticketId.trim()) throw new Error('Kitchen ticket id is required');
-  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) {
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
     throw new Error('Kitchen ticket version is invalid');
   }
 
