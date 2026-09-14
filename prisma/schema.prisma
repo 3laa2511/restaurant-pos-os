@@ -122,6 +122,7 @@ model User {
   status UserStatus @default(ACTIVE)
   branchId String?
   branch Branch? @relation(fields: [branchId], references: [id])
+  kitchenStation KitchenStation?
   roleLinks UserRole[]
   orders Order[] @relation("CreatedOrders")
   shifts Shift[]
