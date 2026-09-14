@@ -241,7 +241,25 @@ export class KitchenService {
     const cleanReason = reason?.trim() || null;
 
     return this.prisma.$transaction(async (tx) => {
-      const order = await tx.order.findUnique({ where: { id }, select: { id: true, orderNumber: true, branchId: true, status: true, version: true } });
+      const order = await tx.order.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          orderNumber: true,
+          branchId: true,
+          status: true,
+          version: true,
+          items: {
+            select: {
+              id: true,
+              quantity: true,
+              notes: true,
+              productId: true,
+              product: { select: { name: true, kitchenStation: true } },
+            },
+          },
+        },
+      });
       if (!order) throw new Error('Order not found');
       assertBranchAccess(context, order.branchId);
       if (!ACTIVE_STATUSES.includes(order.status as (typeof ACTIVE_STATUSES)[number])) throw new Error(`Order is not active in kitchen: ${order.status}`);
@@ -253,6 +271,41 @@ export class KitchenService {
         data: { status: target === 'COMPLETED' ? 'CLOSED' : target, version: { increment: 1 } },
       });
       if (updated.count !== 1) throw new Error('Kitchen order changed concurrently; reload and retry');
+
+      if (target === 'SENT_TO_KITCHEN') {
+        if (order.items.length === 0) throw new Error('Order has no items');
+        const drafts = routeOrderItems(
+          order.items.map((item) => ({
+            id: item.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            station: item.product.kitchenStation,
+            nameSnapshot: item.product.name,
+            note: item.notes,
+          })),
+        );
+        for (const draft of drafts) {
+          await tx.kitchenTicket.upsert({
+            where: { orderId_station_sequence: { orderId: order.id, station: draft.station, sequence: 1 } },
+            create: {
+              orderId: order.id,
+              branchId: order.branchId,
+              station: draft.station,
+              sequence: 1,
+              status: 'SENT_TO_KITCHEN',
+              items: {
+                create: draft.items.map((item) => ({
+                  orderItemId: item.orderItemId,
+                  nameSnapshot: item.name,
+                  quantity: item.quantity,
+                  note: item.note,
+                })),
+              },
+            },
+            update: {},
+          });
+        }
+      }
 
       const eventId = randomUUID();
       await tx.orderEvent.create({
