@@ -91,7 +91,7 @@ describe('KitchenService.transitionTicket', () => {
 
   it('records cancellation reason and cancellation timestamp atomically', async () => {
     const { prisma, tx } = buildPrisma();
-    tx.kitchenTicket.findUnique.mockResolvedValue(ticket({ status: 'READY', version: 7 }));
+    tx.kitchenTicket.findUnique.mockResolvedValue(ticket({ status: 'PREPARING', version: 7 }));
     const audit = { recordWithClient: jest.fn() as AsyncMock };
     const service = new KitchenService(prisma as unknown as PrismaService, audit as any);
 
