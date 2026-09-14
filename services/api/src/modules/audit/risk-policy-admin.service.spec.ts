@@ -59,7 +59,7 @@ describe('RiskPolicyAdminService', () => {
   it('updates a policy while preserving the existing effectiveFrom when omitted', async () => {
     const { prisma, tx } = buildPrisma(); const existing = policy({ effectiveFrom: new Date('2026-02-01T00:00:00.000Z') }); prisma.riskPolicy.findUnique.mockResolvedValue(existing); tx.riskPolicy.update.mockResolvedValue(policy({ baseScore: 75 }));
     const service = new RiskPolicyAdminService(prisma as unknown as PrismaService);
-    const input = validInput({ baseScore: 75, effectiveFrom: undefined });
+    const { effectiveFrom: _omitted, ...input } = validInput({ baseScore: 75 });
     await service.update(context, 'policy-1', input);
     expect(tx.riskPolicy.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ effectiveFrom: existing.effectiveFrom, baseScore: 75 }) }));
     expect(tx.auditLog.create).toHaveBeenCalledTimes(1);
