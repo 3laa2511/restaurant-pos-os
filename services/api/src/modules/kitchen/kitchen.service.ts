@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
-import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
+import { assertBranchAccess, assertKitchenStationAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AuditService } from '../audit/audit.service.js';
 import { routeOrderItems } from './kitchen-routing.js';
@@ -60,7 +60,10 @@ export class KitchenService {
     if (scopedBranchId) assertBranchAccess(context, scopedBranchId);
 
     const args = {
-      ...(scopedBranchId ? { where: { branchId: scopedBranchId } } : {}),
+      where: {
+        ...(scopedBranchId ? { branchId: scopedBranchId } : {}),
+        ...(context.kitchenStation !== null ? { station: context.kitchenStation } : {}),
+      },
       orderBy: [{ status: 'asc' as const }, { sentAt: 'asc' as const }],
       include: {
         order: { select: { orderNumber: true, type: true } },
@@ -170,6 +173,7 @@ export class KitchenService {
       });
       if (!ticket) throw new Error('Kitchen ticket not found');
       assertBranchAccess(context, ticket.branchId);
+      assertKitchenStationAccess(context, ticket.station);
       if (expectedVersion !== undefined && (!Number.isInteger(expectedVersion) || expectedVersion < 1)) {
         throw new Error('expectedVersion must be a positive integer');
       }
@@ -288,6 +292,9 @@ export class KitchenService {
 
   async transition(context: AuthContext, orderId: string, target: KitchenTicketStatus, reason?: string) {
     assertPermission(context, PERMISSIONS.KITCHEN_TICKET_MANAGE);
+    if (context.kitchenStation !== null) {
+      throw new Error('Station-scoped kitchen users must transition individual tickets');
+    }
     const id = orderId.trim();
     if (!id) throw new Error('orderId is required');
     const cleanReason = reason?.trim() || null;
