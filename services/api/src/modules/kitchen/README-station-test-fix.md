@@ -1,0 +1,1 @@
+Temporary note: station authorization tests are covered by kitchen-station-access.test.ts.
