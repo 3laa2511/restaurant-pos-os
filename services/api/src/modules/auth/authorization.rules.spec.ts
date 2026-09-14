@@ -19,4 +19,8 @@ describe('authorization rules', () => {
     expect(permissions).toContain(PERMISSIONS.PAYMENT_VOID);
     expect(PERMISSIONS.PAYMENT_REFUND).not.toBe(PERMISSIONS.PAYMENT_VOID);
   });
+
+  it('grants kitchen operators the persisted ticket lifecycle permission', () => {
+    expect(roleHasPermission(ROLE_CODES.KITCHEN, PERMISSIONS.KITCHEN_TICKET_MANAGE)).toBe(true);
+  });
 });
