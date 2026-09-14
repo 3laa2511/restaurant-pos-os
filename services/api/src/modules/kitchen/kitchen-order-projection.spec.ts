@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { OrderStatus } from '../orders/order-status.js';
+import { OrderStatus } from '../../generated/prisma/enums.js';
 import { deriveOrderStatusFromKitchenTickets, shouldAdvanceOrderStatus } from './kitchen-order-projection.js';
 
 describe('deriveOrderStatusFromKitchenTickets', () => {
