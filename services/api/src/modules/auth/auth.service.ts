@@ -5,6 +5,7 @@ import { PrismaService } from '../../database/prisma.service.js';
 import { permissionsForRole } from './authorization.rules.js';
 import { buildAuthContext } from './session.types.js';
 import type { AuthContext } from './authorization.types.js';
+import type { KitchenStation } from '../../generated/prisma/enums.js';
 import type { RoleCode } from './rbac.constants.js';
 
 const scrypt = promisify(scryptCallback);
@@ -27,6 +28,7 @@ export interface LoginResult {
     username: string;
     displayName: string;
     branchId: string | null;
+    kitchenStation: KitchenStation | null;
     roles: readonly RoleCode[];
     permissions: readonly string[];
   };
@@ -139,7 +141,7 @@ export class AuthService {
         action: 'AUTH_LOGIN',
         entityType: 'SESSION',
         entityId: session.id,
-        metadata: { deviceId },
+        metadata: { deviceId, kitchenStation: user.kitchenStation },
       },
     });
 
@@ -151,6 +153,7 @@ export class AuthService {
         username: user.username,
         displayName: user.displayName,
         branchId: selectedBranchId,
+        kitchenStation: user.kitchenStation,
         roles,
         permissions,
       },
@@ -168,6 +171,7 @@ export class AuthService {
           select: {
             id: true,
             status: true,
+            kitchenStation: true,
             roleLinks: { include: { role: { select: { code: true } } } },
           },
         },
@@ -194,6 +198,7 @@ export class AuthService {
         },
         roles,
         permissions,
+        session.user.kitchenStation,
       ),
       sessionId: session.id,
     };
