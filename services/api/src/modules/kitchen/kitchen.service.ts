@@ -62,7 +62,7 @@ export class KitchenService {
     const args = {
       where: {
         ...(scopedBranchId ? { branchId: scopedBranchId } : {}),
-        ...(context.kitchenStation !== null ? { station: context.kitchenStation } : {}),
+        ...(context.kitchenStation != null ? { station: context.kitchenStation } : {}),
       },
       orderBy: [{ status: 'asc' as const }, { sentAt: 'asc' as const }],
       include: {
@@ -292,7 +292,7 @@ export class KitchenService {
 
   async transition(context: AuthContext, orderId: string, target: KitchenTicketStatus, reason?: string) {
     assertPermission(context, PERMISSIONS.KITCHEN_TICKET_MANAGE);
-    if (context.kitchenStation !== null) {
+    if (context.kitchenStation != null) {
       throw new Error('Station-scoped kitchen users must transition individual tickets');
     }
     const id = orderId.trim();
