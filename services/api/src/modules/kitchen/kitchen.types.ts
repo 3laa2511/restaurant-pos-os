@@ -1,11 +1,17 @@
+import { canTransitionKitchenTicket, type KitchenTicketStatus as PolicyKitchenTicketStatus } from './kitchen-ticket.policy.js';
+
 export enum KitchenStationType {
   KITCHEN = 'KITCHEN',
   BEVERAGE = 'BEVERAGE',
   PACKING = 'PACKING',
 }
 
+/**
+ * Kitchen lifecycle is owned by kitchen-ticket.policy.ts.
+ * Keep this enum as a typed boundary for consumers that need an enum value.
+ */
 export enum KitchenTicketStatus {
-  QUEUED = 'QUEUED',
+  SENT_TO_KITCHEN = 'SENT_TO_KITCHEN',
   PREPARING = 'PREPARING',
   READY = 'READY',
   COMPLETED = 'COMPLETED',
@@ -30,13 +36,16 @@ export interface KitchenTicket {
   createdAt: Date;
 }
 
-export function canMoveTicket(status: KitchenTicketStatus, next: KitchenTicketStatus): boolean {
-  const transitions: Record<KitchenTicketStatus, readonly KitchenTicketStatus[]> = {
-    QUEUED: [KitchenTicketStatus.PREPARING, KitchenTicketStatus.CANCELLED],
-    PREPARING: [KitchenTicketStatus.READY, KitchenTicketStatus.CANCELLED],
-    READY: [KitchenTicketStatus.COMPLETED],
-    COMPLETED: [],
-    CANCELLED: [],
-  };
-  return transitions[status].includes(next);
+/**
+ * Compatibility helper for callers that still use the legacy type boundary.
+ * The policy module remains the single source of truth for transitions.
+ */
+export function canMoveTicket(
+  status: KitchenTicketStatus,
+  next: KitchenTicketStatus,
+): boolean {
+  return canTransitionKitchenTicket(
+    status as PolicyKitchenTicketStatus,
+    next as PolicyKitchenTicketStatus,
+  );
 }
