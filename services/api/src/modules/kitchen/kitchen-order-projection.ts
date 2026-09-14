@@ -1,16 +1,14 @@
 import { OrderStatus } from '../../generated/prisma/enums.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
-const FORWARD_ORDER_STATUS: Readonly<Record<'SENT_TO_KITCHEN' | 'PREPARING' | 'READY' | 'CLOSED', number>> = {
-  SENT_TO_KITCHEN: 1,
-  PREPARING: 2,
-  READY: 3,
-  CLOSED: 4,
+const FORWARD_ORDER_STATUS: Readonly<Partial<Record<OrderStatus, number>>> = {
+  [OrderStatus.SENT_TO_KITCHEN]: 1,
+  [OrderStatus.PREPARING]: 2,
+  [OrderStatus.READY]: 3,
+  [OrderStatus.CLOSED]: 4,
 };
 
-export function deriveOrderStatusFromKitchenTickets(
-  statuses: readonly KitchenTicketStatus[],
-): Extract<OrderStatus, 'SENT_TO_KITCHEN' | 'PREPARING' | 'READY' | 'CLOSED' | 'CANCELLED'> {
+export function deriveOrderStatusFromKitchenTickets(statuses: readonly KitchenTicketStatus[]): OrderStatus {
   if (statuses.length === 0) throw new Error('Cannot project order status without kitchen tickets');
 
   const active = statuses.filter((status) => status !== 'CANCELLED' && status !== 'COMPLETED');
@@ -23,14 +21,14 @@ export function deriveOrderStatusFromKitchenTickets(
 }
 
 export function shouldAdvanceOrderStatus(current: OrderStatus, projected: OrderStatus): boolean {
-  const currentRank = FORWARD_ORDER_STATUS[current as keyof typeof FORWARD_ORDER_STATUS];
-  const projectedRank = FORWARD_ORDER_STATUS[projected as keyof typeof FORWARD_ORDER_STATUS];
-
   if (current === projected) return false;
   if (projected === OrderStatus.CANCELLED) {
     return current === OrderStatus.SENT_TO_KITCHEN || current === OrderStatus.PREPARING || current === OrderStatus.READY;
   }
   if (current === OrderStatus.CANCELLED || current === OrderStatus.CLOSED) return false;
+
+  const currentRank = FORWARD_ORDER_STATUS[current];
+  const projectedRank = FORWARD_ORDER_STATUS[projected];
   if (projectedRank === undefined) return false;
   if (currentRank === undefined) return current === OrderStatus.CONFIRMED;
   return projectedRank > currentRank;
