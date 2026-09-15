@@ -59,13 +59,14 @@ export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetc
       const token = accessTokenProvider();
       if (!token) throw new Error('Sync requires an authenticated desktop session');
       const headers: Record<string, string> = { 'content-type': 'application/json', Authorization: `Bearer ${token}` };
-      const response = await fetcher(`${base}/api/sync/operations`, {
+      const endpoint = item.entity_type === 'KITCHEN_TICKET' ? `${base}/api/kitchen/tickets/sync` : `${base}/api/sync/operations`;
+      const response = await fetcher(endpoint, {
         method: 'POST', headers,
         body: JSON.stringify({ id: item.id, deviceId, branchId, operation: item.operation, entityType: item.entity_type, entityId: item.entity_id, idempotencyKey: item.idempotency_key, clientSequence: item.client_sequence, occurredAt: payload.createdAt ?? item.created_at, payload }),
       });
       if (!response.ok) throw new Error(`Sync HTTP ${response.status}`);
-      const result = await response.json().catch(() => null) as { status?: string } | null;
-      if (result?.status === 'CONFLICT' || result?.status === 'REJECTED') throw new Error(`Sync ${result.status.toLowerCase()}`);
+      const result = await response.json().catch(() => null) as { status?: string; reason?: string } | null;
+      if (result?.status === 'CONFLICT' || result?.status === 'REJECTED') throw new Error(`Sync ${result.status.toLowerCase()}: ${result.reason ?? 'operation rejected'}`);
     },
   };
 }
