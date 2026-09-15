@@ -6,8 +6,7 @@ import type { AuditService } from '../audit/audit.service.js';
 import { KitchenService } from './kitchen.service.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
-type AuditDouble = Pick<AuditService, 'recordWithClient'>;
-type AuditRecordWithClient = AuditDouble['recordWithClient'];
+type AuditDouble = { recordWithClient: jest.Mock };
 
 const context: AuthContext = {
   userId: 'kitchen-user-1',
@@ -18,12 +17,13 @@ const context: AuthContext = {
 };
 
 function createAuditDouble(): AuditDouble {
-  const recordWithClient = jest.fn(async () => ({
-    id: 'audit-1',
-    riskScore: 0,
-    riskLevel: 'LOW' as const,
-  })) as unknown as AuditRecordWithClient;
-  return { recordWithClient };
+  return {
+    recordWithClient: jest.fn(async () => ({
+      id: 'audit-1',
+      riskScore: 0,
+      riskLevel: 'LOW' as const,
+    })),
+  };
 }
 
 function ticket(overrides: Record<string, unknown> = {}) {
@@ -72,7 +72,7 @@ function buildPrisma() {
 }
 
 function createService(prisma: unknown, audit: AuditDouble): KitchenService {
-  return new KitchenService(prisma as PrismaService, audit as AuditService);
+  return new KitchenService(prisma as PrismaService, audit as unknown as AuditService);
 }
 
 describe('KitchenService.transitionTicket', () => {
