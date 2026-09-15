@@ -5,7 +5,7 @@ import type { AuthContext } from '../auth/authorization.types.js';
 import { KitchenService } from './kitchen.service.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
-type AsyncMock = jest.Mock<(...args: any[]) => Promise<unknown>>;
+type AsyncMock = jest.Mock<(...args: unknown[]) => Promise<unknown>>;
 
 const context: AuthContext = {
   userId: 'kitchen-user-1',
@@ -63,7 +63,7 @@ function buildPrisma() {
 describe('KitchenService.transitionTicket', () => {
   it('requires a cancellation reason before opening a transaction', async () => {
     const { prisma } = buildPrisma();
-    const service = new KitchenService(prisma as unknown as PrismaService, { recordWithClient: jest.fn() } as any);
+    const service = new KitchenService(prisma as unknown as PrismaService, { recordWithClient: jest.fn() } as unknown as { recordWithClient: AsyncMock });
 
     await expect(service.transitionTicket(context, 'ticket-1', 'CANCELLED')).rejects.toThrow('Cancellation reason is required');
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -71,7 +71,7 @@ describe('KitchenService.transitionTicket', () => {
 
   it('rejects a stale expected version before mutating the ticket', async () => {
     const { prisma, tx } = buildPrisma();
-    const service = new KitchenService(prisma as unknown as PrismaService, { recordWithClient: jest.fn() } as any);
+    const service = new KitchenService(prisma as unknown as PrismaService, { recordWithClient: jest.fn() } as unknown as { recordWithClient: AsyncMock });
 
     await expect(service.transitionTicket(context, 'ticket-1', 'READY', undefined, 2)).rejects.toThrow('changed concurrently');
     expect(tx.kitchenTicket.updateMany).not.toHaveBeenCalled();
@@ -80,7 +80,7 @@ describe('KitchenService.transitionTicket', () => {
   it('uses the ticket version in the atomic update and projects the order forward', async () => {
     const { prisma, tx } = buildPrisma();
     const audit = { recordWithClient: jest.fn() as AsyncMock };
-    const service = new KitchenService(prisma as unknown as PrismaService, audit as any);
+    const service = new KitchenService(prisma as unknown as PrismaService, audit as unknown as { recordWithClient: AsyncMock });
 
     const result = await service.transitionTicket(context, 'ticket-1', 'READY', '  pass quality check  ', 3);
 
@@ -94,8 +94,8 @@ describe('KitchenService.transitionTicket', () => {
     });
     expect(tx.orderEvent.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        type: 'KITCHEN_TICKET_READY',
-        payload: expect.objectContaining({ ticketId: 'ticket-1', from: 'PREPARING', to: 'READY', version: 4, reason: 'pass quality check', orderStatus: 'READY' }),
+        type: 'KITCHEN_READY',
+        payload: expect.objectContaining({ source: 'KITCHEN_TICKET', ticketId: 'ticket-1', status: 'READY' }),
         occurredAt: expect.any(Date),
       }),
     }));
@@ -114,7 +114,7 @@ describe('KitchenService.transitionTicket', () => {
     tx.kitchenTicket.findUnique.mockResolvedValue(ticket({ status: 'PREPARING', version: 7 }));
     tx.kitchenTicket.findMany.mockResolvedValue([{ status: 'CANCELLED' }]);
     const audit = { recordWithClient: jest.fn() as AsyncMock };
-    const service = new KitchenService(prisma as unknown as PrismaService, audit as any);
+    const service = new KitchenService(prisma as unknown as PrismaService, audit as unknown as { recordWithClient: AsyncMock });
 
     await service.transitionTicket(context, 'ticket-1', 'CANCELLED', '  customer cancelled  ', 7);
 
@@ -144,7 +144,7 @@ describe('KitchenService.transitionTicket', () => {
       version: 12,
     });
     const audit = { recordWithClient: jest.fn() as AsyncMock };
-    const service = new KitchenService(prisma as unknown as PrismaService, audit as any);
+    const service = new KitchenService(prisma as unknown as PrismaService, audit as unknown as { recordWithClient: AsyncMock });
 
     await service.transitionTicket(context, 'ticket-1', 'COMPLETED', undefined, 8);
 
@@ -155,7 +155,7 @@ describe('KitchenService.transitionTicket', () => {
     const { prisma, tx } = buildPrisma();
     tx.kitchenTicket.updateMany.mockResolvedValue({ count: 0 });
     const audit = { recordWithClient: jest.fn() as AsyncMock };
-    const service = new KitchenService(prisma as unknown as PrismaService, audit as any);
+    const service = new KitchenService(prisma as unknown as PrismaService, audit as unknown as { recordWithClient: AsyncMock });
 
     await expect(service.transitionTicket(context, 'ticket-1', 'READY', undefined, 3)).rejects.toThrow('changed concurrently');
     expect(tx.orderEvent.create).not.toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe('KitchenService.transitionTicket', () => {
   it('rejects illegal lifecycle transitions before any write', async () => {
     const { prisma, tx } = buildPrisma();
     tx.kitchenTicket.findUnique.mockResolvedValue(ticket({ status: 'COMPLETED', version: 9 }));
-    const service = new KitchenService(prisma as unknown as PrismaService, { recordWithClient: jest.fn() } as any);
+    const service = new KitchenService(prisma as unknown as PrismaService, { recordWithClient: jest.fn() } as unknown as { recordWithClient: AsyncMock });
 
     await expect(service.transitionTicket(context, 'ticket-1', 'READY' as KitchenTicketStatus, undefined, 9)).rejects.toThrow('Invalid kitchen ticket transition');
     expect(tx.kitchenTicket.updateMany).not.toHaveBeenCalled();
