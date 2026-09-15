@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  KitchenApiError,
   listKitchenTickets,
   transitionKitchenTicket,
   type KitchenTicket,
@@ -84,6 +85,30 @@ export function KitchenDisplay() {
     }
   }, [identity.branchId, identity.kitchenStation]);
 
+  const reconcileConflict = useCallback(async (ticketId: string): Promise<boolean> => {
+    try {
+      const latest = await listKitchenTickets(API_BASE_URL, identity.branchId);
+      const scoped = identity.kitchenStation ? latest.filter((ticket) => ticket.station === identity.kitchenStation) : latest;
+      const serverTicket = scoped.find((ticket) => ticket.id === ticketId);
+      if (!serverTicket) {
+        await refresh();
+        return false;
+      }
+      await cacheKitchenTickets(db, [serverTicket]);
+      setTickets((current) => {
+        const withoutLocal = current.filter((ticket) => ticket.id !== ticketId);
+        return [...withoutLocal, serverTicket].sort((a, b) => a.id.localeCompare(b.id));
+      });
+      setOffline(false);
+      setLastUpdated(new Date());
+      setError('حدث تعارض: تم تحديث التذكرة من السيرفر، وهو المصدر المعتمد.');
+      return true;
+    } catch {
+      await refresh();
+      return false;
+    }
+  }, [identity.branchId, identity.kitchenStation, refresh]);
+
   useEffect(() => {
     void refresh();
     const onOnline = () => { setOffline(false); void refresh(); };
@@ -115,6 +140,10 @@ export function KitchenDisplay() {
           await refresh();
           return;
         } catch (cause) {
+          if (cause instanceof KitchenApiError && cause.status === 409) {
+            await reconcileConflict(ticket.id);
+            return;
+          }
           if (typeof navigator !== 'undefined' && navigator.onLine) throw cause;
           setOffline(true);
         }
@@ -144,6 +173,10 @@ export function KitchenDisplay() {
           await refresh();
           return;
         } catch (cause) {
+          if (cause instanceof KitchenApiError && cause.status === 409) {
+            await reconcileConflict(ticket.id);
+            return;
+          }
           if (typeof navigator !== 'undefined' && navigator.onLine) throw cause;
           setOffline(true);
         }
