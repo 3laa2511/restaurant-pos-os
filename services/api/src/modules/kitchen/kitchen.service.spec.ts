@@ -23,6 +23,7 @@ function ticket(overrides: Record<string, unknown> = {}) {
     station: 'KITCHEN',
     status: 'PREPARING',
     version: 3,
+    order: { orderNumber: 'ORD-1001', status: 'PREPARING', version: 10 },
     ...overrides,
   };
 }
@@ -53,7 +54,6 @@ function buildPrisma() {
     branchId: 'branch-1',
     status: 'PREPARING',
     version: 10,
-    orderNumber: 'ORD-1001',
   });
   tx.order.updateMany.mockResolvedValue({ count: 1 });
   tx.orderEvent.create.mockResolvedValue({});
@@ -94,17 +94,17 @@ describe('KitchenService.transitionTicket', () => {
     });
     expect(tx.orderEvent.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        type: 'KITCHEN_READY',
-        payload: { source: 'KITCHEN_TICKET', ticketId: 'ticket-1', status: 'READY' },
+        type: 'KITCHEN_TICKET_READY',
+        payload: expect.objectContaining({ ticketId: 'ticket-1', from: 'PREPARING', to: 'READY', version: 4, reason: 'pass quality check', orderStatus: 'READY' }),
         occurredAt: expect.any(Date),
       }),
     }));
     expect(audit.recordWithClient).toHaveBeenCalledWith(tx, context, expect.objectContaining({
-      action: 'ORDER_STATUS_PROJECTED',
-      entityType: 'Order',
-      entityId: 'order-1',
-      branchId: 'branch-1',
-      metadata: { source: 'KITCHEN_TICKET', ticketId: 'ticket-1', status: 'READY' },
+      action: 'KITCHEN_TICKET_READY',
+      entityType: 'KitchenTicket',
+      entityId: 'ticket-1',
+      before: { status: 'PREPARING', version: 3, station: 'KITCHEN' },
+      after: { status: 'READY', version: 4, station: 'KITCHEN' },
     }));
     expect(result).toEqual(expect.objectContaining({ ticketId: 'ticket-1', status: 'READY', version: 4, orderStatus: 'READY', orderVersion: 11 }));
   });
@@ -129,7 +129,6 @@ describe('KitchenService.transitionTicket', () => {
     });
     expect(audit.recordWithClient).toHaveBeenCalledWith(tx, context, expect.objectContaining({
       action: 'ORDER_STATUS_PROJECTED',
-      reason: undefined,
       metadata: { source: 'KITCHEN_TICKET', ticketId: 'ticket-1', status: 'CANCELLED' },
     }));
   });
@@ -143,7 +142,6 @@ describe('KitchenService.transitionTicket', () => {
       branchId: 'branch-1',
       status: 'READY',
       version: 12,
-      orderNumber: 'ORD-1001',
     });
     const audit = { recordWithClient: jest.fn() as AsyncMock };
     const service = new KitchenService(prisma as unknown as PrismaService, audit as any);
