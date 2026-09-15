@@ -85,7 +85,7 @@ export class KitchenSyncService {
     });
 
     try {
-      const result = await this.kitchen.transitionTicket(
+      await this.kitchen.transitionTicket(
         context,
         envelope.entityId,
         payload.target,
