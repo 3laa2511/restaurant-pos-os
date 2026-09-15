@@ -44,6 +44,16 @@ export interface KitchenTicketTransitionResult {
   orderVersion: number;
 }
 
+export class KitchenApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'KitchenApiError';
+  }
+}
+
 function buildUrl(apiBaseUrl: string, path: string): string {
   return `${apiBaseUrl.replace(/\/$/, '')}/api/${path.replace(/^\//, '')}`;
 }
@@ -52,15 +62,20 @@ async function request<T>(apiBaseUrl: string, path: string, init?: RequestInit):
   const token = getAccessToken();
   if (!token) throw new Error('Authenticated POS session is required');
 
-  const response = await fetch(buildUrl(apiBaseUrl, path), {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      ...(init?.body ? { 'content-type': 'application/json' } : {}),
-      ...(init?.headers ?? {}),
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(apiBaseUrl, path), {
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        ...(init?.body ? { 'content-type': 'application/json' } : {}),
+        ...(init?.headers ?? {}),
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  } catch (cause) {
+    throw new TypeError(cause instanceof Error ? cause.message : 'Kitchen API network request failed');
+  }
 
   const body = await response.json().catch(() => null) as (T & { message?: string; error?: string }) | null;
   if (!response.ok) {
@@ -69,7 +84,7 @@ async function request<T>(apiBaseUrl: string, path: string, init?: RequestInit):
       : body && typeof body.error === 'string'
         ? body.error
         : `Kitchen API request failed (${response.status})`;
-    throw new Error(message);
+    throw new KitchenApiError(message, response.status);
   }
   if (body === null) throw new Error('Kitchen API returned an empty response');
   return body;
