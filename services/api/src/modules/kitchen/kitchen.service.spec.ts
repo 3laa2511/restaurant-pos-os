@@ -7,7 +7,6 @@ import { KitchenService } from './kitchen.service.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
 type AuditDouble = Pick<AuditService, 'recordWithClient'>;
-
 type AuditRecordWithClient = AuditDouble['recordWithClient'];
 
 const context: AuthContext = {
@@ -19,13 +18,11 @@ const context: AuthContext = {
 };
 
 function createAuditDouble(): AuditDouble {
-  const recordWithClient: AuditRecordWithClient = jest.fn(
-    async (..._args: Parameters<AuditRecordWithClient>): Promise<AuditEventResult> => ({
-      id: 'audit-1',
-      riskScore: 0,
-      riskLevel: 'LOW',
-    }),
-  );
+  const recordWithClient = jest.fn(async () => ({
+    id: 'audit-1',
+    riskScore: 0,
+    riskLevel: 'LOW' as const,
+  })) as unknown as AuditRecordWithClient;
   return { recordWithClient };
 }
 
