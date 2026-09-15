@@ -28,7 +28,7 @@ function parsePayload(payload: Record<string, unknown>): KitchenTicketSyncPayloa
   if (typeof target !== 'string' || !STATUSES.includes(target as KitchenTicketStatus)) {
     throw new Error('Invalid kitchen ticket target');
   }
-  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+  if (typeof expectedVersion !== 'number' || !Number.isInteger(expectedVersion) || expectedVersion < 1) {
     throw new Error('Kitchen ticket expectedVersion must be a positive integer');
   }
   const reason = payload.reason;
