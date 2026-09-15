@@ -7,8 +7,13 @@ import {
 } from './pos/kitchen-api.js';
 import { getPosRuntimeIdentity } from './pos/runtime-identity.js';
 import type { KitchenStation } from './pos/auth-client.js';
+import { ensureKitchenLocalSchema, cacheKitchenTickets, getCachedKitchenTickets, enqueueKitchenTransition, applyOptimisticKitchenCache } from './pos/sqlite-kitchen.js';
+import { createDatabaseBridge } from './pos/tauri-bridge.js';
+import { invoke } from '@tauri-apps/api/core';
+import { nextDeviceSequence } from './pos/sqlite-sequence.js';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
+const db = createDatabaseBridge({ invoke });
 
 type Filter = 'ACTIVE' | KitchenTicketStatus;
 
@@ -41,25 +46,56 @@ export function KitchenDisplay() {
   const [loading, setLoading] = useState(true);
   const [busyTicketId, setBusyTicketId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [offline, setOffline] = useState(typeof navigator !== 'undefined' && !navigator.onLine);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const refresh = useCallback(async () => {
     try {
+      await ensureKitchenLocalSchema(db);
       setError('');
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedKitchenTickets(db, identity.kitchenStation);
+        setTickets(cached);
+        setOffline(true);
+        setLastUpdated(new Date());
+        return;
+      }
       const next = await listKitchenTickets(API_BASE_URL, identity.branchId);
-      setTickets(next);
+      const scoped = identity.kitchenStation ? next.filter((ticket) => ticket.station === identity.kitchenStation) : next;
+      await cacheKitchenTickets(db, scoped);
+      setTickets(scoped);
+      setOffline(false);
       setLastUpdated(new Date());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'تعذر تحميل تذاكر المطبخ');
+      try {
+        const cached = await getCachedKitchenTickets(db, identity.kitchenStation);
+        if (cached.length) {
+          setTickets(cached);
+          setOffline(true);
+          setError('تعذر الوصول للسيرفر؛ تعمل الآن من آخر نسخة محفوظة محليًا.');
+        } else {
+          setError(cause instanceof Error ? cause.message : 'تعذر تحميل تذاكر المطبخ');
+        }
+      } catch {
+        setError(cause instanceof Error ? cause.message : 'تعذر تحميل تذاكر المطبخ');
+      }
     } finally {
       setLoading(false);
     }
-  }, [identity.branchId]);
+  }, [identity.branchId, identity.kitchenStation]);
 
   useEffect(() => {
     void refresh();
+    const onOnline = () => { setOffline(false); void refresh(); };
+    const onOffline = () => { setOffline(true); void refresh(); };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
     const timer = window.setInterval(() => void refresh(), 5000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
   }, [refresh]);
 
   const visibleTickets = useMemo(() => tickets.filter((ticket) => {
@@ -73,8 +109,20 @@ export function KitchenDisplay() {
     setBusyTicketId(ticket.id);
     try {
       setError('');
-      await transitionKitchenTicket(API_BASE_URL, ticket.id, target, ticket.version);
-      await refresh();
+      if (!offline) {
+        try {
+          await transitionKitchenTicket(API_BASE_URL, ticket.id, target, ticket.version);
+          await refresh();
+          return;
+        } catch (cause) {
+          if (typeof navigator !== 'undefined' && navigator.onLine) throw cause;
+          setOffline(true);
+        }
+      }
+      const clientSequence = await nextDeviceSequence(db, identity.deviceId);
+      await applyOptimisticKitchenCache(db, { ticketId: ticket.id, target, expectedVersion: ticket.version, reason: null });
+      await enqueueKitchenTransition(db, identity, { ticketId: ticket.id, target, expectedVersion: ticket.version, reason: null }, clientSequence);
+      setTickets(await getCachedKitchenTickets(db, identity.kitchenStation));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'تعذر تحديث التذكرة');
       await refresh();
@@ -90,8 +138,20 @@ export function KitchenDisplay() {
     setBusyTicketId(ticket.id);
     try {
       setError('');
-      await transitionKitchenTicket(API_BASE_URL, ticket.id, 'CANCELLED', ticket.version, reason);
-      await refresh();
+      if (!offline) {
+        try {
+          await transitionKitchenTicket(API_BASE_URL, ticket.id, 'CANCELLED', ticket.version, reason);
+          await refresh();
+          return;
+        } catch (cause) {
+          if (typeof navigator !== 'undefined' && navigator.onLine) throw cause;
+          setOffline(true);
+        }
+      }
+      const clientSequence = await nextDeviceSequence(db, identity.deviceId);
+      await applyOptimisticKitchenCache(db, { ticketId: ticket.id, target: 'CANCELLED', expectedVersion: ticket.version, reason });
+      await enqueueKitchenTransition(db, identity, { ticketId: ticket.id, target: 'CANCELLED', expectedVersion: ticket.version, reason }, clientSequence);
+      setTickets(await getCachedKitchenTickets(db, identity.kitchenStation));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'تعذر إلغاء التذكرة');
       await refresh();
@@ -111,9 +171,12 @@ export function KitchenDisplay() {
             {lastUpdated ? ` · آخر تحديث ${formatTime(lastUpdated.toISOString())}` : ''}
           </p>
         </div>
-        <button type="button" onClick={() => void refresh()} disabled={loading} style={{ border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '10px 14px', background: 'rgba(255,255,255,.06)', color: 'inherit', cursor: 'pointer' }}>
-          {loading ? 'جاري التحديث...' : 'تحديث الآن'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ padding: '8px 11px', borderRadius: 999, background: offline ? 'rgba(245,158,11,.14)' : 'rgba(16,185,129,.12)', fontSize: 12 }}>{offline ? 'Offline · Local Queue' : 'Online · Server'}</span>
+          <button type="button" onClick={() => void refresh()} disabled={loading} style={{ border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '10px 14px', background: 'rgba(255,255,255,.06)', color: 'inherit', cursor: 'pointer' }}>
+            {loading ? 'جاري التحديث...' : 'تحديث الآن'}
+          </button>
+        </div>
       </header>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
@@ -138,7 +201,7 @@ export function KitchenDisplay() {
             return (
               <article key={ticket.id} style={{ border: '1px solid rgba(255,255,255,.11)', borderRadius: 16, padding: 16, background: 'rgba(255,255,255,.035)', boxShadow: ticket.status === 'READY' ? '0 0 0 1px rgba(34,211,238,.15)' : 'none' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'start' }}>
-                  <div><strong style={{ fontSize: 18 }}>طلب {ticket.orderId.slice(-8)}</strong><div style={{ opacity: .55, fontSize: 12, marginTop: 4 }}>#{ticket.id.slice(-8)} · إصدار {ticket.version}</div></div>
+                  <div><strong style={{ fontSize: 18 }}>طلب {ticket.order?.orderNumber ?? ticket.orderId.slice(-8)}</strong><div style={{ opacity: .55, fontSize: 12, marginTop: 4 }}>#{ticket.id.slice(-8)} · إصدار {ticket.version}</div></div>
                   <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(255,255,255,.08)', fontSize: 12 }}>{STATUS_LABELS[ticket.status]}</span>
                 </div>
 
