@@ -2,7 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import type { PrismaService } from '../../database/prisma.service.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
-import type { AuditService, AuditEventResult } from '../audit/audit.service.js';
+import type { AuditService } from '../audit/audit.service.js';
 import { KitchenService } from './kitchen.service.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
