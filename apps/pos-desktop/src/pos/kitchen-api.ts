@@ -30,6 +30,7 @@ export interface KitchenTicket {
   completedAt?: string | null;
   cancelledAt?: string | null;
   cancellationReason?: string | null;
+  order?: { orderNumber?: string; type?: string };
 }
 
 export interface KitchenTicketTransitionResult {
