@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertKitchenStationAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
@@ -178,7 +178,7 @@ export class KitchenService {
         throw new Error('expectedVersion must be a positive integer');
       }
       if (expectedVersion !== undefined && expectedVersion !== ticket.version) {
-        throw new Error('Kitchen ticket changed concurrently; reload and retry');
+        throw new ConflictException('Kitchen ticket changed concurrently; reload and retry');
       }
 
       const from = ticket.status as KitchenTicketStatus;
@@ -195,7 +195,7 @@ export class KitchenService {
           ...(target === 'CANCELLED' ? { cancelledAt: now, cancellationReason: cleanReason } : {}),
         },
       });
-      if (updated.count !== 1) throw new Error('Kitchen ticket changed concurrently; reload and retry');
+      if (updated.count !== 1) throw new ConflictException('Kitchen ticket changed concurrently; reload and retry');
 
       const siblingTickets = await tx.kitchenTicket.findMany({
         where: { orderId: ticket.orderId },
@@ -211,7 +211,7 @@ export class KitchenService {
           where: { id: ticket.orderId, version: ticket.order.version, status: ticket.order.status },
           data: { status: projectedOrderStatus, version: { increment: 1 } },
         });
-        if (orderUpdated.count !== 1) throw new Error('Kitchen order changed concurrently; reload and retry');
+        if (orderUpdated.count !== 1) throw new ConflictException('Kitchen order changed concurrently; reload and retry');
         orderVersion += 1;
 
         const orderEventId = randomUUID();
@@ -259,9 +259,7 @@ export class KitchenService {
             station: ticket.station,
             from,
             to: target,
-            reason: cleanReason,
             version: ticket.version + 1,
-            orderStatus: projectedOrderStatus,
           },
           occurredAt: now,
         },
@@ -273,8 +271,8 @@ export class KitchenService {
         entityId: ticket.id,
         branchId: ticket.branchId,
         reason: cleanReason,
-        before: { status: from, version: ticket.version, station: ticket.station },
-        after: { status: target, version: ticket.version + 1, station: ticket.station },
+        before: { status: ticket.status, version: ticket.version },
+        after: { status: target, version: ticket.version + 1 },
       });
 
       return {
@@ -290,7 +288,12 @@ export class KitchenService {
     });
   }
 
-  async transition(context: AuthContext, orderId: string, target: KitchenTicketStatus, reason?: string) {
+  async transition(
+    context: AuthContext,
+    orderId: string,
+    target: KitchenTicketStatus,
+    reason?: string,
+  ) {
     assertPermission(context, PERMISSIONS.KITCHEN_TICKET_MANAGE);
     if (context.kitchenStation != null) {
       throw new Error('Station-scoped kitchen users must transition individual tickets');
@@ -298,73 +301,23 @@ export class KitchenService {
     const id = orderId.trim();
     if (!id) throw new Error('orderId is required');
     const cleanReason = reason?.trim() || null;
+    if (target === 'CANCELLED' && !cleanReason) throw new Error('Cancellation reason is required');
 
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id },
-        select: {
-          id: true,
-          orderNumber: true,
-          branchId: true,
-          status: true,
-          version: true,
-          items: {
-            select: {
-              id: true,
-              quantity: true,
-              notes: true,
-              productId: true,
-              product: { select: { name: true, kitchenStation: true } },
-            },
-          },
-        },
+        select: { id: true, branchId: true, status: true, version: true },
       });
       if (!order) throw new Error('Order not found');
       assertBranchAccess(context, order.branchId);
-      if (!ACTIVE_STATUSES.includes(order.status as (typeof ACTIVE_STATUSES)[number])) throw new Error(`Order is not active in kitchen: ${order.status}`);
-
       const from = order.status as KitchenTicketStatus;
       assertKitchenTicketTransition(from, target);
+      const now = new Date();
       const updated = await tx.order.updateMany({
-        where: { id, version: order.version, status: order.status },
-        data: { status: target === 'COMPLETED' ? 'CLOSED' : target, version: { increment: 1 } },
+        where: { id: order.id, version: order.version, status: order.status },
+        data: { status: target, version: { increment: 1 } },
       });
-      if (updated.count !== 1) throw new Error('Kitchen order changed concurrently; reload and retry');
-
-      if (target === 'SENT_TO_KITCHEN') {
-        if (order.items.length === 0) throw new Error('Order has no items');
-        const drafts = routeOrderItems(
-          order.items.map((item) => ({
-            id: item.id,
-            productId: item.productId,
-            quantity: item.quantity,
-            station: item.product.kitchenStation,
-            nameSnapshot: item.product.name,
-            note: item.notes,
-          })),
-        );
-        for (const draft of drafts) {
-          await tx.kitchenTicket.upsert({
-            where: { orderId_station_sequence: { orderId: order.id, station: draft.station, sequence: 1 } },
-            create: {
-              orderId: order.id,
-              branchId: order.branchId,
-              station: draft.station,
-              sequence: 1,
-              status: 'SENT_TO_KITCHEN',
-              items: {
-                create: draft.items.map((item) => ({
-                  orderItemId: item.orderItemId,
-                  nameSnapshot: item.name,
-                  quantity: item.quantity,
-                  note: item.note,
-                })),
-              },
-            },
-            update: {},
-          });
-        }
-      }
+      if (updated.count !== 1) throw new ConflictException('Order changed concurrently; reload and retry');
 
       const eventId = randomUUID();
       await tx.orderEvent.create({
@@ -375,22 +328,22 @@ export class KitchenService {
           type: `KITCHEN_${target}`,
           actorUserId: context.userId,
           deviceId: context.deviceId ?? null,
-          payload: { from, to: target, reason: cleanReason },
-          occurredAt: new Date(),
+          payload: { from, to: target, version: order.version + 1 },
+          occurredAt: now,
         },
       });
 
       await this.audit.recordWithClient(tx, context, {
-        action: `KITCHEN_TICKET_${target}`,
+        action: `KITCHEN_${target}`,
         entityType: 'Order',
         entityId: order.id,
         branchId: order.branchId,
         reason: cleanReason,
-        before: { status: from, version: order.version },
+        before: { status: order.status, version: order.version },
         after: { status: target, version: order.version + 1 },
       });
 
-      return { orderId: order.id, orderNumber: order.orderNumber, status: target, version: order.version + 1 };
+      return { orderId: order.id, status: target, version: order.version + 1 };
     });
   }
 }
