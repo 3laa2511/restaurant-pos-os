@@ -3,11 +3,12 @@ import { DatabaseModule } from '../../database/database.module.js';
 import { AuditModule } from '../audit/audit.module.js';
 import { KitchenController } from './kitchen.controller.js';
 import { KitchenService } from './kitchen.service.js';
+import { KitchenSyncService } from './kitchen-sync.service.js';
 
 @Module({
   imports: [DatabaseModule, AuditModule],
   controllers: [KitchenController],
-  providers: [KitchenService],
-  exports: [KitchenService],
+  providers: [KitchenService, KitchenSyncService],
+  exports: [KitchenService, KitchenSyncService],
 })
 export class KitchenModule {}
