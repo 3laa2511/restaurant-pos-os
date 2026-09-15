@@ -2,11 +2,13 @@ import { describe, expect, it, jest } from '@jest/globals';
 import type { PrismaService } from '../../database/prisma.service.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
-import type { AuditService } from '../audit/audit.service.js';
+import type { AuditService, AuditEventResult } from '../audit/audit.service.js';
 import { KitchenService } from './kitchen.service.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
 type AuditDouble = Pick<AuditService, 'recordWithClient'>;
+
+type AuditRecordWithClient = AuditDouble['recordWithClient'];
 
 const context: AuthContext = {
   userId: 'kitchen-user-1',
@@ -16,14 +18,15 @@ const context: AuthContext = {
   permissions: [PERMISSIONS.KITCHEN_TICKET_MANAGE],
 };
 
-function createAuditDouble() {
-  return {
-    recordWithClient: jest.fn(async () => ({
+function createAuditDouble(): AuditDouble {
+  const recordWithClient: AuditRecordWithClient = jest.fn(
+    async (..._args: Parameters<AuditRecordWithClient>): Promise<AuditEventResult> => ({
       id: 'audit-1',
       riskScore: 0,
-      riskLevel: 'LOW' as const,
-    })),
-  } satisfies AuditDouble;
+      riskLevel: 'LOW',
+    }),
+  );
+  return { recordWithClient };
 }
 
 function ticket(overrides: Record<string, unknown> = {}) {
