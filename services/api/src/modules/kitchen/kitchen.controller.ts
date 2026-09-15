@@ -5,8 +5,10 @@ import { PermissionGuard } from '../auth/permission.guard.js';
 import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
+import type { SyncEnvelope, SyncResult } from '../sync/sync-contract.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 import { KitchenService } from './kitchen.service.js';
+import { KitchenSyncService } from './kitchen-sync.service.js';
 
 const KITCHEN_STATUSES: readonly KitchenTicketStatus[] = [
   'SENT_TO_KITCHEN',
@@ -32,7 +34,10 @@ function parseExpectedVersion(value?: number): number | undefined {
 @Controller('kitchen')
 @UseGuards(AuthGuard, PermissionGuard)
 export class KitchenController {
-  constructor(private readonly kitchen: KitchenService) {}
+  constructor(
+    private readonly kitchen: KitchenService,
+    private readonly kitchenSync: KitchenSyncService,
+  ) {}
 
   @Get('tickets')
   @RequirePermission(PERMISSIONS.ORDER_VIEW)
@@ -61,6 +66,12 @@ export class KitchenController {
       body.reason,
       parseExpectedVersion(body.expectedVersion),
     );
+  }
+
+  @Post('tickets/sync')
+  @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
+  syncTicket(@CurrentAuth() context: AuthContext, @Body() envelope: SyncEnvelope): Promise<SyncResult> {
+    return this.kitchenSync.submit(context, envelope);
   }
 
   /**
