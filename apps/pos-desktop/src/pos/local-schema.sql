@@ -9,6 +9,13 @@ CREATE TABLE IF NOT EXISTS devices (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS device_sequences (
+  id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL UNIQUE,
+  next_sequence INTEGER NOT NULL DEFAULT 0 CHECK(next_sequence >= 0),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY,
   sku TEXT NOT NULL UNIQUE,
@@ -140,6 +147,8 @@ CREATE TABLE IF NOT EXISTS sync_queue (
   status TEXT NOT NULL DEFAULT 'PENDING',
   last_error TEXT,
   attempts INTEGER NOT NULL DEFAULT 0,
+  locked_by TEXT,
+  locked_until TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -151,3 +160,4 @@ CREATE INDEX IF NOT EXISTS idx_payments_shift ON payments(shift_id);
 CREATE INDEX IF NOT EXISTS idx_cash_drawer_shift ON cash_drawer_movements(shift_id, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON print_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status, client_sequence);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_lease ON sync_queue(status, locked_until, client_sequence);
