@@ -7,7 +7,7 @@ import { KitchenService } from './kitchen.service.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
 type AuditDouble = { recordWithClient: jest.Mock };
-type AsyncMock = jest.Mock<(...args: never[]) => Promise<unknown>>;
+type AsyncMock = jest.Mock<Promise<unknown>, never[]>;
 
 const context: AuthContext = {
   userId: 'kitchen-user-1',
@@ -41,7 +41,7 @@ function ticket(overrides: Record<string, unknown> = {}) {
 }
 
 function asyncMock(): AsyncMock {
-  return jest.fn<(...args: never[]) => Promise<unknown>>();
+  return jest.fn<Promise<unknown>, never[]>();
 }
 
 function buildPrisma() {
@@ -57,9 +57,14 @@ function buildPrisma() {
     },
     orderEvent: { create: asyncMock() },
   };
+  const transaction = jest.fn<Promise<unknown>, never[]>();
+  transaction.mockImplementation(async (...args) => {
+    const callback = args[0] as unknown as (client: typeof tx) => Promise<unknown>;
+    return callback(tx);
+  });
   const prisma = {
     kitchenTicket: { findUnique: asyncMock() },
-    $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
+    $transaction: transaction,
   };
 
   tx.kitchenTicket.findUnique.mockResolvedValue(ticket());
