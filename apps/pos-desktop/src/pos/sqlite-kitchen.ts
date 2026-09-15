@@ -98,8 +98,8 @@ export async function cacheKitchenTickets(db: LocalDatabaseBridge, tickets: read
       updated_at = excluded.updated_at`,
     params: [
       ticket.id, ticket.orderId, ticket.branchId, ticket.station, ticket.status, ticket.version,
-      (ticket as KitchenTicket & { order?: { orderNumber?: string } }).order?.orderNumber ?? ticket.orderId,
-      (ticket as KitchenTicket & { order?: { type?: string } }).order?.type ?? 'UNKNOWN',
+      ticket.order?.orderNumber ?? ticket.orderId,
+      ticket.order?.type ?? 'UNKNOWN',
       JSON.stringify(ticket.items), ticket.createdAt, ticket.sentAt ?? null, ticket.preparingAt ?? null,
       ticket.readyAt ?? null, ticket.completedAt ?? null, ticket.cancelledAt ?? null,
       ticket.cancellationReason ?? null, new Date().toISOString(),
@@ -130,6 +130,7 @@ export async function enqueueKitchenTransition(
     expectedVersion: command.expectedVersion,
     reason: command.reason?.trim() || null,
   });
+  const now = new Date().toISOString();
   await db.execute(
     `INSERT INTO sync_queue (
       id, device_id, branch_id, entity_type, entity_id, operation,
@@ -143,9 +144,9 @@ export async function enqueueKitchenTransition(
       idempotencyKey,
       clientSequence,
       payload,
-      new Date().toISOString(),
-      new Date().toISOString(),
-      new Date().toISOString(),
+      now,
+      now,
+      now,
     ],
   );
 }
@@ -165,12 +166,17 @@ export async function applyOptimisticKitchenCache(
           ? 'cancelled_at'
           : 'sent_at';
   const reasonSql = command.target === 'CANCELLED' ? ', cancellation_reason = ?' : '';
-  const params: unknown[] = [command.target, command.expectedVersion + 1, timestamp];
-  if (command.target === 'CANCELLED') params.push(command.reason?.trim() || null);
-  params.push(command.ticketId, command.expectedVersion);
   await db.execute(
     `UPDATE kitchen_tickets SET status = ?, version = ?, ${timestampColumn} = ?, updated_at = ?${reasonSql}
      WHERE id = ? AND version = ?`,
-    [command.target, command.expectedVersion + 1, timestamp, timestamp, ...(command.target === 'CANCELLED' ? [command.reason?.trim() || null] : []), command.ticketId, command.expectedVersion],
+    [
+      command.target,
+      command.expectedVersion + 1,
+      timestamp,
+      timestamp,
+      ...(command.target === 'CANCELLED' ? [command.reason?.trim() || null] : []),
+      command.ticketId,
+      command.expectedVersion,
+    ],
   );
 }
