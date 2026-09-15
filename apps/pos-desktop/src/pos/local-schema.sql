@@ -103,20 +103,45 @@ CREATE TABLE IF NOT EXISTS print_jobs (
   printed_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS kitchen_tickets (
+  id TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL,
+  branch_id TEXT NOT NULL,
+  station TEXT NOT NULL CHECK(station IN ('KITCHEN','BEVERAGE','PACKING')),
+  status TEXT NOT NULL CHECK(status IN ('SENT_TO_KITCHEN','PREPARING','READY','COMPLETED','CANCELLED')),
+  version INTEGER NOT NULL CHECK(version > 0),
+  order_number TEXT NOT NULL,
+  order_type TEXT NOT NULL,
+  items_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  sent_at TEXT,
+  preparing_at TEXT,
+  ready_at TEXT,
+  completed_at TEXT,
+  cancelled_at TEXT,
+  cancellation_reason TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_kitchen_tickets_station_status ON kitchen_tickets(station, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_kitchen_tickets_order ON kitchen_tickets(order_id);
+
 CREATE TABLE IF NOT EXISTS sync_queue (
   id TEXT PRIMARY KEY,
-  device_id TEXT NOT NULL,
-  branch_id TEXT NOT NULL,
+  device_id TEXT NOT NULL DEFAULT '',
+  branch_id TEXT NOT NULL DEFAULT '',
   operation TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   entity_id TEXT NOT NULL,
   idempotency_key TEXT NOT NULL UNIQUE,
   client_sequence INTEGER NOT NULL,
   payload TEXT NOT NULL,
-  occurred_at TEXT NOT NULL,
+  occurred_at TEXT NOT NULL DEFAULT (datetime('now')),
   status TEXT NOT NULL DEFAULT 'PENDING',
   last_error TEXT,
-  retry_count INTEGER NOT NULL DEFAULT 0
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
