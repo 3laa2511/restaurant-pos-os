@@ -7,6 +7,7 @@ import { KitchenService } from './kitchen.service.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 
 type AuditDouble = { recordWithClient: jest.Mock };
+type AsyncMock = jest.Mock<(...args: never[]) => Promise<unknown>>;
 
 const context: AuthContext = {
   userId: 'kitchen-user-1',
@@ -39,21 +40,25 @@ function ticket(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function asyncMock(): AsyncMock {
+  return jest.fn<(...args: never[]) => Promise<unknown>>();
+}
+
 function buildPrisma() {
   const tx = {
     kitchenTicket: {
-      findUnique: jest.fn(),
-      findMany: jest.fn(),
-      updateMany: jest.fn(),
+      findUnique: asyncMock(),
+      findMany: asyncMock(),
+      updateMany: asyncMock(),
     },
     order: {
-      findUnique: jest.fn(),
-      updateMany: jest.fn(),
+      findUnique: asyncMock(),
+      updateMany: asyncMock(),
     },
-    orderEvent: { create: jest.fn() },
+    orderEvent: { create: asyncMock() },
   };
   const prisma = {
-    kitchenTicket: { findUnique: jest.fn() },
+    kitchenTicket: { findUnique: asyncMock() },
     $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
   };
 
