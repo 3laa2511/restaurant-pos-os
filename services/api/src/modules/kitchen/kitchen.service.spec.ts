@@ -19,7 +19,7 @@ function ticket(overrides: Record<string, unknown> = {}) {
   return { id: 'ticket-1', orderId: 'order-1', branchId: 'branch-1', station: 'KITCHEN', status: 'PREPARING', version: 3, order: { orderNumber: 'ORD-1001', status: 'PREPARING', version: 10 }, ...overrides };
 }
 
-function asyncMock(): AsyncMock { return jest.fn(async (..._args: unknown[]) => undefined); }
+function asyncMock(): AsyncMock { return jest.fn(async (...args: unknown[]) => { void args; return undefined; }); }
 
 function buildPrisma() {
   const tx = {
