@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS kitchen_tickets (
   station TEXT NOT NULL CHECK(station IN ('KITCHEN','BEVERAGE','PACKING')),
   status TEXT NOT NULL CHECK(status IN ('SENT_TO_KITCHEN','PREPARING','READY','COMPLETED','CANCELLED')),
   version INTEGER NOT NULL CHECK(version > 0),
+  sequence INTEGER NOT NULL DEFAULT 0,
   order_number TEXT NOT NULL,
   order_type TEXT NOT NULL,
   items_json TEXT NOT NULL,
@@ -130,7 +131,7 @@ CREATE TABLE IF NOT EXISTS kitchen_tickets (
   updated_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_kitchen_tickets_station_status ON kitchen_tickets(station, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_kitchen_tickets_station_status ON kitchen_tickets(station, status, created_at, sequence);
 CREATE INDEX IF NOT EXISTS idx_kitchen_tickets_order ON kitchen_tickets(order_id);
 
 CREATE TABLE IF NOT EXISTS sync_queue (
