@@ -5,6 +5,7 @@ import { ShiftService } from './shift.service.js';
 
 const context = (overrides: Partial<AuthContext> = {}): AuthContext => ({
   userId: 'cashier-1',
+  tenantId: 'tenant-1',
   branchId: 'branch-1',
   deviceId: 'device-1',
   roles: [],
