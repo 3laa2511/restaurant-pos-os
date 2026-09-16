@@ -7,94 +7,19 @@ datasource db {
   provider = "postgresql"
 }
 
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
-}
-enum OrderSource {
-  POS
-  CALL_CENTER
-  MOBILE
-  WEB
-  QR
-  AGGREGATOR
-}
-enum OrderType {
-  DINE_IN
-  TAKEAWAY
-  DELIVERY
-}
-enum OrderStatus {
-  DRAFT
-  CONFIRMED
-  SENT_TO_KITCHEN
-  PREPARING
-  READY
-  ASSIGNED
-  OUT_FOR_DELIVERY
-  DELIVERED
-  CLOSED
-  CANCELLED
-  VOIDED
-  REFUNDED
-  FAILED
-}
-enum PaymentStatus {
-  PENDING
-  PAID
-  PARTIALLY_REFUNDED
-  REFUNDED
-  VOIDED
-}
-enum PaymentAdjustmentType {
-  REFUND
-  VOID
-}
-enum ShiftStatus {
-  OPEN
-  CLOSED
-}
-enum DeviceStatus {
-  ACTIVE
-  INACTIVE
-  BLOCKED
-}
-enum RoleCode {
-  CASHIER
-  CALL_CENTER_OPERATOR
-  CALL_CENTER_SUPERVISOR
-  KITCHEN
-  DISPATCHER
-  BRANCH_MANAGER
-  CENTRAL_ADMIN
-  OWNER
-}
-enum CashDrawerMovementType {
-  OPENING_FLOAT
-  SALE
-  CASH_CHANGE
-  REFUND
-  PAY_IN
-  PAY_OUT
-  ADJUSTMENT
-}
-enum CashDrawerDirection {
-  IN
-  OUT
-}
-enum KitchenStation {
-  KITCHEN
-  BEVERAGE
-  PACKING
-}
-enum KitchenTicketStatus {
-  SENT_TO_KITCHEN
-  PREPARING
-  READY
-  COMPLETED
-  CANCELLED
-}
+enum UserStatus { ACTIVE INACTIVE SUSPENDED }
+enum OrderSource { POS CALL_CENTER MOBILE WEB QR AGGREGATOR }
+enum OrderType { DINE_IN TAKEAWAY DELIVERY }
+enum OrderStatus { DRAFT CONFIRMED SENT_TO_KITCHEN PREPARING READY ASSIGNED OUT_FOR_DELIVERY DELIVERED CLOSED CANCELLED VOIDED REFUNDED FAILED }
+enum PaymentStatus { PENDING PAID PARTIALLY_REFUNDED REFUNDED VOIDED }
+enum PaymentAdjustmentType { REFUND VOID }
+enum ShiftStatus { OPEN CLOSED }
+enum DeviceStatus { ACTIVE INACTIVE BLOCKED }
+enum RoleCode { CASHIER CALL_CENTER_OPERATOR CALL_CENTER_SUPERVISOR KITCHEN DISPATCHER BRANCH_MANAGER CENTRAL_ADMIN OWNER }
+enum CashDrawerMovementType { OPENING_FLOAT SALE CASH_CHANGE REFUND PAY_IN PAY_OUT ADJUSTMENT }
+enum CashDrawerDirection { IN OUT }
+enum KitchenStation { KITCHEN BEVERAGE PACKING }
+enum KitchenTicketStatus { SENT_TO_KITCHEN PREPARING READY COMPLETED CANCELLED }
 
 model Branch {
   id String @id @default(cuid())
@@ -211,9 +136,64 @@ model Product {
   kitchenStation KitchenStation @default(KITCHEN)
   categoryId String
   category Category @relation(fields: [categoryId], references: [id])
+  variants ProductVariant[]
+  modifierGroups ProductModifierGroup[]
   orderItems OrderItem[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+model ProductVariant {
+  id String @id @default(cuid())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku String @unique
+  name String
+  nameAr String?
+  price Decimal @db.Decimal(12, 2)
+  active Boolean @default(true)
+  sortOrder Int @default(0)
+  orderItems OrderItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([productId, active, sortOrder])
+}
+model ModifierGroup {
+  id String @id @default(cuid())
+  name String
+  nameAr String?
+  active Boolean @default(true)
+  sortOrder Int @default(0)
+  minSelections Int @default(0)
+  maxSelections Int @default(1)
+  options ModifierOption[]
+  products ProductModifierGroup[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model ModifierOption {
+  id String @id @default(cuid())
+  groupId String
+  group ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name String
+  nameAr String?
+  priceDelta Decimal @default(0) @db.Decimal(12, 2)
+  active Boolean @default(true)
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([groupId, active, sortOrder])
+}
+model ProductModifierGroup {
+  productId String
+  groupId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  group ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  required Boolean @default(false)
+  minSelections Int @default(0)
+  maxSelections Int @default(1)
+  sortOrder Int @default(0)
+  @@id([productId, groupId])
+  @@index([productId, sortOrder])
 }
 model Order {
   id String @id @default(cuid())
@@ -244,12 +224,16 @@ model OrderItem {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId String
   product Product @relation(fields: [productId], references: [id])
+  variantId String?
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
   quantity Int
   unitPrice Decimal @db.Decimal(12, 2)
   lineTotal Decimal @db.Decimal(12, 2)
   notes String?
+  modifiers Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@index([variantId])
 }
 model OrderEvent {
   id String @id @default(cuid())
