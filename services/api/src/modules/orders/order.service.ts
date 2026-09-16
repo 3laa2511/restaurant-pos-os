@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { OrderRepository, CreateOrderRecord } from './order-repository.port.js';
 import { OrderStatus } from './order-status.js';
-import { AuthContext, assertBranchAccess, assertPermission } from '../auth/authorization.types.js';
+import { AuthContext, assertBranchAccess, assertPermission, assertTenantScope } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 
 export interface CreateOrderInput {
@@ -47,12 +47,14 @@ export class OrderService {
 
   async create(context: AuthContext, input: CreateOrderInput): Promise<CreateOrderRecord> {
     assertPermission(context, PERMISSIONS.ORDER_CREATE);
+    const tenantId = assertTenantScope(context);
     assertBranchAccess(context, input.branchId);
 
     const order = await this.orders.create({
       id: randomUUID(),
       orderNumber: await this.nextOrderNumber(input.branchId),
       branchId: input.branchId,
+      tenantId,
       createdById: input.createdById,
       source: input.source,
       type: input.type,
@@ -83,6 +85,28 @@ export class OrderService {
     });
 
     return order;
+  }
+
+  async findById(context: AuthContext, id: string): Promise<CreateOrderRecord | null> {
+    assertPermission(context, PERMISSIONS.ORDER_VIEW);
+    const tenantId = assertTenantScope(context);
+    const order = await this.orders.findById(id.trim(), tenantId);
+    if (order) assertBranchAccess(context, order.branchId);
+    return order;
+  }
+
+  async transition(
+    context: AuthContext,
+    id: string,
+    expectedVersion: number,
+    status: OrderStatus,
+  ): Promise<CreateOrderRecord> {
+    assertPermission(context, PERMISSIONS.ORDER_CONFIRM);
+    const tenantId = assertTenantScope(context);
+    const current = await this.orders.findById(id.trim(), tenantId);
+    if (!current) throw new Error('Order not found');
+    assertBranchAccess(context, current.branchId);
+    return this.orders.transition(id.trim(), tenantId, expectedVersion, status);
   }
 
   private async nextOrderNumber(branchId: string): Promise<string> {
