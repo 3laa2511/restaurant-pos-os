@@ -7,19 +7,94 @@ datasource db {
   provider = "postgresql"
 }
 
-enum UserStatus { ACTIVE INACTIVE SUSPENDED }
-enum OrderSource { POS CALL_CENTER MOBILE WEB QR AGGREGATOR }
-enum OrderType { DINE_IN TAKEAWAY DELIVERY }
-enum OrderStatus { DRAFT CONFIRMED SENT_TO_KITCHEN PREPARING READY ASSIGNED OUT_FOR_DELIVERY DELIVERED CLOSED CANCELLED VOIDED REFUNDED FAILED }
-enum PaymentStatus { PENDING PAID PARTIALLY_REFUNDED REFUNDED VOIDED }
-enum PaymentAdjustmentType { REFUND VOID }
-enum ShiftStatus { OPEN CLOSED }
-enum DeviceStatus { ACTIVE INACTIVE BLOCKED }
-enum RoleCode { CASHIER CALL_CENTER_OPERATOR CALL_CENTER_SUPERVISOR KITCHEN DISPATCHER BRANCH_MANAGER CENTRAL_ADMIN OWNER }
-enum CashDrawerMovementType { OPENING_FLOAT SALE CASH_CHANGE REFUND PAY_IN PAY_OUT ADJUSTMENT }
-enum CashDrawerDirection { IN OUT }
-enum KitchenStation { KITCHEN BEVERAGE PACKING }
-enum KitchenTicketStatus { SENT_TO_KITCHEN PREPARING READY COMPLETED CANCELLED }
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+enum OrderSource {
+  POS
+  CALL_CENTER
+  MOBILE
+  WEB
+  QR
+  AGGREGATOR
+}
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+}
+enum OrderStatus {
+  DRAFT
+  CONFIRMED
+  SENT_TO_KITCHEN
+  PREPARING
+  READY
+  ASSIGNED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CLOSED
+  CANCELLED
+  VOIDED
+  REFUNDED
+  FAILED
+}
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  VOIDED
+}
+enum PaymentAdjustmentType {
+  REFUND
+  VOID
+}
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+enum DeviceStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+enum RoleCode {
+  CASHIER
+  CALL_CENTER_OPERATOR
+  CALL_CENTER_SUPERVISOR
+  KITCHEN
+  DISPATCHER
+  BRANCH_MANAGER
+  CENTRAL_ADMIN
+  OWNER
+}
+enum CashDrawerMovementType {
+  OPENING_FLOAT
+  SALE
+  CASH_CHANGE
+  REFUND
+  PAY_IN
+  PAY_OUT
+  ADJUSTMENT
+}
+enum CashDrawerDirection {
+  IN
+  OUT
+}
+enum KitchenStation {
+  KITCHEN
+  BEVERAGE
+  PACKING
+}
+enum KitchenTicketStatus {
+  SENT_TO_KITCHEN
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
 
 model Tenant {
   id String @id @default(cuid())
@@ -79,10 +154,33 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
-model Role { id String @id @default(cuid()) code RoleCode @unique name String userLinks UserRole[] permissions RolePermission[] }
-model Permission { id String @id @default(cuid()) code String @unique name String roles RolePermission[] }
-model UserRole { userId String roleId String user User @relation(fields: [userId], references: [id], onDelete: Cascade) role Role @relation(fields: [roleId], references: [id], onDelete: Cascade) @@id([userId, roleId]) }
-model RolePermission { roleId String permissionId String role Role @relation(fields: [roleId], references: [id], onDelete: Cascade) permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade) @@id([roleId, permissionId]) }
+model Role {
+  id String @id @default(cuid())
+  code RoleCode @unique
+  name String
+  userLinks UserRole[]
+  permissions RolePermission[]
+}
+model Permission {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  roles RolePermission[]
+}
+model UserRole {
+  userId String
+  roleId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  @@id([userId, roleId])
+}
+model RolePermission {
+  roleId String
+  permissionId String
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@id([roleId, permissionId])
+}
 
 model Device {
   id String @id @default(cuid())
@@ -130,7 +228,6 @@ model Category {
   products Product[]
   @@index([tenantId, active, sortOrder])
 }
-
 model Product {
   id String @id @default(cuid())
   tenantId String
@@ -173,7 +270,6 @@ model Order {
   updatedAt DateTime @updatedAt
   @@unique([branchId, orderNumber])
 }
-
 model OrderItem {
   id String @id @default(cuid())
   orderId String
@@ -249,7 +345,15 @@ model Customer {
   updatedAt DateTime @updatedAt
   @@index([tenantId])
 }
-model CustomerAddress { id String @id @default(cuid()) customerId String customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade) label String? address String area String? notes String? }
+model CustomerAddress {
+  id String @id @default(cuid())
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label String?
+  address String
+  area String?
+  notes String?
+}
 
 model Payment {
   id String @id @default(cuid())
