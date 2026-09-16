@@ -57,7 +57,7 @@ describe('KitchenService.transitionTicket', () => {
     expect(tx.kitchenTicket.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'ticket-1', version: 3, status: 'PREPARING' }, data: expect.objectContaining({ status: 'READY', version: { increment: 1 }, readyAt: expect.any(Date) }) }));
     expect(tx.order.updateMany).toHaveBeenCalledWith({ where: { id: 'order-1', version: 10, status: 'PREPARING' }, data: { status: 'READY', version: { increment: 1 } } });
     expect(tx.orderEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'KITCHEN_READY', payload: expect.objectContaining({ source: 'KITCHEN_TICKET', ticketId: 'ticket-1', status: 'READY' }), occurredAt: expect.any(Date) }) }));
-    expect(audit.recordWithClient).toHaveBeenCalledWith(tx, context, expect.objectContaining({ action: 'KITCHEN_TICKET_READY', entityType: 'KitchenTicket', entityId: 'ticket-1', before: { status: 'PREPARING', version: 3, station: 'KITCHEN' }, after: { status: 'READY', version: 4, station: 'KITCHEN' } }));
+    expect(audit.recordWithClient).toHaveBeenCalledWith(tx, context, expect.objectContaining({ action: 'ORDER_STATUS_PROJECTED', entityType: 'Order', entityId: 'order-1', metadata: { source: 'KITCHEN_TICKET', ticketId: 'ticket-1', status: 'READY' } }));
     expect(result).toEqual(expect.objectContaining({ ticketId: 'ticket-1', status: 'READY', version: 4, orderStatus: 'READY', orderVersion: 11 }));
   });
   it('records cancellation reason and cancellation timestamp atomically', async () => {
