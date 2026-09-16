@@ -4,8 +4,9 @@ import type { OrderStatus } from './order-status.js';
 export class InMemoryOrderRepository implements OrderRepository {
   private readonly records = new Map<string, CreateOrderRecord>();
 
-  async findById(id: string): Promise<CreateOrderRecord | null> {
-    return this.records.get(id) ?? null;
+  async findById(id: string, tenantId: string): Promise<CreateOrderRecord | null> {
+    const record = this.records.get(id);
+    return record?.tenantId === tenantId ? record : null;
   }
 
   async create(input: Omit<CreateOrderRecord, 'version'>): Promise<CreateOrderRecord> {
@@ -16,11 +17,12 @@ export class InMemoryOrderRepository implements OrderRepository {
 
   async transition(
     id: string,
+    tenantId: string,
     expectedVersion: number,
     status: OrderStatus,
   ): Promise<CreateOrderRecord> {
     const current = this.records.get(id);
-    if (!current) throw new Error('Order not found');
+    if (!current || current.tenantId !== tenantId) throw new Error('Order not found in tenant scope');
     if (current.version !== expectedVersion) {
       throw new Error('Order was changed by another operation');
     }
