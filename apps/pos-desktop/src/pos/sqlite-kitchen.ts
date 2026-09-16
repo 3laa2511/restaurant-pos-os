@@ -16,6 +16,7 @@ type LocalKitchenTicket = {
   station: string;
   status: KitchenTicketStatus;
   version: number;
+  sequence: number;
   order_number: string;
   order_type: string;
   items_json: string;
@@ -37,6 +38,7 @@ function toTicket(row: LocalKitchenTicket): KitchenTicket {
     station: row.station as KitchenTicket['station'],
     status: row.status,
     version: Number(row.version),
+    sequence: Number(row.sequence),
     items: JSON.parse(row.items_json) as KitchenTicket['items'],
     createdAt: row.created_at,
     sentAt: row.sent_at,
@@ -45,6 +47,10 @@ function toTicket(row: LocalKitchenTicket): KitchenTicket {
     completedAt: row.completed_at,
     cancelledAt: row.cancelled_at,
     cancellationReason: row.cancellation_reason,
+    order: {
+      orderNumber: row.order_number,
+      type: row.order_type,
+    },
   };
 }
 
@@ -56,6 +62,7 @@ export async function ensureKitchenLocalSchema(db: LocalDatabaseBridge): Promise
     station TEXT NOT NULL,
     status TEXT NOT NULL,
     version INTEGER NOT NULL,
+    sequence INTEGER NOT NULL DEFAULT 0,
     order_number TEXT NOT NULL,
     order_type TEXT NOT NULL,
     items_json TEXT NOT NULL,
@@ -68,23 +75,25 @@ export async function ensureKitchenLocalSchema(db: LocalDatabaseBridge): Promise
     cancellation_reason TEXT,
     updated_at TEXT NOT NULL
   )`);
-  await db.execute('CREATE INDEX IF NOT EXISTS idx_kitchen_tickets_station_status ON kitchen_tickets(station, status, updated_at)');
+  await db.execute('ALTER TABLE kitchen_tickets ADD COLUMN sequence INTEGER NOT NULL DEFAULT 0').catch(() => undefined);
+  await db.execute('CREATE INDEX IF NOT EXISTS idx_kitchen_tickets_station_status ON kitchen_tickets(station, status, created_at, sequence)');
 }
 
 export async function cacheKitchenTickets(db: LocalDatabaseBridge, tickets: readonly KitchenTicket[]): Promise<void> {
   if (!tickets.length) return;
   const statements = tickets.map((ticket) => ({
     sql: `INSERT INTO kitchen_tickets (
-      id, order_id, branch_id, station, status, version, order_number, order_type,
+      id, order_id, branch_id, station, status, version, sequence, order_number, order_type,
       items_json, created_at, sent_at, preparing_at, ready_at, completed_at,
       cancelled_at, cancellation_reason, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       order_id = excluded.order_id,
       branch_id = excluded.branch_id,
       station = excluded.station,
       status = excluded.status,
       version = excluded.version,
+      sequence = excluded.sequence,
       order_number = excluded.order_number,
       order_type = excluded.order_type,
       items_json = excluded.items_json,
@@ -98,6 +107,7 @@ export async function cacheKitchenTickets(db: LocalDatabaseBridge, tickets: read
       updated_at = excluded.updated_at`,
     params: [
       ticket.id, ticket.orderId, ticket.branchId, ticket.station, ticket.status, ticket.version,
+      ticket.sequence ?? 0,
       ticket.order?.orderNumber ?? ticket.orderId,
       ticket.order?.type ?? 'UNKNOWN',
       JSON.stringify(ticket.items), ticket.createdAt, ticket.sentAt ?? null, ticket.preparingAt ?? null,
@@ -110,7 +120,7 @@ export async function cacheKitchenTickets(db: LocalDatabaseBridge, tickets: read
 
 export async function getCachedKitchenTickets(db: LocalDatabaseBridge, station?: string | null): Promise<KitchenTicket[]> {
   const rows = await db.query<LocalKitchenTicket>(
-    `SELECT * FROM kitchen_tickets ${station ? 'WHERE station = ?' : ''} ORDER BY updated_at ASC`,
+    `SELECT * FROM kitchen_tickets ${station ? 'WHERE station = ?' : ''} ORDER BY created_at ASC, sequence ASC, id ASC`,
     station ? [station] : [],
   );
   return rows.map(toTicket);
