@@ -9,7 +9,7 @@ import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 type AuditDouble = { recordWithClient: jest.Mock };
 type AsyncMock = jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
 
-const context: AuthContext = { userId: 'kitchen-user-1', branchId: 'branch-1', deviceId: 'kitchen-device-1', roles: [], permissions: [PERMISSIONS.KITCHEN_TICKET_MANAGE] };
+const context: AuthContext = { userId: 'kitchen-user-1', tenantId: 'tenant-1', branchId: 'branch-1', deviceId: 'kitchen-device-1', roles: [], permissions: [PERMISSIONS.KITCHEN_TICKET_MANAGE] };
 
 function createAuditDouble(): AuditDouble {
   return { recordWithClient: jest.fn(async () => ({ id: 'audit-1', riskScore: 0, riskLevel: 'LOW' as const })) };
