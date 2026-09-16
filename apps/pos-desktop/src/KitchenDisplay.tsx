@@ -8,7 +8,7 @@ import {
 } from './pos/kitchen-api.js';
 import { getPosRuntimeIdentity } from './pos/runtime-identity.js';
 import type { KitchenStation } from './pos/auth-client.js';
-import { ensureKitchenLocalSchema, cacheKitchenTickets, getCachedKitchenTickets, enqueueKitchenTransition, applyOptimisticKitchenCache } from './pos/sqlite-kitchen.js';
+import { ensureKitchenLocalSchema, cacheKitchenTickets, getCachedKitchenTickets, getKitchenSyncStates, enqueueKitchenTransition, applyOptimisticKitchenCache, type KitchenSyncState } from './pos/sqlite-kitchen.js';
 import { createDatabaseBridge } from './pos/tauri-bridge.js';
 import { invoke } from '@tauri-apps/api/core';
 import { nextDeviceSequence } from './pos/sqlite-sequence.js';
@@ -18,12 +18,22 @@ const db = createDatabaseBridge({ invoke });
 
 type Filter = 'ACTIVE' | KitchenTicketStatus;
 
+type SyncMeta = { state: KitchenSyncState; error: string | null };
+
 const STATUS_LABELS: Record<KitchenTicketStatus, string> = {
   SENT_TO_KITCHEN: 'مرسل للمطبخ',
   PREPARING: 'قيد التحضير',
   READY: 'جاهز',
   COMPLETED: 'مكتمل',
   CANCELLED: 'ملغي',
+};
+
+const SYNC_LABELS: Record<KitchenSyncState, string> = {
+  SYNCED: 'متزامن',
+  PENDING: 'في انتظار المزامنة',
+  SYNCING: 'جاري المزامنة',
+  FAILED: 'فشلت المزامنة',
+  CONFLICT: 'تعارض يحتاج مراجعة',
 };
 
 const NEXT_STATUS: Partial<Record<KitchenTicketStatus, KitchenTicketStatus>> = {
@@ -40,9 +50,16 @@ function formatTime(value: string): string {
   return new Date(value).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
 }
 
+function syncBadgeStyle(state: KitchenSyncState): { background: string; border: string } {
+  if (state === 'SYNCED') return { background: 'rgba(16,185,129,.12)', border: '1px solid rgba(16,185,129,.18)' };
+  if (state === 'CONFLICT' || state === 'FAILED') return { background: 'rgba(239,68,68,.12)', border: '1px solid rgba(239,68,68,.2)' };
+  return { background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.18)' };
+}
+
 export function KitchenDisplay() {
   const identity = getPosRuntimeIdentity();
   const [tickets, setTickets] = useState<KitchenTicket[]>([]);
+  const [syncMeta, setSyncMeta] = useState<Record<string, SyncMeta>>({});
   const [filter, setFilter] = useState<Filter>('ACTIVE');
   const [loading, setLoading] = useState(true);
   const [busyTicketId, setBusyTicketId] = useState<string | null>(null);
@@ -50,13 +67,22 @@ export function KitchenDisplay() {
   const [offline, setOffline] = useState(typeof navigator !== 'undefined' && !navigator.onLine);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  const loadLocalState = useCallback(async () => {
+    const [cached, states] = await Promise.all([
+      getCachedKitchenTickets(db, identity.kitchenStation),
+      getKitchenSyncStates(db, identity.kitchenStation),
+    ]);
+    setTickets(cached);
+    setSyncMeta(states);
+    return cached;
+  }, [identity.kitchenStation]);
+
   const refresh = useCallback(async () => {
     try {
       await ensureKitchenLocalSchema(db);
       setError('');
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        const cached = await getCachedKitchenTickets(db, identity.kitchenStation);
-        setTickets(cached);
+        await loadLocalState();
         setOffline(true);
         setLastUpdated(new Date());
         return;
@@ -64,14 +90,15 @@ export function KitchenDisplay() {
       const next = await listKitchenTickets(API_BASE_URL, identity.branchId);
       const scoped = identity.kitchenStation ? next.filter((ticket) => ticket.station === identity.kitchenStation) : next;
       await cacheKitchenTickets(db, scoped);
+      const states = await getKitchenSyncStates(db, identity.kitchenStation);
       setTickets(scoped);
+      setSyncMeta(states);
       setOffline(false);
       setLastUpdated(new Date());
     } catch (cause) {
       try {
-        const cached = await getCachedKitchenTickets(db, identity.kitchenStation);
+        const cached = await loadLocalState();
         if (cached.length) {
-          setTickets(cached);
           setOffline(true);
           setError('تعذر الوصول للسيرفر؛ تعمل الآن من آخر نسخة محفوظة محليًا.');
         } else {
@@ -83,7 +110,7 @@ export function KitchenDisplay() {
     } finally {
       setLoading(false);
     }
-  }, [identity.branchId, identity.kitchenStation]);
+  }, [identity.branchId, identity.kitchenStation, loadLocalState]);
 
   const reconcileConflict = useCallback(async (ticketId: string): Promise<boolean> => {
     try {
@@ -95,13 +122,17 @@ export function KitchenDisplay() {
         return false;
       }
       await cacheKitchenTickets(db, [serverTicket]);
-      setTickets((current) => {
-        const withoutLocal = current.filter((ticket) => ticket.id !== ticketId);
-        return [...withoutLocal, serverTicket].sort((a, b) => a.id.localeCompare(b.id));
-      });
+      await db.execute(
+        `UPDATE kitchen_tickets SET sync_state = 'CONFLICT', sync_error = ?, updated_at = ? WHERE id = ?`,
+        ['Server state changed while this device was offline or processing an older version.', new Date().toISOString(), ticketId],
+      );
+      const states = await getKitchenSyncStates(db, identity.kitchenStation);
+      const cached = await getCachedKitchenTickets(db, identity.kitchenStation);
+      setTickets(cached);
+      setSyncMeta(states);
       setOffline(false);
       setLastUpdated(new Date());
-      setError('حدث تعارض: تم تحديث التذكرة من السيرفر، وهو المصدر المعتمد.');
+      setError('حدث تعارض: تم اعتماد نسخة السيرفر. راجع حالة التذكرة قبل تنفيذ أي إجراء جديد.');
       return true;
     } catch {
       await refresh();
@@ -131,6 +162,10 @@ export function KitchenDisplay() {
   async function advance(ticket: KitchenTicket) {
     const target = NEXT_STATUS[ticket.status];
     if (!target) return;
+    if (syncMeta[ticket.id]?.state === 'CONFLICT') {
+      setError('هذه التذكرة لديها تعارض. تم اعتماد نسخة السيرفر؛ حدّث القائمة أولًا قبل تنفيذ إجراء جديد.');
+      return;
+    }
     setBusyTicketId(ticket.id);
     try {
       setError('');
@@ -151,7 +186,9 @@ export function KitchenDisplay() {
       const clientSequence = await nextDeviceSequence(db, identity.deviceId);
       await applyOptimisticKitchenCache(db, { ticketId: ticket.id, target, expectedVersion: ticket.version, reason: null });
       await enqueueKitchenTransition(db, identity, { ticketId: ticket.id, target, expectedVersion: ticket.version, reason: null }, clientSequence);
-      setTickets(await getCachedKitchenTickets(db, identity.kitchenStation));
+      const cached = await getCachedKitchenTickets(db, identity.kitchenStation);
+      setTickets(cached);
+      setSyncMeta(await getKitchenSyncStates(db, identity.kitchenStation));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'تعذر تحديث التذكرة');
       await refresh();
@@ -162,6 +199,10 @@ export function KitchenDisplay() {
 
   async function cancel(ticket: KitchenTicket) {
     if (ticket.status === 'COMPLETED' || ticket.status === 'CANCELLED') return;
+    if (syncMeta[ticket.id]?.state === 'CONFLICT') {
+      setError('هذه التذكرة لديها تعارض. تم اعتماد نسخة السيرفر؛ حدّث القائمة أولًا قبل تنفيذ إجراء جديد.');
+      return;
+    }
     const reason = window.prompt('سبب إلغاء تذكرة المطبخ؟')?.trim();
     if (!reason) return;
     setBusyTicketId(ticket.id);
@@ -184,7 +225,9 @@ export function KitchenDisplay() {
       const clientSequence = await nextDeviceSequence(db, identity.deviceId);
       await applyOptimisticKitchenCache(db, { ticketId: ticket.id, target: 'CANCELLED', expectedVersion: ticket.version, reason });
       await enqueueKitchenTransition(db, identity, { ticketId: ticket.id, target: 'CANCELLED', expectedVersion: ticket.version, reason }, clientSequence);
-      setTickets(await getCachedKitchenTickets(db, identity.kitchenStation));
+      const cached = await getCachedKitchenTickets(db, identity.kitchenStation);
+      setTickets(cached);
+      setSyncMeta(await getKitchenSyncStates(db, identity.kitchenStation));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'تعذر إلغاء التذكرة');
       await refresh();
@@ -231,11 +274,18 @@ export function KitchenDisplay() {
           {visibleTickets.map((ticket) => {
             const next = NEXT_STATUS[ticket.status];
             const busy = busyTicketId === ticket.id;
+            const sync = syncMeta[ticket.id] ?? { state: 'SYNCED' as KitchenSyncState, error: null };
+            const syncStyle = syncBadgeStyle(sync.state);
             return (
               <article key={ticket.id} style={{ border: '1px solid rgba(255,255,255,.11)', borderRadius: 16, padding: 16, background: 'rgba(255,255,255,.035)', boxShadow: ticket.status === 'READY' ? '0 0 0 1px rgba(34,211,238,.15)' : 'none' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'start' }}>
                   <div><strong style={{ fontSize: 18 }}>طلب {ticket.order?.orderNumber ?? ticket.orderId.slice(-8)}</strong><div style={{ opacity: .55, fontSize: 12, marginTop: 4 }}>#{ticket.id.slice(-8)} · إصدار {ticket.version}</div></div>
                   <span style={{ padding: '5px 8px', borderRadius: 999, background: 'rgba(255,255,255,.08)', fontSize: 12 }}>{STATUS_LABELS[ticket.status]}</span>
+                </div>
+
+                <div style={{ marginTop: 10, padding: '7px 9px', borderRadius: 9, background: syncStyle.background, border: syncStyle.border, fontSize: 12 }}>
+                  <strong>{SYNC_LABELS[sync.state]}</strong>
+                  {sync.error && <div style={{ marginTop: 4, opacity: .72 }}>{sync.error}</div>}
                 </div>
 
                 <div style={{ marginTop: 14, display: 'grid', gap: 8 }}>
@@ -248,8 +298,8 @@ export function KitchenDisplay() {
                 </div>
 
                 <div style={{ marginTop: 14, opacity: .55, fontSize: 12 }}>أُرسلت {formatTime(ticket.sentAt ?? ticket.createdAt)}</div>
-                {next && <button type="button" disabled={busy} onClick={() => void advance(ticket)} style={{ width: '100%', marginTop: 12, border: 0, borderRadius: 11, padding: '12px 14px', background: 'rgba(34,211,238,.18)', color: 'inherit', fontWeight: 700, cursor: 'pointer' }}>{busy ? 'جاري الحفظ...' : `نقل إلى: ${STATUS_LABELS[next]}`}</button>}
-                {ticket.status !== 'COMPLETED' && ticket.status !== 'CANCELLED' && <button type="button" disabled={busy} onClick={() => void cancel(ticket)} style={{ width: '100%', marginTop: 8, border: '1px solid rgba(239,68,68,.25)', borderRadius: 11, padding: '10px 14px', background: 'transparent', color: 'inherit', cursor: 'pointer' }}>إلغاء التذكرة</button>}
+                {next && <button type="button" disabled={busy || sync.state === 'CONFLICT'} onClick={() => void advance(ticket)} style={{ width: '100%', marginTop: 12, border: 0, borderRadius: 11, padding: '12px 14px', background: 'rgba(34,211,238,.18)', color: 'inherit', fontWeight: 700, cursor: busy || sync.state === 'CONFLICT' ? 'not-allowed' : 'pointer', opacity: sync.state === 'CONFLICT' ? .5 : 1 }}>{busy ? 'جاري الحفظ...' : sync.state === 'CONFLICT' ? 'راجع التعارض أولًا' : `نقل إلى: ${STATUS_LABELS[next]}`}</button>}
+                {ticket.status !== 'COMPLETED' && ticket.status !== 'CANCELLED' && <button type="button" disabled={busy || sync.state === 'CONFLICT'} onClick={() => void cancel(ticket)} style={{ width: '100%', marginTop: 8, border: '1px solid rgba(239,68,68,.25)', borderRadius: 11, padding: '10px 14px', background: 'transparent', color: 'inherit', cursor: busy || sync.state === 'CONFLICT' ? 'not-allowed' : 'pointer', opacity: sync.state === 'CONFLICT' ? .5 : 1 }}>إلغاء التذكرة</button>}
               </article>
             );
           })}
