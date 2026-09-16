@@ -104,9 +104,9 @@ export class KitchenSyncService {
         return recovered;
       }
       const message = error instanceof Error ? error.message : 'Kitchen ticket sync failed';
-      const rejected: SyncResult = { status: 'CONFLICT', operationId, reason: message };
-      await this.prisma.syncOperation.update({ where: { operationId }, data: { status: 'REJECTED', result: rejected, updatedAt: new Date() } });
-      return rejected;
+      const conflict: SyncResult = { status: 'CONFLICT', operationId, reason: message };
+      await this.prisma.syncOperation.update({ where: { operationId }, data: { status: 'CONFLICT', result: conflict, updatedAt: new Date() } });
+      return conflict;
     }
   }
 
@@ -131,7 +131,9 @@ export class KitchenSyncService {
         await this.prisma.syncOperation.update({ where: { operationId: existing.operationId }, data: { status: 'APPLIED', result: recovered, updatedAt: new Date() } });
         return recovered;
       }
-      return { status: 'CONFLICT', operationId: existing.operationId, reason: 'Kitchen ticket sync is unresolved; reload the ticket before retrying' };
+      const conflict: SyncResult = { status: 'CONFLICT', operationId: existing.operationId, reason: 'Kitchen ticket sync is unresolved; reload the ticket before retrying' };
+      await this.prisma.syncOperation.update({ where: { operationId: existing.operationId }, data: { status: 'CONFLICT', result: conflict, updatedAt: new Date() } });
+      return conflict;
     }
     return { status: 'DUPLICATE', operationId: existing.operationId };
   }
