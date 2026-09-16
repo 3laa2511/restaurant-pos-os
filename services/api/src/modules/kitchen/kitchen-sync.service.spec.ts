@@ -79,13 +79,13 @@ describe('KitchenSyncService.submit', () => {
     expect(kitchen.transitionTicket).not.toHaveBeenCalled();
   });
 
-  it('returns CONFLICT for a stale version and records the rejected result', async () => {
+  it('returns CONFLICT for a stale version and records the conflict result', async () => {
     const { prisma, kitchen, service } = build();
     kitchen.transitionTicket.mockRejectedValue(new Error('Kitchen ticket changed concurrently'));
     prisma.kitchenTicket.findUnique.mockResolvedValue({ branchId: 'branch-1', station: 'KITCHEN', status: 'PREPARING', version: 3 });
     const result = await service.submit(context, envelope());
     expect(result).toEqual(expect.objectContaining({ status: 'CONFLICT', reason: 'Kitchen ticket changed concurrently' }));
-    expect(prisma.syncOperation.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'REJECTED', result }) }));
+    expect(prisma.syncOperation.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'CONFLICT', result }) }));
   });
 
   it('recovers an interrupted RECEIVED operation when the intended state is already applied', async () => {
@@ -106,6 +106,7 @@ describe('KitchenSyncService.submit', () => {
     const result = await service.submit(context, input);
     expect(result).toEqual(expect.objectContaining({ status: 'CONFLICT', operationId: 'operation-4' }));
     expect(kitchen.transitionTicket).not.toHaveBeenCalled();
+    expect(prisma.syncOperation.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'CONFLICT', result }) }));
   });
 
   it('rejects unsupported operations without creating a durable operation', async () => {
