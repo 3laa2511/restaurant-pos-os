@@ -22,6 +22,7 @@ export interface KitchenTicket {
   station: KitchenStation;
   status: KitchenTicketStatus;
   version: number;
+  sequence?: number;
   items: readonly KitchenTicketItem[];
   createdAt: string;
   sentAt?: string | null;
