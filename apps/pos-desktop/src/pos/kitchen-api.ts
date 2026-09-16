@@ -25,6 +25,7 @@ export interface KitchenTicket {
   sequence?: number;
   items: readonly KitchenTicketItem[];
   createdAt: string;
+  updatedAt?: string | null;
   sentAt?: string | null;
   preparingAt?: string | null;
   readyAt?: string | null;
