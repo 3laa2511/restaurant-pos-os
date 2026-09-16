@@ -128,11 +128,14 @@ CREATE TABLE IF NOT EXISTS kitchen_tickets (
   completed_at TEXT,
   cancelled_at TEXT,
   cancellation_reason TEXT,
+  sync_state TEXT NOT NULL DEFAULT 'SYNCED' CHECK(sync_state IN ('SYNCED','PENDING','SYNCING','FAILED','CONFLICT')),
+  sync_error TEXT,
   updated_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_kitchen_tickets_station_status ON kitchen_tickets(station, status, created_at, sequence);
 CREATE INDEX IF NOT EXISTS idx_kitchen_tickets_order ON kitchen_tickets(order_id);
+CREATE INDEX IF NOT EXISTS idx_kitchen_tickets_sync_state ON kitchen_tickets(sync_state, updated_at);
 
 CREATE TABLE IF NOT EXISTS sync_queue (
   id TEXT PRIMARY KEY,
