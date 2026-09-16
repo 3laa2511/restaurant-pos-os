@@ -125,7 +125,7 @@ export async function cacheKitchenTickets(db: LocalDatabaseBridge, tickets: read
       ticket.order?.type ?? 'UNKNOWN',
       JSON.stringify(ticket.items), ticket.createdAt, ticket.sentAt ?? null, ticket.preparingAt ?? null,
       ticket.readyAt ?? null, ticket.completedAt ?? null, ticket.cancelledAt ?? null,
-      ticket.cancellationReason ?? null, 'SYNCED', null, new Date().toISOString(),
+      ticket.cancellationReason ?? null, 'SYNCED', null, ticket.updatedAt,
     ],
   }));
   await db.transaction(statements);
