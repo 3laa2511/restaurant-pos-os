@@ -17,6 +17,7 @@ const envelope = {
 
 const authContext: AuthContext = {
   userId: 'user-1',
+  tenantId: 'tenant-1',
   branchId: 'BR01',
   deviceId: 'POS01',
   roles: ['CASHIER'],
