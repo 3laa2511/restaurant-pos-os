@@ -21,6 +21,30 @@ export class MenuController {
         name: product.name,
         nameAr: product.nameAr,
         price: Number(product.price),
+        variants: product.variants.map((variant) => ({
+          id: variant.id,
+          sku: variant.sku,
+          name: variant.name,
+          nameAr: variant.nameAr,
+          price: Number(variant.price),
+          sortOrder: variant.sortOrder,
+        })),
+        modifierGroups: product.modifierGroups.map((assignment) => ({
+          id: assignment.group.id,
+          name: assignment.group.name,
+          nameAr: assignment.group.nameAr,
+          required: assignment.required,
+          minSelections: assignment.minSelections,
+          maxSelections: assignment.maxSelections,
+          sortOrder: assignment.sortOrder,
+          options: assignment.group.options.map((option) => ({
+            id: option.id,
+            name: option.name,
+            nameAr: option.nameAr,
+            priceDelta: Number(option.priceDelta),
+            sortOrder: option.sortOrder,
+          })),
+        })),
       })),
     }));
   }
