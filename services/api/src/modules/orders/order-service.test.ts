@@ -10,8 +10,15 @@ const context: AuthContext = {
   branchId: 'BR01',
   deviceId: 'POS01',
   roles: ['CASHIER'],
-  permissions: [PERMISSIONS.ORDER_CREATE],
+  permissions: [PERMISSIONS.ORDER_CREATE, PERMISSIONS.ORDER_VIEW, PERMISSIONS.ORDER_CONFIRM],
 };
+
+function writers() {
+  return {
+    events: { append: async () => undefined },
+    audits: { append: async () => undefined },
+  };
+}
 
 describe('OrderService', () => {
   it('creates a draft order and emits event/audit records', async () => {
@@ -35,6 +42,7 @@ describe('OrderService', () => {
 
     expect(order.status).toBe('DRAFT');
     expect(order.version).toBe(1);
+    expect(order.tenantId).toBe('tenant-1');
     expect(events).toHaveLength(1);
     expect(audits).toHaveLength(1);
   });
@@ -56,5 +64,34 @@ describe('OrderService', () => {
         idempotencyKey: '0123456789abcdef',
       }),
     ).rejects.toThrow('branch access denied');
+  });
+
+  it('denies tenantless sessions before reading orders', async () => {
+    const repository = new InMemoryOrderRepository();
+    const service = new OrderService(repository, writers().events, writers().audits);
+    const tenantless = { ...context, tenantId: null, branchId: null } satisfies AuthContext;
+
+    await expect(service.findById(tenantless, 'order-1')).rejects.toThrow('tenant scope is required');
+  });
+
+  it('cannot read or transition an order owned by another tenant', async () => {
+    const repository = new InMemoryOrderRepository();
+    const service = new OrderService(repository, writers().events, writers().audits);
+    await repository.create({
+      id: 'order-tenant-2',
+      orderNumber: 'BR02-1',
+      branchId: 'BR02',
+      tenantId: 'tenant-2',
+      createdById: 'user-2',
+      source: 'POS',
+      type: 'TAKEAWAY',
+      status: 'DRAFT',
+      total: '25.00',
+    });
+
+    expect(await service.findById(context, 'order-tenant-2')).toBeNull();
+    await expect(
+      service.transition(context, 'order-tenant-2', 1, 'CONFIRMED'),
+    ).rejects.toThrow('Order not found');
   });
 });
