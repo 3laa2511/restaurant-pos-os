@@ -3,6 +3,7 @@ import { InMemoryOrderRepository } from './in-memory-order-repository.js';
 import { OrderService } from './order.service.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
+import { OrderStatus } from './order-status.js';
 
 const context: AuthContext = {
   userId: 'user-1',
@@ -40,7 +41,7 @@ describe('OrderService', () => {
       idempotencyKey: '0123456789abcdef',
     });
 
-    expect(order.status).toBe('DRAFT');
+    expect(order.status).toBe(OrderStatus.DRAFT);
     expect(order.version).toBe(1);
     expect(order.tenantId).toBe('tenant-1');
     expect(events).toHaveLength(1);
@@ -91,7 +92,7 @@ describe('OrderService', () => {
 
     expect(await service.findById(context, 'order-tenant-2')).toBeNull();
     await expect(
-      service.transition(context, 'order-tenant-2', 1, 'CONFIRMED'),
+      service.transition(context, 'order-tenant-2', 1, OrderStatus.CONFIRMED),
     ).rejects.toThrow('Order not found');
   });
 });
