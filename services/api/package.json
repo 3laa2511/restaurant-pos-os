@@ -6,7 +6,8 @@
     "generate": "prisma generate --schema ../../prisma/schema.prisma",
     "typecheck": "pnpm generate && tsc --noEmit",
     "lint": "eslint .",
-    "test": "jest"
+    "test": "jest",
+    "test:staging": "jest --runInBand test/staging-pos.integration.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",
