@@ -154,6 +154,68 @@ describe('POS staging integration matrix', () => {
     });
   });
 
+  it('settles card, wallet, instapay and mixed tenders with authoritative breakdowns', async () => {
+    if (!pool) return;
+    await withRollback(async client => {
+      const methods = [
+        { method: 'card', card_amount: fixture.productPrice },
+        { method: 'wallet', wallet_amount: fixture.productPrice },
+        { method: 'instapay', wallet_amount: fixture.productPrice },
+        { method: 'mixed', cash_amount: fixture.productPrice / 2, card_amount: fixture.productPrice / 2, cash_tendered: fixture.productPrice / 2 + 5 },
+      ];
+
+      for (const [index, payment] of methods.entries()) {
+        const orderNumber = `IT-TENDER-${Date.now()}-${index}`;
+        const { rows } = await checkout(client, orderNumber, {
+          payment_method: payment.method,
+          cash_tendered: payment.method === 'mixed' ? payment.cash_tendered : 0,
+          cash_amount: payment.cash_amount ?? 0,
+          card_amount: payment.card_amount ?? 0,
+          wallet_amount: payment.wallet_amount ?? 0,
+        });
+
+        expect(rows[0].result).toMatchObject({ success: true, payment_status: 'paid' });
+
+        const paymentRow = await client.query(
+          `SELECT method, amount, cash_amount, card_amount, wallet_amount, cash_tendered, change_amount
+           FROM public.payments WHERE order_id = $1::uuid`,
+          [rows[0].result.order_id],
+        );
+
+        expect(paymentRow.rowCount).toBe(1);
+        expect(paymentRow.rows[0].method).toBe(payment.method);
+        expect(Number(paymentRow.rows[0].amount)).toBeCloseTo(fixture.productPrice, 2);
+      }
+    });
+  });
+
+  it('rejects oversettlement against an already fully paid order', async () => {
+    if (!pool) return;
+    await withRollback(async client => {
+      const orderNumber = `IT-OVERSETTLE-${Date.now()}`;
+      const first = await checkout(client, orderNumber);
+      expect(first.rows[0].result.payment_status).toBe('paid');
+
+      await expect(
+        client.query(
+          `INSERT INTO public.payments
+             (order_id, amount, method, status, transaction_ref, paid_at,
+              cash_amount, cash_tendered, change_amount, shift_id, branch_id, cashier_id)
+           VALUES ($1::uuid, $2, 'pos_cash', 'paid', $3, NOW(), $2, $2, 0,
+                   $4::uuid, $5::uuid, $6::uuid)`,
+          [
+            first.rows[0].result.order_id,
+            fixture.productPrice,
+            `IT-OVERSETTLE-TXN-${Date.now()}`,
+            fixture.shiftId,
+            fixture.branchId,
+            fixture.cashierId,
+          ],
+        ),
+      ).rejects.toThrow(/ERR_PAYMENT_OVERSETTLEMENT/);
+    });
+  });
+
   it('rejects a cashier/shift mismatch authoritatively', async () => {
     if (!pool) return;
     await withRollback(async client => {
