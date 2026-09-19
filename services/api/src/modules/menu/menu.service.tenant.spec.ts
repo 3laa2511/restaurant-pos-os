@@ -16,7 +16,7 @@ describe('MenuService tenant isolation', () => {
       kitchenStation: null,
     } satisfies AuthContext;
 
-    await (service as any).listActiveMenu(context);
+    await service.listActiveMenu(context);
 
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { tenantId: 'tenant-a', active: true },
