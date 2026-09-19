@@ -86,7 +86,7 @@ describe('OrderService', () => {
       createdById: 'user-2',
       source: 'POS',
       type: 'TAKEAWAY',
-      status: 'DRAFT',
+      status: OrderStatus.DRAFT,
       total: '25.00',
     });
 
