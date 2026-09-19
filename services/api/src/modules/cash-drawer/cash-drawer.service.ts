@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
-import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
+import { assertBranchAccess, assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AuditService } from '../audit/audit.service.js';
 import { assertMoneyAmount } from '../shifts/shift-policy.js';
@@ -29,29 +29,30 @@ export class CashDrawerService {
   constructor(private readonly prisma: PrismaService, private readonly audit: AuditService) {}
 
   async create(context: AuthContext, input: CreateCashDrawerInput) {
-    assertPermission(context, PERMISSIONS.CASH_DRAWER_MANAGE); text(input.branchId, 'Branch'); text(input.deviceId, 'Device'); text(input.name, 'Drawer name'); assertBranchAccess(context, input.branchId);
+    assertPermission(context, PERMISSIONS.CASH_DRAWER_MANAGE); assertTenantScope(context); text(input.branchId, 'Branch'); text(input.deviceId, 'Device'); text(input.name, 'Drawer name'); assertBranchAccess(context, input.branchId);
     if (context.deviceId !== input.deviceId) throw new Error('Cash drawer device does not match the authenticated device');
-    const device = await this.prisma.device.findUnique({ where: { id: input.deviceId }, select: { id: true, branchId: true, status: true } });
-    if (!device || device.branchId !== input.branchId || device.status !== 'ACTIVE') throw new Error('Device is not active in the selected branch');
+    const device = await this.prisma.device.findFirst({ where: { id: input.deviceId, branchId: input.branchId, branch: { tenantId: context.tenantId!, active: true } }, select: { id: true, branchId: true, status: true } });
+    if (!device || device.status !== 'ACTIVE') throw new Error('Device is not active in the selected branch');
     try { return await this.prisma.cashDrawer.create({ data: { id: randomUUID(), branchId: input.branchId, deviceId: input.deviceId, name: input.name.trim() } }); }
     catch (error) { if (isUnique(error)) throw new Error('A cash drawer already exists for this device'); throw error; }
   }
 
   async getBalance(context: AuthContext, drawerId: string, shiftId: string, deviceId: string): Promise<CashDrawerBalance> {
-    assertPermission(context, PERMISSIONS.CASH_DRAWER_VIEW); text(drawerId, 'Drawer'); text(shiftId, 'Shift'); text(deviceId, 'Device'); assertBranchAccess(context, context.branchId ?? '');
+    assertPermission(context, PERMISSIONS.CASH_DRAWER_VIEW); const tenantId = assertTenantScope(context); text(drawerId, 'Drawer'); text(shiftId, 'Shift'); text(deviceId, 'Device');
+    if (context.branchId) assertBranchAccess(context, context.branchId);
     if (context.deviceId !== deviceId) throw new Error('Cash drawer device does not match the authenticated device');
-    const drawer = await this.prisma.cashDrawer.findUnique({ where: { id: drawerId }, select: { id: true, branchId: true, deviceId: true, active: true } });
+    const drawer = await this.prisma.cashDrawer.findFirst({ where: { id: drawerId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, active: true } });
     if (!drawer || !drawer.active) throw new Error('Cash drawer not found or inactive'); assertBranchAccess(context, drawer.branchId);
     if (drawer.deviceId !== deviceId) throw new Error('Cash drawer does not belong to the selected device');
-    const shift = await this.prisma.shift.findUnique({ where: { id: shiftId }, select: { id: true, branchId: true, deviceId: true, status: true } });
+    const shift = await this.prisma.shift.findFirst({ where: { id: shiftId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, status: true } });
     if (!shift) throw new Error('Shift not found'); if (shift.branchId !== drawer.branchId || shift.deviceId !== drawer.deviceId) throw new Error('Shift does not belong to the cash drawer');
-    const movements = await this.prisma.cashDrawerMovement.findMany({ where: { drawerId, shiftId }, select: { amount: true, direction: true } });
+    const movements = await this.prisma.cashDrawerMovement.findMany({ where: { drawerId, shiftId, branch: { tenantId } }, select: { amount: true, direction: true } });
     const balance = money(movements.reduce((total, movement) => total + (movement.direction === 'IN' ? Number(movement.amount) : -Number(movement.amount)), 0));
     return { drawerId: drawer.id, branchId: drawer.branchId, deviceId: drawer.deviceId, shiftId: shift.id, balance };
   }
 
   async recordMovement(context: AuthContext, input: RecordCashMovementInput) {
-    assertPermission(context, PERMISSIONS.CASH_DRAWER_MANAGE); text(input.drawerId, 'Drawer'); text(input.shiftId, 'Shift'); text(input.deviceId, 'Device'); text(input.reason, 'Reason'); text(input.idempotencyKey, 'Idempotency key');
+    assertPermission(context, PERMISSIONS.CASH_DRAWER_MANAGE); const tenantId = assertTenantScope(context); text(input.drawerId, 'Drawer'); text(input.shiftId, 'Shift'); text(input.deviceId, 'Device'); text(input.reason, 'Reason'); text(input.idempotencyKey, 'Idempotency key');
     if (!Number.isInteger(input.clientSequence) || input.clientSequence < 0) throw new Error('clientSequence must be a non-negative integer');
     assertMoneyAmount(input.amount, 'Cash movement amount'); if (input.amount === 0) throw new Error('Cash movement amount must be greater than zero');
     const direction = directionFor(input.type, input.direction);
@@ -60,7 +61,7 @@ export class CashDrawerService {
     if (input.type === 'PAY_OUT' && direction !== 'OUT') throw new Error('Pay-out must be an OUT movement');
     if (input.type === 'PAY_IN' && direction !== 'IN') throw new Error('Pay-in must be an IN movement');
     const requestHash = hash({ ...input, direction });
-    const existing = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+    const existing = await this.prisma.syncOperation.findFirst({ where: { idempotencyKey: input.idempotencyKey, branch: { tenantId } } });
     if (existing) { if (existing.requestHash !== requestHash) throw new Error('Idempotency key was reused with a different cash movement'); if (existing.result) return existing.result as unknown as { operationId: string; movementId: string; balance: number }; }
     if (context.deviceId !== input.deviceId) throw new Error('Cash drawer device does not match the authenticated device');
 
@@ -68,13 +69,13 @@ export class CashDrawerService {
       const operationId = randomUUID();
       try {
         return await this.prisma.$transaction(async (tx) => {
-          const drawer = await tx.cashDrawer.findUnique({ where: { id: input.drawerId }, select: { id: true, branchId: true, deviceId: true, active: true } });
+          const drawer = await tx.cashDrawer.findFirst({ where: { id: input.drawerId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, active: true } });
           if (!drawer || !drawer.active) throw new Error('Cash drawer not found or inactive'); assertBranchAccess(context, drawer.branchId);
           if (drawer.deviceId !== input.deviceId) throw new Error('Cash drawer does not belong to the selected device');
-          const shift = await tx.shift.findUnique({ where: { id: input.shiftId }, select: { id: true, branchId: true, deviceId: true, status: true } });
+          const shift = await tx.shift.findFirst({ where: { id: input.shiftId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, status: true } });
           if (!shift) throw new Error('Shift not found'); if (shift.status !== 'OPEN') throw new Error('Shift is not open');
           if (shift.branchId !== drawer.branchId || shift.deviceId !== drawer.deviceId) throw new Error('Shift does not belong to the cash drawer');
-          const movements = await tx.cashDrawerMovement.findMany({ where: { drawerId: drawer.id, shiftId: shift.id }, select: { amount: true, direction: true } });
+          const movements = await tx.cashDrawerMovement.findMany({ where: { drawerId: drawer.id, shiftId: shift.id, branch: { tenantId } }, select: { amount: true, direction: true } });
           const currentBalance = money(movements.reduce((total, item) => total + (item.direction === 'IN' ? Number(item.amount) : -Number(item.amount)), 0));
           const projectedBalance = money(currentBalance + (direction === 'IN' ? input.amount : -input.amount));
           if (projectedBalance < 0) throw new Error('Cash drawer balance cannot become negative');
@@ -86,7 +87,7 @@ export class CashDrawerService {
           return result;
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       } catch (error) {
-        if (isUnique(error)) { const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }); if (winner) { if (winner.requestHash !== requestHash) throw new Error('Idempotency key was reused with a different cash movement'); if (winner.result) return winner.result as unknown as { operationId: string; movementId: string; balance: number }; } }
+        if (isUnique(error)) { const winner = await this.prisma.syncOperation.findFirst({ where: { idempotencyKey: input.idempotencyKey, branch: { tenantId } } }); if (winner) { if (winner.requestHash !== requestHash) throw new Error('Idempotency key was reused with a different cash movement'); if (winner.result) return winner.result as unknown as { operationId: string; movementId: string; balance: number }; } }
         if (!isSerializationConflict(error) || attempt === 2) throw error;
       }
     }
