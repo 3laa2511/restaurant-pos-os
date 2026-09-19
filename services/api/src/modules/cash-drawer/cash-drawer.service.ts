@@ -61,8 +61,13 @@ export class CashDrawerService {
     if (input.type === 'PAY_OUT' && direction !== 'OUT') throw new Error('Pay-out must be an OUT movement');
     if (input.type === 'PAY_IN' && direction !== 'IN') throw new Error('Pay-in must be an IN movement');
     const requestHash = hash({ ...input, direction });
-    const existing = await this.prisma.syncOperation.findFirst({ where: { idempotencyKey: input.idempotencyKey, branch: { tenantId } } });
-    if (existing) { if (existing.requestHash !== requestHash) throw new Error('Idempotency key was reused with a different cash movement'); if (existing.result) return existing.result as unknown as { operationId: string; movementId: string; balance: number }; }
+    const existing = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+    if (existing) {
+      const owner = await this.prisma.branch.findFirst({ where: { id: existing.branchId, tenantId }, select: { id: true } });
+      if (!owner) throw new Error('Idempotency key is already in use');
+      if (existing.requestHash !== requestHash) throw new Error('Idempotency key was reused with a different cash movement');
+      if (existing.result) return existing.result as unknown as { operationId: string; movementId: string; balance: number };
+    }
     if (context.deviceId !== input.deviceId) throw new Error('Cash drawer device does not match the authenticated device');
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -87,7 +92,15 @@ export class CashDrawerService {
           return result;
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       } catch (error) {
-        if (isUnique(error)) { const winner = await this.prisma.syncOperation.findFirst({ where: { idempotencyKey: input.idempotencyKey, branch: { tenantId } } }); if (winner) { if (winner.requestHash !== requestHash) throw new Error('Idempotency key was reused with a different cash movement'); if (winner.result) return winner.result as unknown as { operationId: string; movementId: string; balance: number }; } }
+        if (isUnique(error)) {
+          const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+          if (winner) {
+            const owner = await this.prisma.branch.findFirst({ where: { id: winner.branchId, tenantId }, select: { id: true } });
+            if (!owner) throw new Error('Idempotency key is already in use');
+            if (winner.requestHash !== requestHash) throw new Error('Idempotency key was reused with a different cash movement');
+            if (winner.result) return winner.result as unknown as { operationId: string; movementId: string; balance: number };
+          }
+        }
         if (!isSerializationConflict(error) || attempt === 2) throw error;
       }
     }
