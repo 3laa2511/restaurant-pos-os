@@ -4,7 +4,7 @@ import type { AuthContext } from '../auth/authorization.types.js';
 
 describe('MenuService tenant isolation', () => {
   it('always applies the authenticated tenant to categories and nested products', async () => {
-    const findMany = jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
+    const findMany = jest.fn<(args: unknown) => Promise<unknown[]>>().mockResolvedValue([]);
     const service = new MenuService({ category: { findMany } } as never);
     const context = {
       userId: 'user-1',
