@@ -302,6 +302,96 @@ describe('POS staging integration matrix', () => {
     });
   });
 
+  it('executes full refund and restores inventory and drawer cash', async () => {
+    if (!pool) return;
+    await withRollback(async client => {
+      const orderNumber = `IT-FULL-REFUND-${Date.now()}`;
+      const checkoutResult = await checkout(client, orderNumber, {
+        cash_tendered: fixture.productPrice + 10,
+      });
+      const orderId = checkoutResult.rows[0].result.order_id as string;
+
+      const beforeStock = await client.query(
+        'SELECT stock_quantity FROM public.products WHERE id = $1::uuid',
+        [fixture.productId],
+      );
+      const beforeShift = await client.query(
+        'SELECT expected_cash FROM public.cash_drawer_shifts WHERE id = $1::uuid',
+        [fixture.shiftId],
+      );
+
+      const refund = await client.query(
+        'SELECT public.fn_atomic_pos_refund($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::text) AS result',
+        [orderId, fixture.branchId, fixture.cashierId, fixture.shiftId, 'Automated full refund'],
+      );
+
+      expect(refund.rows[0].result).toMatchObject({ success: true, order_id: orderId });
+      expect(Number(refund.rows[0].result.refund_amount)).toBeCloseTo(fixture.productPrice, 2);
+
+      const afterStock = await client.query(
+        'SELECT stock_quantity FROM public.products WHERE id = $1::uuid',
+        [fixture.productId],
+      );
+      expect(Number(afterStock.rows[0].stock_quantity)).toBe(Number(beforeStock.rows[0].stock_quantity) + 1);
+
+      const order = await client.query(
+        'SELECT status, payment_status, inventory_deducted FROM public.orders WHERE id = $1::uuid',
+        [orderId],
+      );
+      expect(order.rows[0]).toMatchObject({
+        status: 'returned',
+        payment_status: 'refunded',
+        inventory_deducted: false,
+      });
+
+      const afterShift = await client.query(
+        'SELECT expected_cash FROM public.cash_drawer_shifts WHERE id = $1::uuid',
+        [fixture.shiftId],
+      );
+      expect(Number(afterShift.rows[0].expected_cash)).toBeCloseTo(
+        Number(beforeShift.rows[0].expected_cash) - fixture.productPrice,
+        2,
+      );
+    });
+  });
+
+  it('rejects a second full refund after the order is returned', async () => {
+    if (!pool) return;
+    await withRollback(async client => {
+      const orderNumber = `IT-FULL-REFUND-DOUBLE-${Date.now()}`;
+      const checkoutResult = await checkout(client, orderNumber);
+      const orderId = checkoutResult.rows[0].result.order_id as string;
+
+      await client.query(
+        'SELECT public.fn_atomic_pos_refund($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::text)',
+        [orderId, fixture.branchId, fixture.cashierId, fixture.shiftId, 'Automated full refund'],
+      );
+
+      await expect(
+        client.query(
+          'SELECT public.fn_atomic_pos_refund($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::text)',
+          [orderId, fixture.branchId, fixture.cashierId, fixture.shiftId, 'Duplicate refund'],
+        ),
+      ).rejects.toThrow(/ERR_ALREADY_REFUNDED/);
+    });
+  });
+
+  it('rejects a full refund when the refund shift is closed or belongs to another cashier', async () => {
+    if (!pool) return;
+    await withRollback(async client => {
+      const orderNumber = `IT-REFUND-SHIFT-${Date.now()}`;
+      const checkoutResult = await checkout(client, orderNumber);
+      const orderId = checkoutResult.rows[0].result.order_id as string;
+
+      await expect(
+        client.query(
+          'SELECT public.fn_atomic_pos_refund($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::text)',
+          [orderId, fixture.branchId, fixture.cashierId, '00000000-0000-4000-8000-000000000000', 'Invalid refund shift'],
+        ),
+      ).rejects.toThrow(/ERR_SHIFT_REQUIRED/);
+    });
+  });
+
   it('rejects a cashier/shift mismatch authoritatively', async () => {
     if (!pool) return;
     await withRollback(async client => {
