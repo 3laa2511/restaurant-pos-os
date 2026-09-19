@@ -392,6 +392,60 @@ describe('POS staging integration matrix', () => {
     });
   });
 
+  it('opens, reconciles and closes an isolated shift with zero variance', async () => {
+    if (!pool) return;
+    await withRollback(async client => {
+      const opened = await client.query(
+        'SELECT public.fn_open_cash_drawer_shift($1::uuid,$2::uuid,$3::text,$4::numeric) AS result',
+        [fixture.branchId, fixture.cashierId, 'Staging Integration', 1000],
+      );
+      const shiftId = opened.rows[0].result.shift_id as string;
+
+      const sale = await client.query(
+        'SELECT public.fn_atomic_pos_checkout($1::jsonb) AS result',
+        [JSON.stringify({
+          order_number: `IT-SHIFT-LIFECYCLE-${Date.now()}`,
+          source: 'pos_cashier',
+          branch_id: fixture.branchId,
+          cashier_id: fixture.cashierId,
+          shift_id: shiftId,
+          cashier_name: 'Staging Integration',
+          cashier_role: 'cashier',
+          payment_method: 'pos_cash',
+          cash_tendered: fixture.productPrice + 20,
+          items: [{ product_id: fixture.productId, quantity: 1 }],
+        })],
+      );
+      expect(sale.rows[0].result.payment_status).toBe('paid');
+
+      const summary = await client.query(
+        'SELECT public.fn_get_cashier_shift_summary($1::uuid,$2::uuid,$3::uuid) AS result',
+        [shiftId, fixture.branchId, fixture.cashierId],
+      );
+      expect(summary.rows[0].result).toBeTruthy();
+
+      const shift = await client.query(
+        'SELECT expected_cash FROM public.cash_drawer_shifts WHERE id = $1::uuid',
+        [shiftId],
+      );
+
+      const closed = await client.query(
+        'SELECT public.fn_close_cash_drawer_shift($1::uuid,$2::uuid,$3::uuid,$4::numeric,$5::text) AS result',
+        [shiftId, fixture.branchId, fixture.cashierId, Number(shift.rows[0].expected_cash), 'Automated zero-variance close'],
+      );
+
+      expect(Number(closed.rows[0].result.variance)).toBeCloseTo(0, 2);
+      expect(closed.rows[0].result.status).toBe('closed');
+
+      const persisted = await client.query(
+        'SELECT status, expected_cash, actual_cash, variance FROM public.cash_drawer_shifts WHERE id = $1::uuid',
+        [shiftId],
+      );
+      expect(persisted.rows[0].status).toBe('closed');
+      expect(Number(persisted.rows[0].variance)).toBeCloseTo(0, 2);
+    });
+  });
+
   it('rejects a cashier/shift mismatch authoritatively', async () => {
     if (!pool) return;
     await withRollback(async client => {
