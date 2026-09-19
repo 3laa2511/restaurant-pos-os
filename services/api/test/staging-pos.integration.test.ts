@@ -216,6 +216,92 @@ describe('POS staging integration matrix', () => {
     });
   });
 
+  it('executes partial refund, restores inventory, and is idempotent', async () => {
+    if (!pool) return;
+    await withRollback(async client => {
+      const orderNumber = `IT-PARTIAL-REFUND-${Date.now()}`;
+      const checkoutResult = await checkout(client, orderNumber);
+      const orderId = checkoutResult.rows[0].result.order_id as string;
+
+      const item = await client.query(
+        'SELECT id, quantity FROM public.order_items WHERE order_id = $1::uuid LIMIT 1',
+        [orderId],
+      );
+      expect(item.rowCount).toBe(1);
+
+      const beforeStock = await client.query(
+        'SELECT stock_quantity FROM public.products WHERE id = $1::uuid',
+        [fixture.productId],
+      );
+
+      const key = `IT-REFUND-${Date.now()}`;
+      const payload = {
+        order_id: orderId,
+        branch_id: fixture.branchId,
+        cashier_id: fixture.cashierId,
+        shift_id: fixture.shiftId,
+        idempotency_key: key,
+        reason: 'Automated integration refund',
+        refund_items: [{ order_item_id: item.rows[0].id, quantity: 1 }],
+      };
+
+      const first = await client.query(
+        'SELECT public.fn_atomic_pos_partial_refund($1::jsonb) AS result',
+        [JSON.stringify(payload)],
+      );
+
+      expect(first.rows[0].result).toMatchObject({ success: true, existing: false, partial: true });
+
+      const afterStock = await client.query(
+        'SELECT stock_quantity FROM public.products WHERE id = $1::uuid',
+        [fixture.productId],
+      );
+      expect(Number(afterStock.rows[0].stock_quantity)).toBe(Number(beforeStock.rows[0].stock_quantity) + 1);
+
+      const second = await client.query(
+        'SELECT public.fn_atomic_pos_partial_refund($1::jsonb) AS result',
+        [JSON.stringify(payload)],
+      );
+      expect(second.rows[0].result.existing).toBe(true);
+      expect(second.rows[0].result.refund_id).toBe(first.rows[0].result.refund_id);
+    });
+  });
+
+  it('rejects refund of the same quantity twice', async () => {
+    if (!pool) return;
+    await withRollback(async client => {
+      const orderNumber = `IT-REFUND-DOUBLE-${Date.now()}`;
+      const checkoutResult = await checkout(client, orderNumber);
+      const orderId = checkoutResult.rows[0].result.order_id as string;
+
+      const item = await client.query(
+        'SELECT id FROM public.order_items WHERE order_id = $1::uuid LIMIT 1',
+        [orderId],
+      );
+
+      const base = {
+        order_id: orderId,
+        branch_id: fixture.branchId,
+        cashier_id: fixture.cashierId,
+        shift_id: fixture.shiftId,
+        reason: 'Automated integration refund',
+        refund_items: [{ order_item_id: item.rows[0].id, quantity: 1 }],
+      };
+
+      await client.query(
+        'SELECT public.fn_atomic_pos_partial_refund($1::jsonb)',
+        [JSON.stringify({ ...base, idempotency_key: `IT-REFUND-A-${Date.now()}` })],
+      );
+
+      await expect(
+        client.query(
+          'SELECT public.fn_atomic_pos_partial_refund($1::jsonb)',
+          [JSON.stringify({ ...base, idempotency_key: `IT-REFUND-B-${Date.now()}` })],
+        ),
+      ).rejects.toThrow(/ERR_REFUND_QUANTITY_EXCEEDED|ERR_ALREADY_REFUNDED|ERR_REFUND_LIMIT_EXCEEDED/);
+    });
+  });
+
   it('rejects a cashier/shift mismatch authoritatively', async () => {
     if (!pool) return;
     await withRollback(async client => {
