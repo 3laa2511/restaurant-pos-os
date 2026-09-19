@@ -10,4 +10,4 @@
 
 DROP INDEX IF EXISTS public.idx_payments_idempotency_key_unique;
 
-DROP TRIGGER IF EXISTS public.trg_payment_lock_pos_shift ON public.payments;
+DROP TRIGGER IF EXISTS trg_payment_lock_pos_shift ON public.payments;
