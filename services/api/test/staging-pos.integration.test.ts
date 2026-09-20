@@ -58,7 +58,7 @@ describe('POS staging integration matrix', () => {
       throw new Error('STAGING_FIXTURE_MISSING: requires one open shift and one in-stock product');
     }
 
-    const row = result.rows[0]!;
+    const row = result.rows[0];
     fixture = {
       branchId: row.branch_id,
       shiftId: row.shift_id,
@@ -108,14 +108,14 @@ describe('POS staging integration matrix', () => {
     if (!pool) return;
     await withRollback(async client => {
       const { rows } = await checkout(client, `IT-CASH-${Date.now()}`);
-      expect(rows[0]!.result).toMatchObject({ success: true, existing: false, payment_status: 'paid' });
+      expect(rows[0].result).toMatchObject({ success: true, existing: false, payment_status: 'paid' });
 
       const order = await client.query(
         'SELECT total, payment_status FROM public.orders WHERE id = $1::uuid',
-        [rows[0]!.result.order_id],
+        [rows[0].result.order_id],
       );
-      expect(Number(order.rows[0]!.total)).toBeCloseTo(fixture.productPrice, 2);
-      expect(order.rows[0]!.payment_status).toBe('paid');
+      expect(Number(order.rows[0].total)).toBeCloseTo(fixture.productPrice, 2);
+      expect(order.rows[0].payment_status).toBe('paid');
     });
   });
 
@@ -126,15 +126,15 @@ describe('POS staging integration matrix', () => {
       const first = await checkout(client, orderNumber);
       const second = await checkout(client, orderNumber);
 
-      expect(first.rows[0]!.result.existing).toBe(false);
-      expect(second.rows[0]!.result.existing).toBe(true);
-      expect(second.rows[0]!.result.order_id).toBe(first.rows[0]!.result.order_id);
+      expect(first.rows[0].result.existing).toBe(false);
+      expect(second.rows[0].result.existing).toBe(true);
+      expect(second.rows[0].result.order_id).toBe(first.rows[0].result.order_id);
 
       const count = await client.query(
         'SELECT COUNT(*)::int AS count FROM public.orders WHERE order_number = $1',
         [orderNumber],
       );
-      expect(count.rows[0]!.count).toBe(1);
+      expect(count.rows[0].count).toBe(1);
     });
   });
 
@@ -150,7 +150,7 @@ describe('POS staging integration matrix', () => {
         'SELECT COUNT(*)::int AS count FROM public.orders WHERE order_number = $1',
         [orderNumber],
       );
-      expect(count.rows[0]!.count).toBe(0);
+      expect(count.rows[0].count).toBe(0);
     });
   });
 
@@ -174,17 +174,17 @@ describe('POS staging integration matrix', () => {
           wallet_amount: payment.wallet_amount ?? 0,
         });
 
-        expect(rows[0]!.result).toMatchObject({ success: true, payment_status: 'paid' });
+        expect(rows[0].result).toMatchObject({ success: true, payment_status: 'paid' });
 
         const paymentRow = await client.query(
           `SELECT method, amount, cash_amount, card_amount, wallet_amount, cash_tendered, change_amount
            FROM public.payments WHERE order_id = $1::uuid`,
-          [rows[0]!.result.order_id],
+          [rows[0].result.order_id],
         );
 
         expect(paymentRow.rowCount).toBe(1);
-        expect(paymentRow.rows[0]!.method).toBe(payment.method);
-        expect(Number(paymentRow.rows[0]!.amount)).toBeCloseTo(fixture.productPrice, 2);
+        expect(paymentRow.rows[0].method).toBe(payment.method);
+        expect(Number(paymentRow.rows[0].amount)).toBeCloseTo(fixture.productPrice, 2);
       }
     });
   });
@@ -194,7 +194,7 @@ describe('POS staging integration matrix', () => {
     await withRollback(async client => {
       const orderNumber = `IT-OVERSETTLE-${Date.now()}`;
       const first = await checkout(client, orderNumber);
-      expect(first.rows[0]!.result.payment_status).toBe('paid');
+      expect(first.rows[0].result.payment_status).toBe('paid');
 
       await expect(
         client.query(
@@ -204,7 +204,7 @@ describe('POS staging integration matrix', () => {
            VALUES ($1::uuid, $2, 'pos_cash', 'paid', $3, NOW(), $2, $2, 0,
                    $4::uuid, $5::uuid, $6::uuid)`,
           [
-            first.rows[0]!.result.order_id,
+            first.rows[0].result.order_id,
             fixture.productPrice,
             `IT-OVERSETTLE-TXN-${Date.now()}`,
             fixture.shiftId,
@@ -221,7 +221,7 @@ describe('POS staging integration matrix', () => {
     await withRollback(async client => {
       const orderNumber = `IT-PARTIAL-REFUND-${Date.now()}`;
       const checkoutResult = await checkout(client, orderNumber);
-      const orderId = checkoutResult.rows[0]!.result.order_id as string;
+      const orderId = checkoutResult.rows[0].result.order_id as string;
 
       const item = await client.query(
         'SELECT id, quantity FROM public.order_items WHERE order_id = $1::uuid LIMIT 1',
@@ -242,7 +242,7 @@ describe('POS staging integration matrix', () => {
         shift_id: fixture.shiftId,
         idempotency_key: key,
         reason: 'Automated integration refund',
-        refund_items: [{ order_item_id: item.rows[0]!.id, quantity: 1 }],
+        refund_items: [{ order_item_id: item.rows[0].id, quantity: 1 }],
       };
 
       const first = await client.query(
@@ -250,20 +250,20 @@ describe('POS staging integration matrix', () => {
         [JSON.stringify(payload)],
       );
 
-      expect(first.rows[0]!.result).toMatchObject({ success: true, existing: false, partial: true });
+      expect(first.rows[0].result).toMatchObject({ success: true, existing: false, partial: true });
 
       const afterStock = await client.query(
         'SELECT stock_quantity FROM public.products WHERE id = $1::uuid',
         [fixture.productId],
       );
-      expect(Number(afterStock.rows[0]!.stock_quantity)).toBe(Number(beforeStock.rows[0]!.stock_quantity) + 1);
+      expect(Number(afterStock.rows[0].stock_quantity)).toBe(Number(beforeStock.rows[0].stock_quantity) + 1);
 
       const second = await client.query(
         'SELECT public.fn_atomic_pos_partial_refund($1::jsonb) AS result',
         [JSON.stringify(payload)],
       );
-      expect(second.rows[0]!.result.existing).toBe(true);
-      expect(second.rows[0]!.result.refund_id).toBe(first.rows[0]!.result.refund_id);
+      expect(second.rows[0].result.existing).toBe(true);
+      expect(second.rows[0].result.refund_id).toBe(first.rows[0].result.refund_id);
     });
   });
 
@@ -272,7 +272,7 @@ describe('POS staging integration matrix', () => {
     await withRollback(async client => {
       const orderNumber = `IT-REFUND-DOUBLE-${Date.now()}`;
       const checkoutResult = await checkout(client, orderNumber);
-      const orderId = checkoutResult.rows[0]!.result.order_id as string;
+      const orderId = checkoutResult.rows[0].result.order_id as string;
 
       const item = await client.query(
         'SELECT id FROM public.order_items WHERE order_id = $1::uuid LIMIT 1',
@@ -285,7 +285,7 @@ describe('POS staging integration matrix', () => {
         cashier_id: fixture.cashierId,
         shift_id: fixture.shiftId,
         reason: 'Automated integration refund',
-        refund_items: [{ order_item_id: item.rows[0]!.id, quantity: 1 }],
+        refund_items: [{ order_item_id: item.rows[0].id, quantity: 1 }],
       };
 
       await client.query(
@@ -309,7 +309,7 @@ describe('POS staging integration matrix', () => {
       const checkoutResult = await checkout(client, orderNumber, {
         cash_tendered: fixture.productPrice + 10,
       });
-      const orderId = checkoutResult.rows[0]!.result.order_id as string;
+      const orderId = checkoutResult.rows[0].result.order_id as string;
 
       const beforeStock = await client.query(
         'SELECT stock_quantity FROM public.products WHERE id = $1::uuid',
@@ -325,20 +325,20 @@ describe('POS staging integration matrix', () => {
         [orderId, fixture.branchId, fixture.cashierId, fixture.shiftId, 'Automated full refund'],
       );
 
-      expect(refund.rows[0]!.result).toMatchObject({ success: true, order_id: orderId });
-      expect(Number(refund.rows[0]!.result.refund_amount)).toBeCloseTo(fixture.productPrice, 2);
+      expect(refund.rows[0].result).toMatchObject({ success: true, order_id: orderId });
+      expect(Number(refund.rows[0].result.refund_amount)).toBeCloseTo(fixture.productPrice, 2);
 
       const afterStock = await client.query(
         'SELECT stock_quantity FROM public.products WHERE id = $1::uuid',
         [fixture.productId],
       );
-      expect(Number(afterStock.rows[0]!.stock_quantity)).toBe(Number(beforeStock.rows[0]!.stock_quantity) + 1);
+      expect(Number(afterStock.rows[0].stock_quantity)).toBe(Number(beforeStock.rows[0].stock_quantity) + 1);
 
       const order = await client.query(
         'SELECT status, payment_status, inventory_deducted FROM public.orders WHERE id = $1::uuid',
         [orderId],
       );
-      expect(order.rows[0]!).toMatchObject({
+      expect(order.rows[0]).toMatchObject({
         status: 'returned',
         payment_status: 'refunded',
         inventory_deducted: false,
@@ -348,8 +348,8 @@ describe('POS staging integration matrix', () => {
         'SELECT expected_cash FROM public.cash_drawer_shifts WHERE id = $1::uuid',
         [fixture.shiftId],
       );
-      expect(Number(afterShift.rows[0]!.expected_cash)).toBeCloseTo(
-        Number(beforeShift.rows[0]!.expected_cash) - fixture.productPrice,
+      expect(Number(afterShift.rows[0].expected_cash)).toBeCloseTo(
+        Number(beforeShift.rows[0].expected_cash) - fixture.productPrice,
         2,
       );
     });
@@ -360,7 +360,7 @@ describe('POS staging integration matrix', () => {
     await withRollback(async client => {
       const orderNumber = `IT-FULL-REFUND-DOUBLE-${Date.now()}`;
       const checkoutResult = await checkout(client, orderNumber);
-      const orderId = checkoutResult.rows[0]!.result.order_id as string;
+      const orderId = checkoutResult.rows[0].result.order_id as string;
 
       await client.query(
         'SELECT public.fn_atomic_pos_refund($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::text)',
@@ -381,7 +381,7 @@ describe('POS staging integration matrix', () => {
     await withRollback(async client => {
       const orderNumber = `IT-REFUND-SHIFT-${Date.now()}`;
       const checkoutResult = await checkout(client, orderNumber);
-      const orderId = checkoutResult.rows[0]!.result.order_id as string;
+      const orderId = checkoutResult.rows[0].result.order_id as string;
 
       await expect(
         client.query(
@@ -399,7 +399,7 @@ describe('POS staging integration matrix', () => {
         'SELECT public.fn_open_cash_drawer_shift($1::uuid,$2::uuid,$3::text,$4::numeric) AS result',
         [fixture.branchId, fixture.cashierId, 'Staging Integration', 1000],
       );
-      const shiftId = opened.rows[0]!.result.shift_id as string;
+      const shiftId = opened.rows[0].result.shift_id as string;
 
       const sale = await client.query(
         'SELECT public.fn_atomic_pos_checkout($1::jsonb) AS result',
@@ -416,13 +416,13 @@ describe('POS staging integration matrix', () => {
           items: [{ product_id: fixture.productId, quantity: 1 }],
         })],
       );
-      expect(sale.rows[0]!.result.payment_status).toBe('paid');
+      expect(sale.rows[0].result.payment_status).toBe('paid');
 
       const summary = await client.query(
         'SELECT public.fn_get_cashier_shift_summary($1::uuid,$2::uuid,$3::uuid) AS result',
         [shiftId, fixture.branchId, fixture.cashierId],
       );
-      expect(summary.rows[0]!.result).toBeTruthy();
+      expect(summary.rows[0].result).toBeTruthy();
 
       const shift = await client.query(
         'SELECT expected_cash FROM public.cash_drawer_shifts WHERE id = $1::uuid',
@@ -431,18 +431,18 @@ describe('POS staging integration matrix', () => {
 
       const closed = await client.query(
         'SELECT public.fn_close_cash_drawer_shift($1::uuid,$2::uuid,$3::uuid,$4::numeric,$5::text) AS result',
-        [shiftId, fixture.branchId, fixture.cashierId, Number(shift.rows[0]!.expected_cash), 'Automated zero-variance close'],
+        [shiftId, fixture.branchId, fixture.cashierId, Number(shift.rows[0].expected_cash), 'Automated zero-variance close'],
       );
 
-      expect(Number(closed.rows[0]!.result.variance)).toBeCloseTo(0, 2);
-      expect(closed.rows[0]!.result.status).toBe('closed');
+      expect(Number(closed.rows[0].result.variance)).toBeCloseTo(0, 2);
+      expect(closed.rows[0].result.status).toBe('closed');
 
       const persisted = await client.query(
         'SELECT status, expected_cash, actual_cash, variance FROM public.cash_drawer_shifts WHERE id = $1::uuid',
         [shiftId],
       );
-      expect(persisted.rows[0]!.status).toBe('closed');
-      expect(Number(persisted.rows[0]!.variance)).toBeCloseTo(0, 2);
+      expect(persisted.rows[0].status).toBe('closed');
+      expect(Number(persisted.rows[0].variance)).toBeCloseTo(0, 2);
     });
   });
 
@@ -495,7 +495,7 @@ describe('POS staging integration matrix', () => {
       throw new Error('STAGING_CONCURRENCY_FIXTURE_MISSING: requires one committed paid POS order');
     }
 
-    const row = seed.rows[0]!;
+    const row = seed.rows[0];
     const runRetry = async () => {
       const client = await pool.connect();
       try {
@@ -515,7 +515,7 @@ describe('POS staging integration matrix', () => {
             items: [{ product_id: fixture.productId, quantity: 1 }],
           })],
         );
-        return result.rows[0]!.result;
+        return result.rows[0].result;
       } finally {
         await client.query('ROLLBACK');
         client.release();
@@ -535,7 +535,7 @@ describe('POS staging integration matrix', () => {
        WHERE order_id = $1::uuid`,
       [row.order_id],
     );
-    expect(persisted.rows[0]!.count).toBe(1);
+    expect(persisted.rows[0].count).toBe(1);
   });
 
   it('serializes concurrent oversettlement attempts against one paid order', async () => {
@@ -568,7 +568,7 @@ describe('POS staging integration matrix', () => {
       throw new Error('STAGING_CONCURRENCY_FIXTURE_MISSING: requires one committed paid POS order');
     }
 
-    const row = seed.rows[0]!;
+    const row = seed.rows[0];
 
     const runAttempt = async (suffix: string) => {
       const client = await pool.connect();
@@ -606,6 +606,6 @@ describe('POS staging integration matrix', () => {
       [row.order_id],
     );
 
-    expect(persisted.rows[0]!.count).toBe(1);
+    expect(persisted.rows[0].count).toBe(1);
   });
 });
