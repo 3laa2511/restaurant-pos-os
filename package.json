@@ -11,7 +11,8 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "verify:migrations": "node scripts/verify-migration-sequence.mjs"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
