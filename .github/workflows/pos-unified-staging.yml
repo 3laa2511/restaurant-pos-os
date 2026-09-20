@@ -1,0 +1,54 @@
+name: POS Unified Staging Verification
+
+on:
+  push:
+    branches:
+      - main
+      - "reconcile/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pos-unified-staging-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Verify staging secret is configured
+        shell: bash
+        run: |
+          if [ -z "$STAGING_DATABASE_URL" ]; then
+            echo "::error::STAGING_DATABASE_URL repository secret is not configured."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Lint API
+        run: pnpm --dir services/api lint
+
+      - name: Typecheck API
+        run: pnpm --dir services/api typecheck
+
+      - name: Run staging POS integration matrix
+        run: pnpm --dir services/api test:staging
