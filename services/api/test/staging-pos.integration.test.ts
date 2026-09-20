@@ -17,7 +17,7 @@ describe('POS staging integration matrix', () => {
   const pool = shouldRun
     ? new Pool({
         connectionString: databaseUrl,
-        max: 4,
+        max: 8,
         connectionTimeoutMillis: 5000,
         idleTimeoutMillis: 30000,
       })
@@ -468,5 +468,76 @@ describe('POS staging integration matrix', () => {
         }),
       ).rejects.toThrow(/ERR_SHIFT_REQUIRED|ERR_POS_SHIFT_NOT_OPEN/);
     });
+  });
+
+  it('serializes concurrent oversettlement attempts against one paid order', async () => {
+    if (!pool) return;
+
+    const seed = await pool.query<{
+      order_id: string;
+      amount: string;
+      branch_id: string;
+      cashier_id: string;
+      shift_id: string;
+    }>(`
+      SELECT
+        o.id AS order_id,
+        p.amount::text AS amount,
+        o.branch_id,
+        p.cashier_id,
+        p.shift_id
+      FROM public.orders o
+      JOIN public.payments p ON p.order_id = o.id
+      WHERE o.payment_status = 'paid'
+        AND p.status = 'paid'
+        AND p.shift_id IS NOT NULL
+        AND o.source = 'pos_cashier'
+      ORDER BY o.updated_at DESC NULLS LAST, o.id
+      LIMIT 1
+    `);
+
+    if (seed.rowCount !== 1) {
+      throw new Error('STAGING_CONCURRENCY_FIXTURE_MISSING: requires one committed paid POS order');
+    }
+
+    const row = seed.rows[0];
+
+    const runAttempt = async (suffix: string) => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await expect(
+          client.query(
+            `INSERT INTO public.payments
+               (order_id, amount, method, status, transaction_ref, paid_at,
+                cash_amount, cash_tendered, change_amount, shift_id, branch_id, cashier_id)
+             VALUES ($1::uuid, $2, 'pos_cash', 'paid', $3, NOW(), $2, $2, 0,
+                     $4::uuid, $5::uuid, $6::uuid)`,
+            [
+              row.order_id,
+              row.amount,
+              `IT-CONCURRENCY-${Date.now()}-${suffix}`,
+              row.shift_id,
+              row.branch_id,
+              row.cashier_id,
+            ],
+          ),
+        ).rejects.toThrow(/ERR_PAYMENT_OVERSETTLEMENT/);
+      } finally {
+        await client.query('ROLLBACK');
+        client.release();
+      }
+    };
+
+    await Promise.all([runAttempt('A'), runAttempt('B')]);
+
+    const persisted = await pool.query(
+      `SELECT COUNT(*)::int AS count
+       FROM public.payments
+       WHERE order_id = $1::uuid`,
+      [row.order_id],
+    );
+
+    expect(persisted.rows[0].count).toBe(1);
   });
 });
