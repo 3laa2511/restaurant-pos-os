@@ -470,6 +470,74 @@ describe('POS staging integration matrix', () => {
     });
   });
 
+  it('keeps concurrent retries idempotent for one committed order', async () => {
+    if (!pool) return;
+
+    const seed = await pool.query<{
+      order_id: string;
+      order_number: string;
+      branch_id: string;
+      cashier_id: string;
+      shift_id: string;
+    }>(
+      `SELECT o.id AS order_id, o.order_number, o.branch_id, p.cashier_id, p.shift_id
+       FROM public.orders o
+       JOIN public.payments p ON p.order_id = o.id
+       WHERE o.payment_status = 'paid'
+         AND p.status = 'paid'
+         AND o.source = 'pos_cashier'
+         AND p.shift_id IS NOT NULL
+       ORDER BY o.updated_at DESC NULLS LAST, o.id
+       LIMIT 1`,
+    );
+
+    if (seed.rowCount !== 1) {
+      throw new Error('STAGING_CONCURRENCY_FIXTURE_MISSING: requires one committed paid POS order');
+    }
+
+    const row = seed.rows[0];
+    const runRetry = async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await client.query<{ result: Record<string, unknown> }>(
+          'SELECT public.fn_atomic_pos_checkout($1::jsonb) AS result',
+          [JSON.stringify({
+            order_number: row.order_number,
+            source: 'pos_cashier',
+            branch_id: row.branch_id,
+            cashier_id: row.cashier_id,
+            shift_id: row.shift_id,
+            cashier_name: 'Staging Integration',
+            cashier_role: 'cashier',
+            payment_method: 'pos_cash',
+            cash_tendered: fixture.productPrice,
+            items: [{ product_id: fixture.productId, quantity: 1 }],
+          })],
+        );
+        return result.rows[0].result;
+      } finally {
+        await client.query('ROLLBACK');
+        client.release();
+      }
+    };
+
+    const [first, second] = await Promise.all([runRetry(), runRetry()]);
+
+    expect(first.existing).toBe(true);
+    expect(second.existing).toBe(true);
+    expect(first.order_id).toBe(row.order_id);
+    expect(second.order_id).toBe(row.order_id);
+
+    const persisted = await pool.query(
+      `SELECT COUNT(*)::int AS count
+       FROM public.payments
+       WHERE order_id = $1::uuid`,
+      [row.order_id],
+    );
+    expect(persisted.rows[0].count).toBe(1);
+  });
+
   it('serializes concurrent oversettlement attempts against one paid order', async () => {
     if (!pool) return;
 
