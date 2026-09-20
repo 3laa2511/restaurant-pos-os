@@ -32,6 +32,18 @@ jobs:
         with:
           node-version: 24
 
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Verify migration sequence
+        run: pnpm verify:migrations
+
+      - name: Lint API
+        run: pnpm --dir services/api lint
+
+      - name: Typecheck API
+        run: pnpm --dir services/api typecheck
+
       - name: Verify staging secret is configured
         shell: bash
         run: |
@@ -39,15 +51,6 @@ jobs:
             echo "::error::STAGING_DATABASE_URL repository secret is not configured."
             exit 1
           fi
-
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Lint API
-        run: pnpm --dir services/api lint
-
-      - name: Typecheck API
-        run: pnpm --dir services/api typecheck
 
       - name: Run staging POS integration matrix
         run: pnpm --dir services/api test:staging
