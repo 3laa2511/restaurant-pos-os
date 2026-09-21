@@ -115,7 +115,10 @@ export class SyncService {
         })).map((branch) => branch.id);
 
     return this.prisma.syncOperation.findMany({
-      where: { status: 'RECEIVED', branchId: { in: branchIds } },
+      where: {
+        status: 'RECEIVED',
+        branchId: { in: branchIds },
+      },
       orderBy: [{ clientSequence: 'asc' }, { createdAt: 'asc' }],
       take: boundedLimit,
       select: {
@@ -133,7 +136,6 @@ export class SyncService {
       },
     });
   }
-
   private async rejectUnsupportedOperation(envelope: SyncEnvelope, requestHash: string): Promise<SyncResult> {
     const operationId = randomUUID();
     const result: SyncResult = { status: 'REJECTED', operationId, reason: 'Unsupported sync operation; completed POS checkouts must use CHECKOUT' };
