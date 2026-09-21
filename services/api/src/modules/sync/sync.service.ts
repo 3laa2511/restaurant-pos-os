@@ -107,7 +107,31 @@ export class SyncService {
   async pending(context: AuthContext, limit = 100) {
     const tenantId = assertTenantScope(context);
     const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
-    return this.prisma.syncOperation.findMany({ where: { status: 'RECEIVED', branch: { tenantId }, ...(context.branchId ? { branchId: context.branchId } : {}) }, orderBy: [{ clientSequence: 'asc' }, { createdAt: 'asc' }], take: boundedLimit, select: { operationId: true, deviceId: true, branchId: true, operation: true, entityType: true, entityId: true, idempotencyKey: true, clientSequence: true, occurredAt: true, payload: true, status: true } });
+    const branchIds = context.branchId
+      ? [context.branchId]
+      : (await this.prisma.branch.findMany({
+          where: { tenantId, active: true },
+          select: { id: true },
+        })).map((branch) => branch.id);
+
+    return this.prisma.syncOperation.findMany({
+      where: { status: 'RECEIVED', branchId: { in: branchIds } },
+      orderBy: [{ clientSequence: 'asc' }, { createdAt: 'asc' }],
+      take: boundedLimit,
+      select: {
+        operationId: true,
+        deviceId: true,
+        branchId: true,
+        operation: true,
+        entityType: true,
+        entityId: true,
+        idempotencyKey: true,
+        clientSequence: true,
+        occurredAt: true,
+        payload: true,
+        status: true,
+      },
+    });
   }
 
   private async rejectUnsupportedOperation(envelope: SyncEnvelope, requestHash: string): Promise<SyncResult> {
