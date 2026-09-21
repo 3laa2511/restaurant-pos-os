@@ -5,6 +5,7 @@ import { CashDrawerService } from './cash-drawer.service.js';
 
 const context = (overrides: Partial<AuthContext> = {}): AuthContext => ({
   userId: 'manager-1',
+  tenantId: 'tenant-1',
   branchId: 'branch-1',
   deviceId: 'device-1',
   roles: [],

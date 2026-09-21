@@ -17,6 +17,7 @@ const envelope = {
 
 const authContext: AuthContext = {
   userId: 'user-1',
+  tenantId: 'tenant-1',
   branchId: 'BR01',
   deviceId: 'POS01',
   roles: ['CASHIER'],
@@ -26,6 +27,12 @@ const authContext: AuthContext = {
 function createPrismaMock() {
   const records = new Map<string, any>();
   return {
+    branch: {
+      findFirst: async ({ where }: any) =>
+        where.id === 'BR01' && where.tenantId === 'tenant-1' && where.active === true ? { id: 'BR01' } : null,
+      findMany: async ({ where }: any) =>
+        where.tenantId === 'tenant-1' && where.active === true ? [{ id: 'BR01' }] : [],
+    },
     syncOperation: {
       findUnique: async ({ where }: any) => records.get(where.idempotencyKey) ?? null,
       create: async ({ data }: any) => {
