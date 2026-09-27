@@ -28,21 +28,25 @@ export class InventoryService {
     const tenantId=assertTenantScope(context); assertBranchAccess(context,input.branchId); if(!input.items?.length)throw new Error('Receipt must contain at least one item');
     return this.prisma.$transaction(async tx=>{
       const branch=await tx.branch.findFirst({where:{id:input.branchId,tenantId,active:true},select:{id:true}}); if(!branch)throw new Error('Branch not found');
-      const items: Array<{ ingredientId:string; purchaseUnitFactor:number; qty:number; baseQty:number; unitCost:number; line:number }> = []; let total=0;
+      const items: Array<{ ingredientId:string; purchaseUnitFactor:number; qty:number; baseQty:number; unitCost:number; baseUnitCost:number; line:number }> = []; let total=0;
       for(const item of input.items){
         const ingredient=await tx.ingredient.findFirst({where:{id:item.ingredientId,tenantId,active:true}});
         if(!ingredient)throw new Error('Ingredient not found');
         const qty=n(item.quantityPurchaseUnit,'Quantity'); if(qty<=0)throw new Error('Quantity must be greater than zero');
         const unitCost=n(item.unitCost,'Unit cost'); const baseQty=qty*Number(ingredient.purchaseUnitFactor); const line=qty*unitCost; total+=line;
-        items.push({ingredientId:ingredient.id,purchaseUnitFactor:Number(ingredient.purchaseUnitFactor),qty,baseQty,unitCost,line});
+        items.push({ingredientId:ingredient.id,purchaseUnitFactor:Number(ingredient.purchaseUnitFactor),qty,baseQty,unitCost,baseUnitCost:unitCost/Number(ingredient.purchaseUnitFactor),line});
+      }
+      if (input.supplierId) {
+        const supplier = await tx.supplier.findFirst({ where: { id: input.supplierId, tenantId, active: true }, select: { id: true } });
+        if (!supplier) throw new Error('Supplier not found');
       }
       const receipt=await tx.inventoryReceipt.create({data:{id:randomUUID(),tenantId,branchId:input.branchId,supplierId:input.supplierId||null,reference:input.reference?.trim()||null,totalCost:total,items:{create:items.map(x=>({id:randomUUID(),ingredientId:x.ingredientId,quantityPurchaseUnit:x.qty,quantityBaseUnit:x.baseQty,unitCost:x.unitCost,totalCost:x.line}))}}});
       for(const x of items){
         const existing=await tx.inventoryStockBalance.findUnique({where:{branchId_ingredientId:{branchId:input.branchId,ingredientId:x.ingredientId}}});
         const oldQty=existing?Number(existing.quantityBaseUnit):0; const oldAvg=existing?Number(existing.averageCostPerBaseUnit):0;
-        const newQty=oldQty+x.baseQty; const newAvg=newQty===0?0:((oldQty*oldAvg)+(x.baseQty*x.unitCost/x.purchaseUnitFactor))/newQty;
+        const newQty=oldQty+x.baseQty; const newAvg=newQty===0?0:((oldQty*oldAvg)+(x.baseQty*x.baseUnitCost))/newQty;
         await tx.inventoryStockBalance.upsert({where:{branchId_ingredientId:{branchId:input.branchId,ingredientId:x.ingredient.id}},update:{quantityBaseUnit:newQty,averageCostPerBaseUnit:newAvg},create:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:x.ingredient.id,quantityBaseUnit:x.baseQty,averageCostPerBaseUnit:x.unitCost/Number(x.ingredient.purchaseUnitFactor)}});
-        await tx.inventoryMovement.create({data:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:x.ingredient.id,type:'PURCHASE',quantityBaseUnit:x.baseQty,unitCost:x.unitCost/Number(x.ingredient.purchaseUnitFactor),referenceType:'RECEIPT',referenceId:receipt.id,idempotencyKey:`${receipt.id}:${x.ingredient.id}`,actorUserId:context.userId}});
+        await tx.inventoryMovement.create({data:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:x.ingredient.id,type:'PURCHASE',quantityBaseUnit:x.baseQty,unitCost:x.baseUnitCost,referenceType:'RECEIPT',referenceId:receipt.id,idempotencyKey:`${receipt.id}:${x.ingredient.id}`,actorUserId:context.userId}});
       }
       return receipt;
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
@@ -65,7 +69,12 @@ export class InventoryService {
     const product=await this.prisma.product.findFirst({where:{id:productId,tenantId},select:{id:true}}); if(!product)throw new Error('Product not found');
     return this.prisma.$transaction(async tx=>{
       await tx.recipeIngredient.deleteMany({where:{productId,tenantId}});
-      if(input.items?.length) await tx.recipeIngredient.createMany({data:input.items.map(x=>({id:randomUUID(),tenantId,productId,ingredientId:x.ingredientId,quantityBaseUnit:n(x.quantityBaseUnit,'Recipe quantity'),wastePercent:n(x.wastePercent??0,'Waste percent')}))});
+      if(input.items?.length) {
+        const ingredientIds = input.items.map((x) => x.ingredientId);
+        const ingredients = await tx.ingredient.findMany({ where: { tenantId, id: { in: ingredientIds }, active: true }, select: { id: true } });
+        if (ingredients.length !== new Set(ingredientIds).size) throw new Error('Recipe contains an ingredient outside the current tenant or an inactive ingredient');
+        await tx.recipeIngredient.createMany({data:input.items.map(x=>({id:randomUUID(),tenantId,productId,ingredientId:x.ingredientId,quantityBaseUnit:n(x.quantityBaseUnit,'Recipe quantity'),wastePercent:n(x.wastePercent??0,'Waste percent')}))});
+      }
       return tx.recipeIngredient.findMany({where:{productId,tenantId},include:{ingredient:true}});
     });
   }
