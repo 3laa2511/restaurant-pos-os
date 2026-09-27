@@ -10,6 +10,8 @@ import { AccountingService } from './accounting.service.js';
 @UseGuards(AuthGuard, PermissionGuard)
 export class AccountingController {
  constructor(private readonly accounting: AccountingService) {}
+ @Post('journal') @RequirePermission(PERMISSIONS.ACCOUNTING_POST)
+ postJournal(@CurrentAuth() c:AuthContext,@Body() input:Parameters<AccountingService['postManual']>[1]){return this.accounting.postManual(c,input);}
  @Get('journal') @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
  journal(@CurrentAuth() c:AuthContext,@Query('branchId') branchId?:string){return this.accounting.journal(c,branchId);}
  @Post('payments/:paymentId/post') @RequirePermission(PERMISSIONS.ACCOUNTING_POST)
