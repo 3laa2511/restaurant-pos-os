@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsNumber, IsOptional, IsString, Length, Max, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsNumber, IsOptional, IsString, Length, Min, ValidateNested } from 'class-validator';
 import type { PaymentMethod } from './payment-policy.js';
 
 export class PaymentAllocationDto {
@@ -22,56 +22,25 @@ export class PaymentAllocationDto {
 }
 
 export class SettlePaymentDto {
-  @IsString()
-  @Length(1, 128)
-  orderId!: string;
-
-  @IsString()
-  @Length(1, 128)
-  shiftId!: string;
+  @IsString() @Length(1, 128) orderId!: string;
+  @IsString() @Length(1, 128) shiftId!: string;
 
   @IsArray()
+  @ArrayMaxSize(10)
   @ValidateNested({ each: true })
   @Type(() => PaymentAllocationDto)
-  @Max(10)
   allocations!: PaymentAllocationDto[];
 
-  @IsString()
-  @Length(16, 128)
-  idempotencyKey!: string;
-
-  @IsNumber()
-  @Min(0)
-  clientSequence!: number;
+  @IsString() @Length(16, 128) idempotencyKey!: string;
+  @IsNumber({ maxDecimalPlaces: 0 }) @Min(0) clientSequence!: number;
 }
 
 export class PaymentAdjustmentDto {
-  @IsString()
-  @Length(1, 128)
-  paymentId!: string;
-
-  @IsString()
-  @Length(1, 128)
-  shiftId!: string;
-
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0.01)
-  amount!: number;
-
-  @IsString()
-  @Length(1, 500)
-  reason!: string;
-
-  @IsOptional()
-  @IsString()
-  @Length(1, 128)
-  reference?: string;
-
-  @IsString()
-  @Length(16, 128)
-  idempotencyKey!: string;
-
-  @IsNumber()
-  @Min(0)
-  clientSequence!: number;
+  @IsString() @Length(1, 128) paymentId!: string;
+  @IsString() @Length(1, 128) shiftId!: string;
+  @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) amount!: number;
+  @IsString() @Length(1, 500) reason!: string;
+  @IsOptional() @IsString() @Length(1, 128) reference?: string;
+  @IsString() @Length(16, 128) idempotencyKey!: string;
+  @IsNumber({ maxDecimalPlaces: 0 }) @Min(0) clientSequence!: number;
 }
