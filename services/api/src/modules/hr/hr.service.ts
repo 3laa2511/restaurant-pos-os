@@ -65,7 +65,7 @@ export class HrService {
       const role = await tx.role.findUnique({ where: { code: roleCode }, select: { id: true, code: true } });
       if (!role) throw new Error('Employee role is not seeded');
       const user = await tx.user.create({
-        data: { id: randomUUID(), username, displayName, passwordHash, status: 'ACTIVE', branchId: input.branchId ?? null, roleLinks: { create: { roleId: role.id } } },
+        data: { id: randomUUID(), username, displayName, passwordHash, status: 'ACTIVE', tenantId, branchId: input.branchId ?? null, roleLinks: { create: { roleId: role.id } } },
         select: { id: true, username: true, displayName: true, branchId: true },
       });
       const profile = await tx.employeeProfile.create({
