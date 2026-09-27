@@ -193,6 +193,10 @@ BEGIN
     IF NEW."type" = 'CENTRAL' THEN
       RAISE EXCEPTION 'CENTRAL_WAREHOUSE_CANNOT_BE_BRANCH_BOUND';
     END IF;
+  ELSIF TG_TABLE_NAME = 'Warehouse' AND NEW."branchId" IS NULL THEN
+    IF NEW."type" <> 'CENTRAL' THEN
+      RAISE EXCEPTION 'BRANCH_WAREHOUSE_REQUIRES_BRANCH';
+    END IF;
   ELSIF TG_TABLE_NAME = 'WarehouseStockBalance' THEN
     SELECT "tenantId" INTO expected_tenant FROM "Warehouse" WHERE "id" = NEW."warehouseId";
     IF expected_tenant IS NULL OR expected_tenant <> NEW."tenantId" THEN
@@ -223,6 +227,10 @@ BEGIN
     END IF;
     IF NEW."central" = true THEN
       RAISE EXCEPTION 'CENTRAL_DEPARTMENT_CANNOT_BE_BRANCH_BOUND';
+    END IF;
+  ELSIF TG_TABLE_NAME = 'Department' AND NEW."branchId" IS NULL THEN
+    IF NEW."central" <> true THEN
+      RAISE EXCEPTION 'BRANCH_DEPARTMENT_REQUIRES_BRANCH';
     END IF;
   ELSIF TG_TABLE_NAME = 'User' AND NEW."departmentId" IS NOT NULL THEN
     SELECT "tenantId" INTO expected_tenant FROM "Department" WHERE "id" = NEW."departmentId";
