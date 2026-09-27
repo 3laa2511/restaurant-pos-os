@@ -1,5 +1,6 @@
 import type { KitchenStation } from '../../generated/prisma/enums.js';
 import type { PermissionCode, RoleCode } from './rbac.constants.js';
+import type { WorkspaceCode } from './workspace.constants.js';
 
 export interface AuthContext {
   userId: string;
@@ -8,6 +9,7 @@ export interface AuthContext {
   tenantId: string | null;
   branchId: string | null;
   deviceId: string | null;
+  workspace: WorkspaceCode;
   roles: readonly RoleCode[];
   permissions: readonly PermissionCode[];
   /**
