@@ -49,6 +49,7 @@ export class InventoryService {
         await tx.inventoryStockBalance.upsert({where:{branchId_ingredientId:{branchId:input.branchId,ingredientId:x.ingredientId}},update:{quantityBaseUnit:newQty,averageCostPerBaseUnit:newAvg},create:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:x.ingredientId,quantityBaseUnit:x.baseQty,averageCostPerBaseUnit:x.unitCost/Number(x.purchaseUnitFactor)}});
         await tx.inventoryMovement.create({data:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:x.ingredientId,type:'PURCHASE',quantityBaseUnit:x.baseQty,unitCost:x.baseUnitCost,referenceType:'RECEIPT',referenceId:receipt.id,idempotencyKey:`${receipt.id}:${x.ingredientId}`,actorUserId:context.userId}});
       }
+      await this.accounting.postInventoryPurchase(tx, context, { receiptId: receipt.id, branchId: input.branchId, amount: Number(receipt.totalCost) });
       return receipt;
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
   }
@@ -61,6 +62,7 @@ export class InventoryService {
       const currentQty=current?Number(current.quantityBaseUnit):0; const next=input.direction==='IN'?currentQty+qty:currentQty-qty; if(next<0)throw new Error('Insufficient stock');
       const movement=await tx.inventoryMovement.create({data:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:input.ingredientId,type:input.direction==='IN'?'ADJUSTMENT_IN':'ADJUSTMENT_OUT',quantityBaseUnit:qty,unitCost:current?Number(current.averageCostPerBaseUnit):0,referenceType:'MANUAL_ADJUSTMENT',referenceId:input.reason.trim(),idempotencyKey:input.idempotencyKey,actorUserId:context.userId}});
       await tx.inventoryStockBalance.upsert({where:{branchId_ingredientId:{branchId:input.branchId,ingredientId:input.ingredientId}},update:{quantityBaseUnit:next},create:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:input.ingredientId,quantityBaseUnit:next,averageCostPerBaseUnit:0}});
+      await this.accounting.postInventoryAdjustment(tx, context, { movementId: movement.id, branchId: input.branchId, amount: qty * (current ? Number(current.averageCostPerBaseUnit) : 0), direction: input.direction });
       return movement;
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
   }
@@ -133,7 +135,6 @@ export class InventoryService {
       if (!transfer) throw new Error('Transfer not found');
       if (transfer.fromWarehouse.branchId) assertBranchAccess(context, transfer.fromWarehouse.branchId);
       if (transfer.status !== 'APPROVED') throw new Error('Only approved transfers can be dispatched');
-      let transferAmount = 0;
       let transferAmount = 0;
       for (const item of transfer.items) {
         const qty = Number(item.quantityBaseUnit);
