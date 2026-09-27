@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
-import { assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
+import { assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
+import { PERMISSIONS } from '../auth/rbac.constants.js';
 
 type Db = Prisma.TransactionClient;
 type Line = { code: string; name: string; nameAr?: string; type: 'ASSET'|'LIABILITY'|'EQUITY'|'REVENUE'|'EXPENSE'; debit?: number; credit?: number; branchId?: string|null; memo?: string };
@@ -22,7 +23,7 @@ export class AccountingService {
   }
 
   async post(tx: Db, context: AuthContext, input: { sourceType: string; sourceId: string; description: string; branchId?: string|null; lines: Line[] }) {
-    const tenantId = assertTenantScope(context);
+    assertPermission(context, PERMISSIONS.ACCOUNTING_POST); const tenantId = assertTenantScope(context);
     if (!input.lines.length) throw new Error('Journal entry requires lines');
     const totalDebit = money(input.lines.reduce((s,l)=>s+Number(l.debit||0),0));
     const totalCredit = money(input.lines.reduce((s,l)=>s+Number(l.credit||0),0));
