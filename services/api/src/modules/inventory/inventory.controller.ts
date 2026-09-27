@@ -29,7 +29,7 @@ export class InventoryController {
   receive(@CurrentAuth() context: AuthContext, @Body() input: Parameters<InventoryService['receive']>[1]) { return this.inventory.receive(context, input); }
 
   @Post('adjust')
-  @RequirePermission(PERMISSORY.INVENTORY_ADJUST)
+  @RequirePermission(PERMISSIONS.INVENTORY_ADJUST)
   adjust(@CurrentAuth() context: AuthContext, @Body() input: Parameters<InventoryService['adjust']>[1]) { return this.inventory.adjust(context, input); }
 
   @Post('recipes/:productId')
