@@ -26,6 +26,14 @@ const permissions = [
   ['audit.view', 'View audit logs'],
   ['audit.policy_manage', 'Manage audit risk policies'],
   ['kitchen.ticket_manage', 'Manage kitchen tickets'],
+  ['hr.employee_manage', 'Manage employee accounts'],
+  ['hr.attendance_manage', 'Manage attendance'],
+  ['hr.payroll_view', 'View payroll'],
+  ['hr.payroll_manage', 'Manage payroll'],
+  ['inventory.view', 'View inventory'],
+  ['inventory.purchase', 'Receive inventory purchases'],
+  ['inventory.adjust', 'Adjust inventory'],
+  ['inventory.recipe_manage', 'Manage recipes'],
 ] as const;
 
 async function main() {
@@ -42,6 +50,9 @@ async function main() {
     BRANCH_MANAGER: 'Branch Manager',
     CENTRAL_ADMIN: 'Central Admin',
     OWNER: 'Owner',
+    HR_MANAGER: 'HR Manager',
+    ACCOUNTANT: 'Accountant',
+    INVENTORY_MANAGER: 'Inventory Manager',
   };
 
   for (const code of Object.values(RoleCode)) {
@@ -55,7 +66,10 @@ async function main() {
   const kitchen = ['order.view', 'kitchen.ticket_manage'];
   const dispatcher = ['order.view', 'driver.assign'];
   const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'audit.view', 'cash_drawer.manage', 'kitchen.ticket_manage'];
-  const matrix: Record<RoleCode, readonly string[]> = { CASHIER: cashier, CALL_CENTER_OPERATOR: callCenter, CALL_CENTER_SUPERVISOR: supervisor, KITCHEN: kitchen, DISPATCHER: dispatcher, BRANCH_MANAGER: manager, CENTRAL_ADMIN: fullAccess, OWNER: fullAccess };
+  const hrManager = ['hr.employee_manage', 'hr.attendance_manage', 'hr.payroll_view', 'hr.payroll_manage', 'report.view_operational', 'audit.view'];
+  const accountant = ['hr.payroll_view', 'hr.payroll_manage', 'report.view_financial', 'inventory.view', 'inventory.purchase', 'report.view_operational'];
+  const inventoryManager = ['inventory.view', 'inventory.purchase', 'inventory.adjust', 'inventory.recipe_manage', 'report.view_operational'];
+  const matrix: Record<RoleCode, readonly string[]> = { CASHIER: cashier, CALL_CENTER_OPERATOR: callCenter, CALL_CENTER_SUPERVISOR: supervisor, KITCHEN: kitchen, DISPATCHER: dispatcher, BRANCH_MANAGER: manager, CENTRAL_ADMIN: fullAccess, OWNER: fullAccess, HR_MANAGER: hrManager, ACCOUNTANT: accountant, INVENTORY_MANAGER: inventoryManager };
 
   for (const [roleCode, permissionCodes] of Object.entries(matrix) as [RoleCode, readonly string[]][]) {
     const role = await prisma.role.findUniqueOrThrow({ where: { code: roleCode } });
