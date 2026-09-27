@@ -34,7 +34,7 @@ export class AccountingService {
     return tx.journalEntry.create({
       data: {
         id: randomUUID(), tenantId, entryNumber: 'JE-' + Date.now() + '-' + randomUUID().slice(0,6).toUpperCase(),
-        description: input.description, sourceType: input.sourceType, sourceId: input.sourceId, branchId: input.branchId ?? null,
+        description: input.description, sourceType: input.sourceType, sourceId: input.sourceId, branchId: input.branchId ?? null, entryDate: new Date(), postedById: context.userId,
         lines: { create: input.lines.map(l => ({ id: randomUUID(), accountId: accounts.get(l.code)!.id, branchId: l.branchId ?? input.branchId ?? null, debit: money(l.debit||0).toFixed(2), credit: money(l.credit||0).toFixed(2), memo: l.memo ?? null })) },
       },
       include: { lines: true },
