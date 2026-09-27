@@ -65,7 +65,7 @@ async function main() {
   const supervisor = [...callCenter, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_operational', 'report.view_financial', 'driver.assign', 'audit.view', 'cash_drawer.view'];
   const kitchen = ['order.view', 'kitchen.ticket_manage'];
   const dispatcher = ['order.view', 'driver.assign'];
-  const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'audit.view', 'cash_drawer.manage', 'kitchen.ticket_manage'];
+  const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'menu.manage', 'audit.view', 'cash_drawer.manage', 'kitchen.ticket_manage'];
   const hrManager = ['hr.employee_manage', 'hr.attendance_manage', 'hr.payroll_view', 'hr.payroll_manage', 'report.view_operational', 'audit.view'];
   const accountant = ['hr.payroll_view', 'hr.payroll_manage', 'report.view_financial', 'inventory.view', 'inventory.purchase', 'report.view_operational'];
   const inventoryManager = ['inventory.view', 'inventory.purchase', 'inventory.adjust', 'inventory.recipe_manage', 'report.view_operational'];
