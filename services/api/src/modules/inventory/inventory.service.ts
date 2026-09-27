@@ -64,6 +64,102 @@ export class InventoryService {
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
   }
 
+
+  async listWarehouses(context: AuthContext) {
+    const tenantId = assertTenantScope(context);
+    return this.prisma.warehouse.findMany({
+      where: { tenantId, active: true },
+      include: { branch: { select: { id: true, code: true, name: true } } },
+      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  async listTransfers(context: AuthContext, status?: string) {
+    const tenantId = assertTenantScope(context);
+    return this.prisma.inventoryTransfer.findMany({
+      where: { tenantId, ...(status ? { status } : {}) },
+      include: {
+        fromWarehouse: { select: { id: true, code: true, name: true, type: true, branchId: true } },
+        toWarehouse: { select: { id: true, code: true, name: true, type: true, branchId: true } },
+        items: { include: { ingredient: { select: { id: true, sku: true, name: true, baseUnit: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createTransfer(context: AuthContext, input: { fromWarehouseId: string; toWarehouseId: string; items: Array<{ ingredientId: string; quantityBaseUnit: number }>; notes?: string }) {
+    const tenantId = assertTenantScope(context);
+    if (input.fromWarehouseId === input.toWarehouseId) throw new Error('Source and destination warehouses must be different');
+    if (!input.items?.length) throw new Error('Transfer must contain at least one item');
+    const warehouses = await this.prisma.warehouse.findMany({ where: { tenantId, id: { in: [input.fromWarehouseId, input.toWarehouseId] }, active: true } });
+    if (warehouses.length !== 2) throw new Error('Warehouse not found');
+    for (const w of warehouses) if (w.branchId) assertBranchAccess(context, w.branchId);
+    const ingredientIds = input.items.map(x => x.ingredientId);
+    const ingredients = await this.prisma.ingredient.findMany({ where: { tenantId, id: { in: ingredientIds }, active: true }, select: { id: true } });
+    if (ingredients.length !== new Set(ingredientIds).size) throw new Error('Transfer contains an invalid ingredient');
+    for (const item of input.items) { const qty = n(item.quantityBaseUnit, 'Transfer quantity'); if (qty <= 0) throw new Error('Transfer quantity must be greater than zero'); }
+    const transferNumber = 'TR-' + Date.now() + '-' + randomUUID().slice(0, 8).toUpperCase();
+    return this.prisma.inventoryTransfer.create({
+      data: { id: randomUUID(), tenantId, transferNumber, fromWarehouseId: input.fromWarehouseId, toWarehouseId: input.toWarehouseId, status: 'REQUESTED', requestedById: context.userId, requestedAt: new Date(), notes: input.notes?.trim() || null, items: { create: input.items.map(x => ({ id: randomUUID(), ingredientId: x.ingredientId, quantityBaseUnit: n(x.quantityBaseUnit, 'Transfer quantity'), unitCost: 0 })) } },
+      include: { items: true },
+    });
+  }
+
+  async approveTransfer(context: AuthContext, transferId: string) {
+    const tenantId = assertTenantScope(context);
+    return this.prisma.$transaction(async tx => {
+      const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true } });
+      if (!transfer) throw new Error('Transfer not found');
+      if (transfer.fromWarehouse.branchId) assertBranchAccess(context, transfer.fromWarehouse.branchId);
+      if (transfer.toWarehouse.branchId) assertBranchAccess(context, transfer.toWarehouse.branchId);
+      if (transfer.status !== 'REQUESTED' && transfer.status !== 'DRAFT') throw new Error('Transfer cannot be approved in its current state');
+      return tx.inventoryTransfer.update({ where: { id: transfer.id }, data: { status: 'APPROVED', approvedById: context.userId, approvedAt: new Date() } });
+    });
+  }
+
+  async dispatchTransfer(context: AuthContext, transferId: string) {
+    const tenantId = assertTenantScope(context);
+    return this.prisma.$transaction(async tx => {
+      const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
+      if (!transfer) throw new Error('Transfer not found');
+      if (transfer.fromWarehouse.branchId) assertBranchAccess(context, transfer.fromWarehouse.branchId);
+      if (transfer.status !== 'APPROVED') throw new Error('Only approved transfers can be dispatched');
+      for (const item of transfer.items) {
+        const qty = Number(item.quantityBaseUnit);
+        const stock = await tx.warehouseStockBalance.findUnique({ where: { warehouseId_ingredientId: { warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId } } });
+        const current = stock ? Number(stock.quantityBaseUnit) : 0;
+        if (current < qty) throw new Error('Insufficient stock for ingredient ' + item.ingredientId);
+        const unitCost = stock ? Number(stock.averageCostPerBaseUnit) : 0;
+        await tx.warehouseStockBalance.update({ where: { warehouseId_ingredientId: { warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId } }, data: { quantityBaseUnit: current - qty } });
+        await tx.inventoryTransferItem.update({ where: { id: item.id }, data: { unitCost } });
+        await tx.inventoryMovement.create({ data: { id: randomUUID(), tenantId, branchId: transfer.fromWarehouse.branchId, warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId, type: 'TRANSFER_OUT', quantityBaseUnit: qty, unitCost, referenceType: 'INVENTORY_TRANSFER', referenceId: transfer.id, idempotencyKey: 'transfer-out:' + transfer.id + ':' + item.id, actorUserId: context.userId } });
+      }
+      return tx.inventoryTransfer.update({ where: { id: transfer.id }, data: { status: 'IN_TRANSIT', sentAt: new Date() }, include: { items: true } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async receiveTransfer(context: AuthContext, transferId: string) {
+    const tenantId = assertTenantScope(context);
+    return this.prisma.$transaction(async tx => {
+      const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
+      if (!transfer) throw new Error('Transfer not found');
+      if (transfer.toWarehouse.branchId) assertBranchAccess(context, transfer.toWarehouse.branchId);
+      if (transfer.status !== 'IN_TRANSIT') throw new Error('Only in-transit transfers can be received');
+      for (const item of transfer.items) {
+        const qty = Number(item.quantityBaseUnit);
+        const unitCost = Number(item.unitCost);
+        const stock = await tx.warehouseStockBalance.findUnique({ where: { warehouseId_ingredientId: { warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId } } });
+        const oldQty = stock ? Number(stock.quantityBaseUnit) : 0;
+        const oldAvg = stock ? Number(stock.averageCostPerBaseUnit) : 0;
+        const newQty = oldQty + qty;
+        const newAvg = newQty === 0 ? 0 : ((oldQty * oldAvg) + (qty * unitCost)) / newQty;
+        await tx.warehouseStockBalance.upsert({ where: { warehouseId_ingredientId: { warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId } }, update: { quantityBaseUnit: newQty, averageCostPerBaseUnit: newAvg }, create: { id: randomUUID(), tenantId, warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId, quantityBaseUnit: qty, averageCostPerBaseUnit: unitCost } });
+        await tx.inventoryMovement.create({ data: { id: randomUUID(), tenantId, branchId: transfer.toWarehouse.branchId, warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId, type: 'TRANSFER_IN', quantityBaseUnit: qty, unitCost, referenceType: 'INVENTORY_TRANSFER', referenceId: transfer.id, idempotencyKey: 'transfer-in:' + transfer.id + ':' + item.id, actorUserId: context.userId } });
+      }
+      return tx.inventoryTransfer.update({ where: { id: transfer.id }, data: { status: 'RECEIVED', receivedAt: new Date() }, include: { items: true } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
   async setRecipe(context:AuthContext,productId:string,input:{items:Array<{ingredientId:string;quantityBaseUnit:number;wastePercent?:number}>}){
     const tenantId=assertTenantScope(context);
     const product=await this.prisma.product.findFirst({where:{id:productId,tenantId},select:{id:true}}); if(!product)throw new Error('Product not found');
