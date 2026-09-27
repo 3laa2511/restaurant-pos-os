@@ -8,7 +8,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
       {
         name: 'default',
         ttl: 60_000,
-        limit: 120,
+        limit: 300,
         blockDuration: 60_000,
       },
     ]),
