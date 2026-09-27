@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentAuth } from '../auth/auth.decorators.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { PermissionGuard } from '../auth/permission.guard.js';
@@ -49,10 +50,12 @@ export class HrController {
   }
 
   @Post('payroll/periods/:id/approve')
+  @Throttle({ default: { limit: 10, ttl: 60_000, blockDuration: 120_000 } })
   @RequirePermission(PERMISSIONS.HR_PAYROLL_MANAGE)
   approvePayrollPeriod(@CurrentAuth() context: AuthContext, @Param('id') id: string) { return this.hr.approvePayrollPeriod(context, id); }
 
   @Post('payroll/periods/:id/pay')
+  @Throttle({ default: { limit: 10, ttl: 60_000, blockDuration: 120_000 } })
   @RequirePermission(PERMISSIONS.HR_PAYROLL_MANAGE)
   payPayrollPeriod(@CurrentAuth() context: AuthContext, @Param('id') id: string) { return this.hr.payPayrollPeriod(context, id); }
 
