@@ -37,7 +37,7 @@ export class AccountingService {
       if (Math.abs(debit - money(debit)) > 1e-9 || Math.abs(credit - money(credit)) > 1e-9) {
         throw new Error('Journal amounts must have at most 2 decimal places');
       }
-      if (line.branchId) assertBranchAccess(context, line.branchId);
+      if (line.branchId) { assertBranchAccess(context, line.branchId); if (input.branchId && line.branchId !== input.branchId) throw new Error('Journal line branch must match the journal branch'); }
     }
     const totalDebit = money(input.lines.reduce((s,l)=>s+Number(l.debit||0),0));
     const totalCredit = money(input.lines.reduce((s,l)=>s+Number(l.credit||0),0));
