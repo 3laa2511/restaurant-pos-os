@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../database/prisma.service.js';
 import { hashPassword } from '../auth/auth.service.js';
 import { assertBranchAccess, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
+import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { RoleCode } from '../../generated/prisma/enums.js';
 
 const required = (value: unknown, field: string): string => {
@@ -48,6 +49,10 @@ export class HrService {
     const baseSalary = money(input.baseSalary, 'Base salary');
     const overtimeRate = money(input.overtimeRate ?? 0, 'Overtime rate');
     const roleCode = input.roleCode ?? RoleCode.CASHIER;
+    const privilegedRoles = [RoleCode.BRANCH_MANAGER, RoleCode.HR_MANAGER, RoleCode.ACCOUNTANT, RoleCode.INVENTORY_MANAGER, RoleCode.CENTRAL_ADMIN, RoleCode.OWNER];
+    if (privilegedRoles.includes(roleCode) && !context.permissions.includes(PERMISSIONS.USER_MANAGE)) {
+      throw new Error('Only user administrators can assign privileged employee roles');
+    }
 
     if (input.branchId) assertBranchAccess(context, input.branchId);
     if (input.branchId) {
