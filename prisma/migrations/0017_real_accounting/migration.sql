@@ -1,0 +1,28 @@
+CREATE TYPE "AccountingAccountType" AS ENUM ('ASSET','LIABILITY','EQUITY','REVENUE','EXPENSE');
+CREATE TYPE "JournalEntryStatus" AS ENUM ('POSTED','VOIDED');
+CREATE TABLE "AccountingAccount" ("id" TEXT NOT NULL,"tenantId" TEXT NOT NULL,"code" TEXT NOT NULL,"name" TEXT NOT NULL,"nameAr" TEXT,"type" "AccountingAccountType" NOT NULL,"parentId" TEXT,"active" BOOLEAN NOT NULL DEFAULT true,"allowPosting" BOOLEAN NOT NULL DEFAULT true,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "AccountingAccount_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "AccountingAccount_tenantId_code_key" ON "AccountingAccount"("tenantId","code");
+CREATE INDEX "AccountingAccount_tenantId_type_active_idx" ON "AccountingAccount"("tenantId","type","active");
+CREATE INDEX "AccountingAccount_tenantId_parentId_idx" ON "AccountingAccount"("tenantId","parentId");
+ALTER TABLE "AccountingAccount" ADD CONSTRAINT "AccountingAccount_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "AccountingAccount" ADD CONSTRAINT "AccountingAccount_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "AccountingAccount"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE TABLE "JournalEntry" ("id" TEXT NOT NULL,"tenantId" TEXT NOT NULL,"branchId" TEXT,"entryNumber" TEXT NOT NULL,"entryDate" TIMESTAMP(3) NOT NULL,"postedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"description" TEXT NOT NULL,"sourceType" TEXT,"sourceId" TEXT,"status" "JournalEntryStatus" NOT NULL DEFAULT 'POSTED',"postedById" TEXT NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "JournalEntry_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "JournalEntry_tenantId_entryNumber_key" ON "JournalEntry"("tenantId","entryNumber");
+CREATE UNIQUE INDEX "JournalEntry_tenantId_sourceType_sourceId_key" ON "JournalEntry"("tenantId","sourceType","sourceId");
+CREATE INDEX "JournalEntry_tenantId_branchId_entryDate_idx" ON "JournalEntry"("tenantId","branchId","entryDate");
+CREATE INDEX "JournalEntry_tenantId_status_entryDate_idx" ON "JournalEntry"("tenantId","status","entryDate");
+ALTER TABLE "JournalEntry" ADD CONSTRAINT "JournalEntry_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "JournalEntry" ADD CONSTRAINT "JournalEntry_branchId_fkey" FOREIGN KEY ("branchId") REFERENCES "Branch"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "JournalEntry" ADD CONSTRAINT "JournalEntry_postedById_fkey" FOREIGN KEY ("postedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE TABLE "JournalLine" ("id" TEXT NOT NULL,"entryId" TEXT NOT NULL,"branchId" TEXT,"accountId" TEXT NOT NULL,"debit" DECIMAL(14,2) NOT NULL DEFAULT 0,"credit" DECIMAL(14,2) NOT NULL DEFAULT 0,"memo" TEXT,CONSTRAINT "JournalLine_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "JournalLine_entryId_idx" ON "JournalLine"("entryId");
+CREATE INDEX "JournalLine_accountId_idx" ON "JournalLine"("accountId");
+CREATE INDEX "JournalLine_branchId_idx" ON "JournalLine"("branchId");
+ALTER TABLE "JournalLine" ADD CONSTRAINT "JournalLine_entryId_fkey" FOREIGN KEY ("entryId") REFERENCES "JournalEntry"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "JournalLine" ADD CONSTRAINT "JournalLine_branchId_fkey" FOREIGN KEY ("branchId") REFERENCES "Branch"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "JournalLine" ADD CONSTRAINT "JournalLine_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "AccountingAccount"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE OR REPLACE FUNCTION validate_journal_entry_balance() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE d numeric;c numeric;
+BEGIN SELECT COALESCE(SUM(debit),0),COALESCE(SUM(credit),0) INTO d,c FROM "JournalLine" WHERE "entryId"=NEW."entryId";
+IF d<>c THEN RAISE EXCEPTION 'Journal entry is not balanced'; END IF; RETURN NEW; END; $$;
+CREATE CONSTRAINT TRIGGER journal_entry_balance_check AFTER INSERT OR UPDATE OR DELETE ON "JournalLine" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION validate_journal_entry_balance();
