@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
+import { AccountingService } from '../accounting/accounting.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { paymentStatusAfterAdjustment, validateRefund, type PaymentAdjustmentType } from './payment-refund-policy.js';
 
@@ -38,7 +39,7 @@ function jsonValue(value: unknown): ReturnType<typeof JSON.parse> { return JSON.
 
 @Injectable()
 export class RefundService {
-  constructor(private readonly prisma: PrismaService, private readonly audit: AuditService) {}
+  constructor(private readonly prisma: PrismaService, private readonly audit: AuditService, private readonly accounting: AccountingService) {}
 
   async adjustPayment(context: AuthContext, input: PaymentAdjustmentInput): Promise<PaymentAdjustmentResult> {
     assertPermission(context, input.type === 'VOID' ? PERMISSIONS.PAYMENT_VOID : PERMISSIONS.PAYMENT_REFUND);
@@ -112,6 +113,7 @@ export class RefundService {
         const eventType = input.type === 'VOID' ? 'PAYMENT_VOIDED' : 'PAYMENT_REFUNDED';
         const eventPayload = { operationId, adjustmentId, paymentId: payment.id, type: input.type, amount: input.amount, reason: input.reason.trim(), reference: input.reference?.trim() || null, paymentStatus: nextPaymentStatus, orderStatus };
         await tx.orderEvent.create({ data: { id: randomUUID(), eventId: randomUUID(), orderId: payment.orderId, type: eventType, actorUserId: context.userId, deviceId: context.deviceId ?? input.deviceId, payload: jsonValue(eventPayload), occurredAt: new Date() } });
+        await this.accounting.postPaymentAdjustment(tx, context, { adjustmentId, branchId: payment.order.branchId, amount: input.amount, method: payment.method, type: input.type });
         const after = { payment: { id: payment.id, amount: money(Number(payment.amount.toString())), status: nextPaymentStatus }, order: { id: payment.orderId, status: orderStatus } };
         await this.audit.recordWithClient(tx, context, { action: eventType, entityType: 'PAYMENT', entityId: payment.id, branchId: payment.order.branchId, deviceId: context.deviceId ?? input.deviceId, reason: input.reason, before, after, metadata: { operationId, adjustmentId, type: input.type, amount: input.amount } });
 
