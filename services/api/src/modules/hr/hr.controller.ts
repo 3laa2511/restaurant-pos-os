@@ -48,6 +48,14 @@ export class HrController {
     return this.hr.createPayrollPeriod(context, input);
   }
 
+  @Post('payroll/periods/:id/approve')
+  @RequirePermission(PERMISSIONS.HR_PAYROLL_MANAGE)
+  approvePayrollPeriod(@CurrentAuth() context: AuthContext, @Param('id') id: string) { return this.hr.approvePayrollPeriod(context, id); }
+
+  @Post('payroll/periods/:id/pay')
+  @RequirePermission(PERMISSIONS.HR_PAYROLL_MANAGE)
+  payPayrollPeriod(@CurrentAuth() context: AuthContext, @Param('id') id: string) { return this.hr.payPayrollPeriod(context, id); }
+
   @Get('payroll/periods/:id')
   @RequirePermission(PERMISSIONS.HR_PAYROLL_VIEW)
   getPayrollPeriod(@CurrentAuth() context: AuthContext, @Param('id') id: string) {
