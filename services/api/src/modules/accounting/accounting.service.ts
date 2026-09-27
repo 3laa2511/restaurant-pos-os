@@ -81,11 +81,19 @@ export class AccountingService {
     ]});
   }
 
-  async postInventoryTransfer(tx: Db, context: AuthContext, input: { transferId:string; fromWarehouseId:string; toWarehouseId:string; fromBranchId?:string|null; toBranchId?:string|null; amount:number }) {
+  async postInventoryDispatch(tx: Db, context: AuthContext, input: { transferId:string; fromWarehouseId:string; fromBranchId?:string|null; amount:number }) {
     if (input.amount <= 0) return null;
-    return this.post(tx,context,{sourceType:'INVENTORY_TRANSFER',sourceId:input.transferId,description:'Inventory transfer',branchId:input.toBranchId ?? input.fromBranchId ?? null,lines:[
-      {code:'1300-INVENTORY-'+input.toWarehouseId,name:'Inventory - destination warehouse',type:'ASSET',debit:input.amount,branchId:input.toBranchId},
+    return this.post(tx,context,{sourceType:'INVENTORY_TRANSFER_DISPATCH',sourceId:input.transferId,description:'Inventory transfer dispatched',branchId:input.fromBranchId ?? null,lines:[
+      {code:'1310-INVENTORY-IN-TRANSIT',name:'Inventory In Transit',type:'ASSET',debit:input.amount},
       {code:'1300-INVENTORY-'+input.fromWarehouseId,name:'Inventory - source warehouse',type:'ASSET',credit:input.amount,branchId:input.fromBranchId},
+    ]});
+  }
+
+  async postInventoryReceipt(tx: Db, context: AuthContext, input: { transferId:string; toWarehouseId:string; toBranchId?:string|null; amount:number }) {
+    if (input.amount <= 0) return null;
+    return this.post(tx,context,{sourceType:'INVENTORY_TRANSFER_RECEIPT',sourceId:input.transferId,description:'Inventory transfer received',branchId:input.toBranchId ?? null,lines:[
+      {code:'1300-INVENTORY-'+input.toWarehouseId,name:'Inventory - destination warehouse',type:'ASSET',debit:input.amount,branchId:input.toBranchId},
+      {code:'1310-INVENTORY-IN-TRANSIT',name:'Inventory In Transit',type:'ASSET',credit:input.amount},
     ]});
   }
 
