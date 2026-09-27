@@ -113,6 +113,7 @@ model Tenant {
   active Boolean @default(true)
   currency String @default("EGP")
   branches Branch[]
+  users User[]
   categories Category[]
   products Product[]
   customers Customer[]
@@ -166,6 +167,8 @@ model User {
   displayName String
   passwordHash String
   status UserStatus @default(ACTIVE)
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   branchId String?
   branch Branch? @relation(fields: [branchId], references: [id])
   kitchenStation KitchenStation?
@@ -182,6 +185,7 @@ model User {
   payrollEntries PayrollEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@index([tenantId, status])
 }
 
 model Role {
