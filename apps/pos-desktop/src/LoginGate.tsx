@@ -28,6 +28,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
   const [deviceCode, setDeviceCode] = useState(DEFAULT_DEVICE);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const branchDeviceRequired = workspace === 'POS' || workspace === 'KITCHEN' || workspace === 'DISPATCH';
 
   if (session) return <>{children}</>;
 
@@ -41,8 +42,8 @@ export function LoginGate({ children }: { children: ReactNode }) {
         username: username.trim(),
         password,
         workspace,
-        branchId: branchId.trim() || undefined,
-        deviceCode: deviceCode.trim() || undefined,
+        branchId: branchDeviceRequired ? branchId.trim() || undefined : undefined,
+        deviceCode: branchDeviceRequired ? deviceCode.trim() || undefined : undefined,
       });
       setSession(next);
     } catch (cause) {
@@ -72,8 +73,8 @@ export function LoginGate({ children }: { children: ReactNode }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <label style={labelStyle}>اسم المستخدم<input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required style={inputStyle} /></label>
           <label style={labelStyle}>كلمة المرور<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required style={inputStyle} /></label>
-          <label style={labelStyle}>الفرع<input value={branchId} onChange={(event) => setBranchId(event.target.value)} style={inputStyle} /></label>
-          <label style={labelStyle}>كود الجهاز<input value={deviceCode} onChange={(event) => setDeviceCode(event.target.value)} style={inputStyle} /></label>
+          {branchDeviceRequired && <label style={labelStyle}>الفرع<input value={branchId} onChange={(event) => setBranchId(event.target.value)} style={inputStyle} /></label>}
+          {branchDeviceRequired && <label style={labelStyle}>كود الجهاز<input value={deviceCode} onChange={(event) => setDeviceCode(event.target.value)} style={inputStyle} /> />}</label>
         </div>
 
         {error && <div style={{ margin: '14px 0', padding: 10, borderRadius: 9, border: '1px solid #63373a', color: '#f0a7a7', background: '#211214', fontSize: 11 }}>{error}</div>}
