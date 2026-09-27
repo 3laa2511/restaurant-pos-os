@@ -176,6 +176,10 @@ model User {
   devices Device[]
   sessions Session[]
   cashDrawerMovements CashDrawerMovement[]
+  employeeProfile EmployeeProfile?
+  attendanceRecords AttendanceRecord[]
+  workSchedules WorkSchedule[]
+  payrollEntries PayrollEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
