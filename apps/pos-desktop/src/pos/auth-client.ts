@@ -1,8 +1,11 @@
 export type KitchenStation = 'KITCHEN' | 'BEVERAGE' | 'PACKING';
+export type WorkspaceCode = 'POS' | 'CALL_CENTER' | 'KITCHEN' | 'DISPATCH' | 'HR' | 'ACCOUNTING' | 'INVENTORY' | 'MANAGEMENT';
 
 export interface DesktopSession {
   accessToken: string;
   expiresAt: string;
+  workspace: WorkspaceCode;
+  availableWorkspaces: readonly WorkspaceCode[];
   user: {
     id: string;
     username: string;
@@ -58,7 +61,7 @@ export function clearDesktopSession(): void {
 
 export async function loginDesktop(
   apiBaseUrl: string,
-  input: { username: string; password: string; branchId?: string; deviceCode?: string },
+  input: { username: string; password: string; workspace?: WorkspaceCode; branchId?: string; deviceCode?: string },
 ): Promise<DesktopSession> {
   const response = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/api/auth/login`, {
     method: 'POST',
@@ -74,6 +77,8 @@ export async function loginDesktop(
   const session: DesktopSession = {
     accessToken: body.accessToken,
     expiresAt: String(body.expiresAt),
+    workspace: body.workspace as WorkspaceCode,
+    availableWorkspaces: Array.isArray(body.availableWorkspaces) ? body.availableWorkspaces as WorkspaceCode[] : [],
     user: {
       ...body.user,
       kitchenStation: body.user.kitchenStation ?? null,
