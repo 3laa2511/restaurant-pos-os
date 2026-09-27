@@ -2,7 +2,7 @@ name: POS Desktop Quality Gate
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
   pull_request:
     branches: [main]
 
