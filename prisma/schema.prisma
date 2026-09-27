@@ -358,6 +358,8 @@ model Session {
   tokenHash String @unique
   userId String
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   branchId String?
   branch Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
   deviceId String?
@@ -367,6 +369,7 @@ model Session {
   lastSeenAt DateTime @default(now())
   createdAt DateTime @default(now())
   @@index([userId, revokedAt])
+  @@index([tenantId, revokedAt])
   @@index([expiresAt])
   @@index([deviceId, revokedAt])
 }
