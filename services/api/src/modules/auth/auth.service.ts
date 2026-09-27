@@ -187,6 +187,16 @@ export class AuthService {
       throw new UnauthorizedException('Session is expired or revoked');
     }
 
+    if (session.user.tenantId !== session.tenantId) {
+      throw new UnauthorizedException('Session tenant scope is invalid');
+    }
+    if (session.branch !== null && session.branch.tenantId !== session.tenantId) {
+      throw new UnauthorizedException('Session branch scope is invalid');
+    }
+    if (session.user.branchId !== null && session.branchId !== null && session.user.branchId !== session.branchId) {
+      throw new UnauthorizedException('Session user branch scope is invalid');
+    }
+
     const roles = session.user.roleLinks.map(({ role }) => role.code as RoleCode);
     if (roles.length === 0) throw new UnauthorizedException('User has no assigned role');
     const permissions = [...new Set(roles.flatMap((role) => permissionsForRole(role)))];
