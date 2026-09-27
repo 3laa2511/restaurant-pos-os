@@ -4,6 +4,7 @@ import { PrismaService } from '../../database/prisma.service.js';
 import { hashPassword } from '../auth/auth.service.js';
 import { assertBranchAccess, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
+import { AccountingService } from '../accounting/accounting.service.js';
 import { RoleCode } from '../../generated/prisma/enums.js';
 
 const required = (value: unknown, field: string): string => {
@@ -23,7 +24,7 @@ const day = (value: string): Date => {
 
 @Injectable()
 export class HrService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingService) {}
 
   async listEmployees(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
@@ -130,6 +131,35 @@ export class HrService {
         await tx.payrollEntry.create({ data: { id: randomUUID(), tenantId, periodId: period.id, userId: employee.userId, baseSalary: employee.baseSalary, overtimeAmount, bonuses: bonus, deductions: deduction, netAmount } });
       }
       return tx.payrollPeriod.findUnique({ where: { id: period.id }, include: { entries: true } });
+    });
+  }
+
+
+  async approvePayrollPeriod(context: AuthContext, id: string) {
+    const tenantId = assertTenantScope(context);
+    return this.prisma.$transaction(async tx => {
+      const period = await tx.payrollPeriod.findFirst({ where: { id, tenantId }, include: { entries: { include: { user: { select: { branchId: true } } } } } });
+      if (!period) throw new Error('Payroll period not found');
+      if (period.status !== 'DRAFT') throw new Error('Only draft payroll periods can be approved');
+      const allocations = new Map<string|null, number>();
+      for (const e of period.entries) allocations.set(e.user.branchId, (allocations.get(e.user.branchId) ?? 0) + Number(e.netAmount));
+      const total = Array.from(allocations.values()).reduce((a,b)=>a+b,0);
+      await this.accounting.postPayrollAccrual(tx, context, { periodId: period.id, total, allocations: Array.from(allocations.entries()).map(([branchId,amount])=>({branchId,amount})) });
+      return tx.payrollPeriod.update({ where: { id: period.id }, data: { status: 'APPROVED' }, include: { entries: true } });
+    });
+  }
+
+  async payPayrollPeriod(context: AuthContext, id: string) {
+    const tenantId = assertTenantScope(context);
+    return this.prisma.$transaction(async tx => {
+      const period = await tx.payrollPeriod.findFirst({ where: { id, tenantId }, include: { entries: true } });
+      if (!period) throw new Error('Payroll period not found');
+      if (period.status !== 'APPROVED') throw new Error('Only approved payroll periods can be paid');
+      const total = period.entries.reduce((sum,e)=>sum+Number(e.netAmount),0);
+      if (total <= 0) throw new Error('Payroll total must be greater than zero');
+      await this.accounting.postPayrollPayment(tx, context, { periodId: period.id, total });
+      await tx.payrollEntry.updateMany({ where: { periodId: period.id }, data: { paidAt: new Date() } });
+      return tx.payrollPeriod.update({ where: { id: period.id }, data: { status: 'PAID' }, include: { entries: true } });
     });
   }
 
