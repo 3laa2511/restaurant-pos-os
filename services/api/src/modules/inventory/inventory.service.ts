@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma, InventoryUnit } from '../../generated/prisma/client.js';
+import { AccountingService } from '../accounting/accounting.service.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
 
 const n=(v:unknown,f:string)=>{const x=Number(v);if(!Number.isFinite(x)||x<0)throw new Error(f+' must be non-negative');return x;};
 @Injectable()
 export class InventoryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingService) {}
 
   async listIngredients(context: AuthContext) {
     return this.prisma.ingredient.findMany({ where:{ tenantId:assertTenantScope(context), active:true }, orderBy:{name:'asc'} });
@@ -132,16 +133,20 @@ export class InventoryService {
       if (!transfer) throw new Error('Transfer not found');
       if (transfer.fromWarehouse.branchId) assertBranchAccess(context, transfer.fromWarehouse.branchId);
       if (transfer.status !== 'APPROVED') throw new Error('Only approved transfers can be dispatched');
+      let transferAmount = 0;
+      let transferAmount = 0;
       for (const item of transfer.items) {
         const qty = Number(item.quantityBaseUnit);
         const stock = await tx.warehouseStockBalance.findUnique({ where: { warehouseId_ingredientId: { warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId } } });
         const current = stock ? Number(stock.quantityBaseUnit) : 0;
         if (current < qty) throw new Error('Insufficient stock for ingredient ' + item.ingredientId);
         const unitCost = stock ? Number(stock.averageCostPerBaseUnit) : 0;
+        transferAmount += qty * unitCost;
         await tx.warehouseStockBalance.update({ where: { warehouseId_ingredientId: { warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId } }, data: { quantityBaseUnit: current - qty } });
         await tx.inventoryTransferItem.update({ where: { id: item.id }, data: { unitCost } });
         await tx.inventoryMovement.create({ data: { id: randomUUID(), tenantId, branchId: transfer.fromWarehouse.branchId, warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId, type: 'TRANSFER_OUT', quantityBaseUnit: qty, unitCost, referenceType: 'INVENTORY_TRANSFER', referenceId: transfer.id, idempotencyKey: 'transfer-out:' + transfer.id + ':' + item.id, actorUserId: context.userId } });
       }
+      await this.accounting.postInventoryDispatch(tx, context, { transferId: transfer.id, fromWarehouseId: transfer.fromWarehouseId, fromBranchId: transfer.fromWarehouse.branchId, amount: transferAmount });
       return tx.inventoryTransfer.update({ where: { id: transfer.id }, data: { status: 'IN_TRANSIT', sentAt: new Date() }, include: { items: true } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
@@ -156,6 +161,7 @@ export class InventoryService {
       for (const item of transfer.items) {
         const qty = Number(item.quantityBaseUnit);
         const unitCost = Number(item.unitCost);
+        transferAmount += qty * unitCost;
         const stock = await tx.warehouseStockBalance.findUnique({ where: { warehouseId_ingredientId: { warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId } } });
         const oldQty = stock ? Number(stock.quantityBaseUnit) : 0;
         const oldAvg = stock ? Number(stock.averageCostPerBaseUnit) : 0;
@@ -164,6 +170,7 @@ export class InventoryService {
         await tx.warehouseStockBalance.upsert({ where: { warehouseId_ingredientId: { warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId } }, update: { quantityBaseUnit: newQty, averageCostPerBaseUnit: newAvg }, create: { id: randomUUID(), tenantId, warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId, quantityBaseUnit: qty, averageCostPerBaseUnit: unitCost } });
         await tx.inventoryMovement.create({ data: { id: randomUUID(), tenantId, branchId: transfer.toWarehouse.branchId, warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId, type: 'TRANSFER_IN', quantityBaseUnit: qty, unitCost, referenceType: 'INVENTORY_TRANSFER', referenceId: transfer.id, idempotencyKey: 'transfer-in:' + transfer.id + ':' + item.id, actorUserId: context.userId } });
       }
+      await this.accounting.postInventoryReceipt(tx, context, { transferId: transfer.id, toWarehouseId: transfer.toWarehouseId, toBranchId: transfer.toWarehouse.branchId, amount: transferAmount });
       return tx.inventoryTransfer.update({ where: { id: transfer.id }, data: { status: 'RECEIVED', receivedAt: new Date() }, include: { items: true } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
