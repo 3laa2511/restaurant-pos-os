@@ -98,6 +98,26 @@ export class AccountingService {
     ]});
   }
 
+
+  async postInventoryPurchase(tx: Db, context: AuthContext, input:{receiptId:string;branchId:string;amount:number}) {
+    if(input.amount<=0) return null;
+    return this.post(tx,context,{sourceType:'INVENTORY_PURCHASE',sourceId:input.receiptId,description:'Inventory purchase',branchId:input.branchId,lines:[
+      {code:'1200-INVENTORY',name:'Inventory',type:'ASSET',debit:input.amount,branchId:input.branchId},
+      {code:'2200-ACCOUNTS-PAYABLE',name:'Accounts Payable',type:'LIABILITY',credit:input.amount,branchId:input.branchId},
+    ]});
+  }
+
+  async postInventoryAdjustment(tx: Db, context: AuthContext, input:{movementId:string;branchId:string;amount:number;direction:'IN'|'OUT'}) {
+    if(input.amount<=0) return null;
+    return this.post(tx,context,{sourceType:'INVENTORY_ADJUSTMENT',sourceId:input.movementId,description:'Inventory adjustment',branchId:input.branchId,lines:input.direction==='IN' ? [
+      {code:'1200-INVENTORY',name:'Inventory',type:'ASSET',debit:input.amount,branchId:input.branchId},
+      {code:'4300-INVENTORY-GAIN',name:'Inventory Adjustment Gain',type:'REVENUE',credit:input.amount,branchId:input.branchId},
+    ] : [
+      {code:'6300-INVENTORY-LOSS',name:'Inventory Adjustment Loss',type:'EXPENSE',debit:input.amount,branchId:input.branchId},
+      {code:'1200-INVENTORY',name:'Inventory',type:'ASSET',credit:input.amount,branchId:input.branchId},
+    ]});
+  }
+
   async postPayrollAccrual(tx: Db, context: AuthContext, input:{periodId:string; total:number; allocations:Array<{branchId?:string|null;amount:number}>}) {
     const lines:Line[]=[];
     for(const a of input.allocations) if(a.amount>0) {
