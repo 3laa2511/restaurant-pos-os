@@ -25,6 +25,7 @@ describe('MenuService tenant and branch isolation', () => {
     const service = new MenuService({
       category: { findMany: categoryFindMany },
       branchProduct: { findMany: branchProductFindMany },
+      branch: { findFirst: branchFindFirst },
     } as never);
 
     const context = {
@@ -38,10 +39,6 @@ describe('MenuService tenant and branch isolation', () => {
       kitchenStation: null,
     } satisfies AuthContext;
 
-    // The branch lookup is intentionally supplied through the Prisma mock.
-    (service as unknown as { prisma: { branch: { findFirst: typeof branchFindFirst } } }).prisma.branch = {
-      findFirst: branchFindFirst,
-    };
 
     const result = await service.listActiveMenu(context);
 
