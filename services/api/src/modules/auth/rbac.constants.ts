@@ -7,6 +7,9 @@ export const ROLE_CODES = {
   BRANCH_MANAGER: 'BRANCH_MANAGER',
   CENTRAL_ADMIN: 'CENTRAL_ADMIN',
   OWNER: 'OWNER',
+  HR_MANAGER: 'HR_MANAGER',
+  ACCOUNTANT: 'ACCOUNTANT',
+  INVENTORY_MANAGER: 'INVENTORY_MANAGER',
 } as const;
 
 export const PERMISSIONS = {
@@ -33,6 +36,14 @@ export const PERMISSIONS = {
   AUDIT_VIEW: 'audit.view',
   AUDIT_POLICY_MANAGE: 'audit.policy_manage',
   KITCHEN_TICKET_MANAGE: 'kitchen.ticket_manage',
+  HR_EMPLOYEE_MANAGE: 'hr.employee_manage',
+  HR_ATTENDANCE_MANAGE: 'hr.attendance_manage',
+  HR_PAYROLL_VIEW: 'hr.payroll_view',
+  HR_PAYROLL_MANAGE: 'hr.payroll_manage',
+  INVENTORY_VIEW: 'inventory.view',
+  INVENTORY_PURCHASE: 'inventory.purchase',
+  INVENTORY_ADJUST: 'inventory.adjust',
+  RECIPE_MANAGE: 'inventory.recipe_manage',
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
