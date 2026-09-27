@@ -4,6 +4,7 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
+import { AccountingService } from '../accounting/accounting.service.js';
 import { validateSplitPayment, type PaymentAllocation } from './split-payment-policy.js';
 
 export interface PersistSplitPaymentInput { orderId: string; shiftId: string; allocations: readonly PaymentAllocation[]; idempotencyKey: string; deviceId: string; clientSequence: number; }
@@ -19,7 +20,7 @@ const jsonValue = (value: unknown): ReturnType<typeof JSON.parse> => JSON.parse(
 
 @Injectable()
 export class PaymentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingService) {}
 
   async settleSplitPayment(context: AuthContext, input: PersistSplitPaymentInput): Promise<PersistSplitPaymentResult> {
     assertPermission(context, PERMISSIONS.PAYMENT_CREATE); const tenantId = assertTenantScope(context); requireText(input.orderId, 'Order'); requireText(input.shiftId, 'Shift'); requireText(input.idempotencyKey, 'Idempotency key'); requireText(input.deviceId, 'Device');
@@ -69,6 +70,7 @@ export class PaymentService {
           if (transition.count !== 1) throw new Error('Order was changed by another operation before payment could be finalized');
           const eventPayload = { operationId, totalPaid: validated.totalAllocated, paymentCount: input.allocations.length, paymentIds, change: validated.change };
           await tx.orderEvent.create({ data: { id: randomUUID(), eventId: randomUUID(), orderId: input.orderId, type: 'ORDER_PAID', actorUserId: context.userId, deviceId: input.deviceId, payload: jsonValue(eventPayload), occurredAt: new Date() } });
+          await this.accounting.postSale(tx, context, { orderId: input.orderId, branchId: order.branchId, amount: validated.totalAllocated, payments: input.allocations.map(a => ({ method: a.method, amount: a.amount })) });
           await tx.auditLog.create({ data: { id: randomUUID(), actorUserId: context.userId, branchId: order.branchId, action: 'PAYMENT_SETTLED', entityType: 'ORDER', entityId: input.orderId, metadata: jsonValue(eventPayload) } });
           const result: PersistSplitPaymentResult = { operationId, orderId: input.orderId, status: 'PAID', totalPaid: validated.totalAllocated, change: validated.change, paymentIds };
           await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: input.deviceId, branchId: order.branchId, operation: 'PAYMENT_SETTLED', entityType: 'ORDER', entityId: input.orderId, idempotencyKey: input.idempotencyKey, clientSequence: input.clientSequence, occurredAt: new Date(), payload: jsonValue({ orderId: input.orderId, shiftId: input.shiftId, allocations: input.allocations, paymentIds }), requestHash, status: 'APPLIED', result: jsonValue(result), updatedAt: new Date() } });
