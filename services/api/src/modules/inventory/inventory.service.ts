@@ -68,7 +68,9 @@ export class InventoryService {
   async listWarehouses(context: AuthContext) {
     const tenantId = assertTenantScope(context);
     return this.prisma.warehouse.findMany({
-      where: { tenantId, active: true },
+      where: context.branchId
+        ? { tenantId, active: true, OR: [{ branchId: context.branchId }, { type: 'CENTRAL' }] }
+        : { tenantId, active: true },
       include: { branch: { select: { id: true, code: true, name: true } } },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     });
@@ -77,7 +79,13 @@ export class InventoryService {
   async listTransfers(context: AuthContext, status?: string) {
     const tenantId = assertTenantScope(context);
     return this.prisma.inventoryTransfer.findMany({
-      where: { tenantId, ...(status ? { status } : {}) },
+      where: {
+        tenantId,
+        ...(status ? { status } : {}),
+        ...(context.branchId
+          ? { OR: [{ fromWarehouse: { branchId: context.branchId } }, { toWarehouse: { branchId: context.branchId } }, { fromWarehouse: { type: 'CENTRAL' }, toWarehouse: { branchId: context.branchId } }, { fromWarehouse: { branchId: context.branchId }, toWarehouse: { type: 'CENTRAL' } }] }
+          : {}),
+      },
       include: {
         fromWarehouse: { select: { id: true, code: true, name: true, type: true, branchId: true } },
         toWarehouse: { select: { id: true, code: true, name: true, type: true, branchId: true } },
