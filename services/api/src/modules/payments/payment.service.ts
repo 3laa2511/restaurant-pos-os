@@ -5,7 +5,6 @@ import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AccountingService } from '../accounting/accounting.service.js';
-import { AccountingService } from '../accounting/accounting.service.js';
 import { validateSplitPayment, type PaymentAllocation } from './split-payment-policy.js';
 
 export interface PersistSplitPaymentInput { orderId: string; shiftId: string; allocations: readonly PaymentAllocation[]; idempotencyKey: string; deviceId: string; clientSequence: number; }
@@ -63,7 +62,6 @@ export class PaymentService {
             const changeAmount = allocation.method === 'CASH' ? money(Math.max(0, (receivedAmount ?? allocation.amount) - allocation.amount)) : 0;
             await tx.payment.create({ data: { id: paymentId, orderId: input.orderId, shiftId: input.shiftId, amount: allocation.amount.toFixed(2), method: allocation.method, reference: allocation.reference?.trim() || null, receivedAmount: receivedAmount === null ? null : receivedAmount.toFixed(2), changeAmount: changeAmount.toFixed(2), status: 'PAID', idempotencyKey: `${input.idempotencyKey}:payment:${index}` } });
           }
-          await this.accounting.postSale(tx, context, { orderId: input.orderId, branchId: order.branchId, amount: Number(order.total), payments: input.allocations.map((a) => ({ method: a.method, amount: a.amount })) });
           if (drawer) {
             if (cashSale > 0) await tx.cashDrawerMovement.create({ data: { id: randomUUID(), drawerId: drawer.id, branchId: order.branchId, deviceId: input.deviceId, shiftId: input.shiftId, userId: context.userId, type: 'SALE', direction: 'IN', amount: cashSale.toFixed(2), reason: `Cash sale for order ${order.id}`, sourceType: 'PAYMENT_OPERATION', sourceId: operationId, idempotencyKey: `${input.idempotencyKey}:drawer:sale`, operationId: `${operationId}:sale`, metadata: jsonValue({ orderId: order.id, paymentIds }), occurredAt: new Date() } });
             if (cashChange > 0) await tx.cashDrawerMovement.create({ data: { id: randomUUID(), drawerId: drawer.id, branchId: order.branchId, deviceId: input.deviceId, shiftId: input.shiftId, userId: context.userId, type: 'CASH_CHANGE', direction: 'OUT', amount: cashChange.toFixed(2), reason: `Change for order ${order.id}`, sourceType: 'PAYMENT_OPERATION', sourceId: operationId, idempotencyKey: `${input.idempotencyKey}:drawer:change`, operationId: `${operationId}:change`, metadata: jsonValue({ orderId: order.id, paymentIds }), occurredAt: new Date() } });
