@@ -130,7 +130,7 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
 
     const session = await this.prisma.session.create({
-      data: { tokenHash: hashToken(accessToken), userId: user.id, branchId: selectedBranchId, deviceId, workspace: workspace as never, expiresAt },
+      data: { tokenHash: hashToken(accessToken), userId: user.id, tenantId: user.tenantId, branchId: selectedBranchId, deviceId, workspace: workspace as never, expiresAt },
       select: { id: true },
     });
 
@@ -169,6 +169,7 @@ export class AuthService {
     const session = await this.prisma.session.findUnique({
       where: { tokenHash: hashToken(accessToken) },
       include: {
+        tenant: { select: { id: true } },
         branch: { select: { tenantId: true } },
         user: {
           select: {
@@ -195,7 +196,7 @@ export class AuthService {
         {
           sessionId: session.id,
           userId: session.user.id,
-          tenantId: session.user.tenantId,
+          tenantId: session.tenantId,
           branchId: session.branchId,
           deviceId: session.deviceId,
           expiresAt: session.expiresAt,
