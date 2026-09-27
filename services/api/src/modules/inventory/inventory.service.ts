@@ -155,6 +155,7 @@ export class InventoryService {
   async receiveTransfer(context: AuthContext, transferId: string) {
     const tenantId = assertTenantScope(context);
     return this.prisma.$transaction(async tx => {
+      let transferAmount = 0;
       const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
       if (!transfer) throw new Error('Transfer not found');
       if (transfer.toWarehouse.branchId) assertBranchAccess(context, transfer.toWarehouse.branchId);
