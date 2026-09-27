@@ -140,6 +140,7 @@ model Tenant {
   recipeIngredients RecipeIngredient[]
   accountingAccounts AccountingAccount[]
   journalEntries JournalEntry[]
+  postedJournalEntries JournalEntry[] @relation("PostedJournalEntries")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([active])
@@ -155,7 +156,6 @@ model Branch {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   users User[]
   journalEntries JournalEntry[]
-  journalLines JournalLine[]
   devices Device[]
   orders Order[]
   shifts Shift[]
@@ -170,6 +170,7 @@ model Branch {
   inventoryStockBalances InventoryStockBalance[]
   inventoryReceipts InventoryReceipt[]
   inventoryMovements InventoryMovement[]
+  journalLines JournalLine[]
   warehouses Warehouse[]
   departments Department[]
   createdAt DateTime @default(now())
@@ -191,7 +192,6 @@ model AccountingAccount {
   children AccountingAccount[] @relation("AccountTree")
   active Boolean @default(true)
   allowPosting Boolean @default(true)
-  journalLines JournalLine[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([tenantId, code])
@@ -264,6 +264,7 @@ model User {
   attendanceRecords AttendanceRecord[]
   workSchedules WorkSchedule[]
   payrollEntries PayrollEntry[]
+  postedJournalEntries JournalEntry[] @relation("PostedJournalEntries")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([tenantId, status])
