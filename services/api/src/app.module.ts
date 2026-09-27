@@ -13,6 +13,7 @@ import { KitchenModule } from './modules/kitchen/kitchen.module.js';
 import { HrModule } from './modules/hr/hr.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { AccountingModule } from './modules/accounting/accounting.module.js';
+import { AccountingModule } from './modules/accounting/accounting.module.js';
 
 @Module({
   imports: [DatabaseModule, AuthModule, HealthModule, OrderModule, PaymentModule, ShiftModule, CashDrawerModule, SyncModule, MenuModule, AuditModule, KitchenModule, HrModule, InventoryModule, AccountingModule],
