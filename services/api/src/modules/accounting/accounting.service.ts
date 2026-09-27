@@ -23,7 +23,7 @@ export class AccountingService {
   }
 
   async post(tx: Db, context: AuthContext, input: { sourceType: string; sourceId: string; description: string; branchId?: string|null; lines: Line[] }) {
-    assertPermission(context, PERMISSIONS.ACCOUNTING_POST); const tenantId = assertTenantScope(context);
+    const tenantId = assertTenantScope(context);
     if (!input.lines.length) throw new Error('Journal entry requires lines');
     const totalDebit = money(input.lines.reduce((s,l)=>s+Number(l.debit||0),0));
     const totalCredit = money(input.lines.reduce((s,l)=>s+Number(l.credit||0),0));
