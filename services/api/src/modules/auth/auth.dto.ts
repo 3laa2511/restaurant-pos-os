@@ -13,7 +13,7 @@ export class LoginDto {
   password!: string;
 
   @IsOptional()
-  @IsIn(WORKSPACES)
+  @IsIn(Object.values(WORKSPACES))
   workspace?: WorkspaceCode;
 
   @IsOptional()
