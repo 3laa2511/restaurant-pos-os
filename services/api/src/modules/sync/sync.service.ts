@@ -39,8 +39,8 @@ export class SyncService {
 
   async submit(context: AuthContext, envelope: SyncEnvelope): Promise<SyncResult> {
     const tenantId = assertTenantScope(context);
-    this.assertDeviceScope(context, envelope.deviceId, envelope.branchId);
     validateSyncEnvelope(envelope);
+    this.assertDeviceScope(context, envelope.deviceId, envelope.branchId);
     const branch = await this.prisma.branch.findFirst({ where: { id: envelope.branchId, tenantId, active: true }, select: { id: true } });
     if (!branch) throw new Error('Forbidden: branch does not belong to the authenticated tenant');
     const requestHash = createHash('sha256').update(JSON.stringify(envelope)).digest('hex');
