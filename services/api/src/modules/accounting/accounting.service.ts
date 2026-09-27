@@ -42,6 +42,18 @@ export class AccountingService {
     });
   }
 
+  async postManual(context: AuthContext, input: { branchId?: string|null; sourceType?: string; sourceId?: string; description: string; lines: Line[] }) {
+    assertPermission(context, PERMISSIONS.ACCOUNTING_POST);
+    const tenantId = assertTenantScope(context);
+    return this.prisma.$transaction((tx) => this.post(tx, context, {
+      sourceType: input.sourceType ?? 'MANUAL',
+      sourceId: input.sourceId ?? randomUUID(),
+      description: input.description,
+      branchId: input.branchId,
+      lines: input.lines,
+    }));
+  }
+
   async trialBalance(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
     return this.prisma.journalLine.groupBy({
