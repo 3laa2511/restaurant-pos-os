@@ -32,6 +32,30 @@ export class InventoryController {
   @RequirePermission(PERMISSIONS.INVENTORY_ADJUST)
   adjust(@CurrentAuth() context: AuthContext, @Body() input: Parameters<InventoryService['adjust']>[1]) { return this.inventory.adjust(context, input); }
 
+  @Get('warehouses')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
+  warehouses(@CurrentAuth() context: AuthContext) { return this.inventory.listWarehouses(context); }
+
+  @Get('transfers')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
+  transfers(@CurrentAuth() context: AuthContext, @Query('status') status?: string) { return this.inventory.listTransfers(context, status); }
+
+  @Post('transfers')
+  @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
+  createTransfer(@CurrentAuth() context: AuthContext, @Body() input: Parameters<InventoryService['createTransfer']>[1]) { return this.inventory.createTransfer(context, input); }
+
+  @Post('transfers/:transferId/approve')
+  @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
+  approveTransfer(@CurrentAuth() context: AuthContext, @Param('transferId') transferId: string) { return this.inventory.approveTransfer(context, transferId); }
+
+  @Post('transfers/:transferId/dispatch')
+  @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
+  dispatchTransfer(@CurrentAuth() context: AuthContext, @Param('transferId') transferId: string) { return this.inventory.dispatchTransfer(context, transferId); }
+
+  @Post('transfers/:transferId/receive')
+  @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
+  receiveTransfer(@CurrentAuth() context: AuthContext, @Param('transferId') transferId: string) { return this.inventory.receiveTransfer(context, transferId); }
+
   @Post('recipes/:productId')
   @RequirePermission(PERMISSIONS.RECIPE_MANAGE)
   setRecipe(@CurrentAuth() context: AuthContext, @Param('productId') productId: string, @Body() input: Parameters<InventoryService['setRecipe']>[2]) { return this.inventory.setRecipe(context, productId, input); }
