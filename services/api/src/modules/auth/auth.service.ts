@@ -175,6 +175,7 @@ export class AuthService {
           select: {
             id: true,
             tenantId: true,
+            branchId: true,
             status: true,
             kitchenStation: true,
             roleLinks: { include: { role: { select: { code: true } } } },
