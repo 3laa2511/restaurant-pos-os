@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentAuth } from '../auth/auth.decorators.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { RequirePermission } from '../auth/permission.decorator.js';
@@ -53,6 +54,7 @@ export class PaymentController {
   }
 
   @Post('refund')
+  @Throttle({ default: { limit: 20, ttl: 60_000, blockDuration: 120_000 } })
   @RequirePermission(PERMISSIONS.PAYMENT_REFUND)
   refund(@CurrentAuth() context: AuthContext, @Body() body: AdjustmentBody) {
     return this.refunds.refundPayment(context, {
@@ -64,6 +66,7 @@ export class PaymentController {
   }
 
   @Post('void')
+  @Throttle({ default: { limit: 20, ttl: 60_000, blockDuration: 120_000 } })
   @RequirePermission(PERMISSIONS.PAYMENT_VOID)
   void(@CurrentAuth() context: AuthContext, @Body() body: AdjustmentBody) {
     return this.refunds.voidPayment(context, {
