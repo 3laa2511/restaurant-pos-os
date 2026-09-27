@@ -41,6 +41,7 @@ export const PERMISSIONS = {
   HR_PAYROLL_VIEW: 'hr.payroll_view',
   HR_PAYROLL_MANAGE: 'hr.payroll_manage',
   INVENTORY_VIEW: 'inventory.view',
+  ACCOUNTING_VIEW: 'accounting.view',
   ACCOUNTING_POST: 'accounting.post',
   ACCOUNTING_MANAGE: 'accounting.manage',
   INVENTORY_PURCHASE: 'inventory.purchase',
