@@ -1,6 +1,7 @@
 import type { KitchenStation } from '../../generated/prisma/enums.js';
 import type { AuthContext } from './authorization.types.js';
 import type { WorkspaceCode } from './workspace.constants.js';
+import { WORKSPACES } from './workspace.constants.js';
 
 export interface SessionRecord {
   sessionId: string;
@@ -24,7 +25,7 @@ export function buildAuthContext(
   roles: readonly AuthContext['roles'][number][],
   permissions: AuthContext['permissions'],
   kitchenStation: KitchenStation | null = null,
-  workspace: WorkspaceCode,
+  workspace: WorkspaceCode = WORKSPACES.POS,
 ): AuthContext {
   assertSessionActive(session);
   return {
