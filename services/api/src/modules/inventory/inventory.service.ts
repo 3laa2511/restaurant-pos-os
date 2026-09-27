@@ -45,8 +45,8 @@ export class InventoryService {
         const existing=await tx.inventoryStockBalance.findUnique({where:{branchId_ingredientId:{branchId:input.branchId,ingredientId:x.ingredientId}}});
         const oldQty=existing?Number(existing.quantityBaseUnit):0; const oldAvg=existing?Number(existing.averageCostPerBaseUnit):0;
         const newQty=oldQty+x.baseQty; const newAvg=newQty===0?0:((oldQty*oldAvg)+(x.baseQty*x.baseUnitCost))/newQty;
-        await tx.inventoryStockBalance.upsert({where:{branchId_ingredientId:{branchId:input.branchId,ingredientId:x.ingredient.id}},update:{quantityBaseUnit:newQty,averageCostPerBaseUnit:newAvg},create:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:x.ingredient.id,quantityBaseUnit:x.baseQty,averageCostPerBaseUnit:x.unitCost/Number(x.ingredient.purchaseUnitFactor)}});
-        await tx.inventoryMovement.create({data:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:x.ingredient.id,type:'PURCHASE',quantityBaseUnit:x.baseQty,unitCost:x.baseUnitCost,referenceType:'RECEIPT',referenceId:receipt.id,idempotencyKey:`${receipt.id}:${x.ingredient.id}`,actorUserId:context.userId}});
+        await tx.inventoryStockBalance.upsert({where:{branchId_ingredientId:{branchId:input.branchId,ingredientId:x.ingredientId}},update:{quantityBaseUnit:newQty,averageCostPerBaseUnit:newAvg},create:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:x.ingredientId,quantityBaseUnit:x.baseQty,averageCostPerBaseUnit:x.unitCost/Number(x.purchaseUnitFactor)}});
+        await tx.inventoryMovement.create({data:{id:randomUUID(),tenantId,branchId:input.branchId,ingredientId:x.ingredientId,type:'PURCHASE',quantityBaseUnit:x.baseQty,unitCost:x.baseUnitCost,referenceType:'RECEIPT',referenceId:receipt.id,idempotencyKey:`${receipt.id}:${x.ingredientId}`,actorUserId:context.userId}});
       }
       return receipt;
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
