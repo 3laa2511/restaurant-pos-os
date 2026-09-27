@@ -7,6 +7,7 @@ import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { HrService } from './hr.service.js';
+import { AttendanceDto, CreateEmployeeDto, CreatePayrollPeriodDto } from './hr.dto.js';
 
 @Controller('hr')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -15,39 +16,27 @@ export class HrController {
 
   @Get('employees')
   @RequirePermission(PERMISSIONS.HR_EMPLOYEE_MANAGE)
-  listEmployees(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) {
-    return this.hr.listEmployees(context, branchId);
-  }
+  listEmployees(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) { return this.hr.listEmployees(context, branchId); }
 
   @Post('employees')
   @RequirePermission(PERMISSIONS.HR_EMPLOYEE_MANAGE)
-  createEmployee(@CurrentAuth() context: AuthContext, @Body() input: Parameters<HrService['createEmployee']>[1]) {
-    return this.hr.createEmployee(context, input);
-  }
+  createEmployee(@CurrentAuth() context: AuthContext, @Body() input: CreateEmployeeDto) { return this.hr.createEmployee(context, input); }
 
   @Get('attendance')
   @RequirePermission(PERMISSIONS.HR_ATTENDANCE_MANAGE)
-  listAttendance(@CurrentAuth() context: AuthContext, @Query('from') from?: string, @Query('to') to?: string, @Query('branchId') branchId?: string) {
-    return this.hr.listAttendance(context, { from, to, branchId });
-  }
+  listAttendance(@CurrentAuth() context: AuthContext, @Query('from') from?: string, @Query('to') to?: string, @Query('branchId') branchId?: string) { return this.hr.listAttendance(context, { from, to, branchId }); }
 
   @Post('attendance/check-in')
   @RequirePermission(PERMISSIONS.HR_ATTENDANCE_MANAGE)
-  checkIn(@CurrentAuth() context: AuthContext, @Body() input: Parameters<HrService['checkIn']>[1]) {
-    return this.hr.checkIn(context, input);
-  }
+  checkIn(@CurrentAuth() context: AuthContext, @Body() input: AttendanceDto) { return this.hr.checkIn(context, input); }
 
   @Post('attendance/check-out')
   @RequirePermission(PERMISSIONS.HR_ATTENDANCE_MANAGE)
-  checkOut(@CurrentAuth() context: AuthContext, @Body() input: Parameters<HrService['checkOut']>[1]) {
-    return this.hr.checkOut(context, input);
-  }
+  checkOut(@CurrentAuth() context: AuthContext, @Body() input: AttendanceDto) { return this.hr.checkOut(context, input); }
 
   @Post('payroll/periods')
   @RequirePermission(PERMISSIONS.HR_PAYROLL_MANAGE)
-  createPayrollPeriod(@CurrentAuth() context: AuthContext, @Body() input: Parameters<HrService['createPayrollPeriod']>[1]) {
-    return this.hr.createPayrollPeriod(context, input);
-  }
+  createPayrollPeriod(@CurrentAuth() context: AuthContext, @Body() input: CreatePayrollPeriodDto) { return this.hr.createPayrollPeriod(context, input); }
 
   @Post('payroll/periods/:id/approve')
   @Throttle({ default: { limit: 10, ttl: 60_000, blockDuration: 120_000 } })
@@ -61,7 +50,5 @@ export class HrController {
 
   @Get('payroll/periods/:id')
   @RequirePermission(PERMISSIONS.HR_PAYROLL_VIEW)
-  getPayrollPeriod(@CurrentAuth() context: AuthContext, @Param('id') id: string) {
-    return this.hr.getPayrollPeriod(context, id);
-  }
+  getPayrollPeriod(@CurrentAuth() context: AuthContext, @Param('id') id: string) { return this.hr.getPayrollPeriod(context, id); }
 }
