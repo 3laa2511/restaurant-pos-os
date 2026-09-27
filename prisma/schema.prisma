@@ -115,6 +115,7 @@ model Tenant {
   currency String @default("EGP")
   branches Branch[]
   users User[]
+  branchProducts BranchProduct[]
   categories Category[]
   products Product[]
   customers Customer[]
@@ -151,6 +152,7 @@ model Branch {
   cashDrawerMovements CashDrawerMovement[]
   riskPolicies RiskPolicy[]
   kitchenTickets KitchenTicket[]
+  branchProducts BranchProduct[]
   workSchedules WorkSchedule[]
   attendanceRecords AttendanceRecord[]
   inventoryStockBalances InventoryStockBalance[]
@@ -290,11 +292,30 @@ model Product {
   category Category @relation(fields: [categoryId], references: [id])
   orderItems OrderItem[]
   recipeIngredients RecipeIngredient[]
+  branchProducts BranchProduct[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([tenantId, sku])
   @@index([tenantId, active])
   @@index([categoryId, active])
+}
+
+model BranchProduct {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  priceOverride Decimal? @db.Decimal(12, 2)
+  enabled Boolean @default(true)
+  available Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([branchId, productId])
+  @@index([tenantId, branchId, enabled, available])
+  @@index([productId, branchId])
 }
 
 model Order {
