@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Query, UseGuards, Body } from '@nestjs/common';
 import { CurrentAuth } from '../auth/auth.decorators.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { PermissionGuard } from '../auth/permission.guard.js';
@@ -14,8 +14,6 @@ export class AccountingController {
  postJournal(@CurrentAuth() c:AuthContext,@Body() input:Parameters<AccountingService['postManual']>[1]){return this.accounting.postManual(c,input);}
  @Get('journal') @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
  journal(@CurrentAuth() c:AuthContext,@Query('branchId') branchId?:string){return this.accounting.journal(c,branchId);}
- @Post('payments/:paymentId/post') @RequirePermission(PERMISSIONS.ACCOUNTING_POST)
- postPayment(@CurrentAuth() c:AuthContext,@Param('paymentId') paymentId:string){return this.accounting.postPayment(c,paymentId);}
  @Get('trial-balance') @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
  trialBalance(@CurrentAuth() c:AuthContext,@Query('branchId') branchId?:string){return this.accounting.trialBalance(c,branchId);}
 }
