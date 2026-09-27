@@ -130,7 +130,7 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
 
     const session = await this.prisma.session.create({
-      data: { tokenHash: hashToken(accessToken), userId: user.id, branchId: selectedBranchId, deviceId, expiresAt },
+      data: { tokenHash: hashToken(accessToken), userId: user.id, branchId: selectedBranchId, deviceId, workspace: workspace as never, expiresAt },
       select: { id: true },
     });
 
@@ -203,6 +203,7 @@ export class AuthService {
         roles,
         permissions,
         session.user.kitchenStation,
+        session.workspace as never,
       ),
       sessionId: session.id,
     };
