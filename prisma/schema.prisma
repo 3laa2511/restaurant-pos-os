@@ -104,27 +104,9 @@ enum AttendanceStatus { PRESENT LATE ABSENT LEAVE OFF_DAY }
 enum PayrollStatus { DRAFT APPROVED PAID CANCELLED }
 enum InventoryUnit { GRAM KILOGRAM BAG MILLILITER LITER PIECE BOX PACK }
 enum InventoryMovementType { PURCHASE CONSUMPTION WASTE ADJUSTMENT_IN ADJUSTMENT_OUT TRANSFER_IN TRANSFER_OUT }
-enum AccountingAccountType { ASSET LIABILITY EQUITY REVENUE EXPENSE }
 enum WorkspaceCode { POS CALL_CENTER KITCHEN DISPATCH HR ACCOUNTING INVENTORY MANAGEMENT }
 enum WarehouseType { CENTRAL BRANCH }
 
-model AccountingAccount {
- id String @id @default(cuid()) tenantId String tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict) code String name String nameAr String? type AccountingAccountType parentId String?
- parent AccountingAccount? @relation("AccountTree",fields:[parentId],references:[id],onDelete:Restrict) children AccountingAccount[] @relation("AccountTree")
- active Boolean @default(true) allowPosting Boolean @default(true) createdAt DateTime @default(now()) updatedAt DateTime @updatedAt journalLines JournalLine[]
- @@unique([tenantId,code]) @@index([tenantId,type,active]) @@index([tenantId,parentId])
-}
-model JournalEntry {
- id String @id @default(cuid()) tenantId String tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict) branchId String? branch Branch? @relation(fields:[branchId],references:[id],onDelete:Restrict)
- entryNumber String entryDate DateTime postedAt DateTime @default(now()) description String sourceType String? sourceId String? status JournalEntryStatus @default(POSTED)
- postedById String postedBy User @relation("PostedJournalEntries",fields:[postedById],references:[id],onDelete:Restrict) createdAt DateTime @default(now()) lines JournalLine[]
- @@unique([tenantId,entryNumber]) @@unique([tenantId,sourceType,sourceId]) @@index([tenantId,branchId,entryDate]) @@index([tenantId,status,entryDate])
-}
-model JournalLine {
- id String @id @default(cuid()) entryId String entry JournalEntry @relation(fields:[entryId],references:[id],onDelete:Cascade) branchId String? branch Branch? @relation(fields:[branchId],references:[id],onDelete:Restrict)
- accountId String account AccountingAccount @relation(fields:[accountId],references:[id],onDelete:Restrict) debit Decimal @default(0) @db.Decimal(14,2) credit Decimal @default(0) @db.Decimal(14,2) memo String?
- @@index([entryId]) @@index([accountId]) @@index([branchId])
-}
 model Tenant {
   id String @id @default(cuid())
   slug String @unique
@@ -133,10 +115,7 @@ model Tenant {
   active Boolean @default(true)
   currency String @default("EGP")
   branches Branch[]
-  accountingAccounts AccountingAccount[]
-  journalEntries JournalEntry[]
   users User[]
-  postedJournalEntries JournalEntry[] @relation("PostedJournalEntries")
   sessions Session[]
   warehouses Warehouse[]
   departments Department[]
@@ -157,8 +136,6 @@ model Tenant {
   inventoryReceipts InventoryReceipt[]
   inventoryMovements InventoryMovement[]
   recipeIngredients RecipeIngredient[]
-  accountingAccounts AccountingAccount[]
-  journalEntries JournalEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([active])
@@ -174,7 +151,6 @@ model Branch {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   users User[]
   devices Device[]
-  journalEntries JournalEntry[]
   orders Order[]
   shifts Shift[]
   sessions Session[]
@@ -188,63 +164,12 @@ model Branch {
   inventoryStockBalances InventoryStockBalance[]
   inventoryReceipts InventoryReceipt[]
   inventoryMovements InventoryMovement[]
-  journalEntries JournalEntry[]
-  journalLines JournalLine[]
   warehouses Warehouse[]
   departments Department[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([tenantId, code])
   @@index([tenantId, active])
-}
-
-model AccountingAccount {
-  id String @id @default(cuid())
-  tenantId String
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  code String
-  name String
-  nameAr String?
-  type AccountingAccountType
-  active Boolean @default(true)
-  journalLines JournalLine[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@unique([tenantId, code])
-  @@index([tenantId, type, active])
-}
-
-model JournalEntry {
-  id String @id @default(cuid())
-  tenantId String
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  entryNumber String
-  description String
-  sourceType String
-  sourceId String
-  branchId String?
-  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  postedAt DateTime @default(now())
-  lines JournalLine[]
-  createdAt DateTime @default(now())
-  @@unique([tenantId, entryNumber])
-  @@unique([tenantId, sourceType, sourceId])
-  @@index([tenantId, branchId, postedAt])
-}
-
-model JournalLine {
-  id String @id @default(cuid())
-  entryId String
-  entry JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  accountId String
-  account AccountingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  branchId String?
-  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  debit Decimal @db.Decimal(14, 2) @default(0)
-  credit Decimal @db.Decimal(14, 2) @default(0)
-  memo String?
-  @@index([entryId])
-  @@index([accountId, branchId])
 }
 
 model User {
