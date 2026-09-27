@@ -108,6 +108,23 @@ enum AccountingAccountType { ASSET LIABILITY EQUITY REVENUE EXPENSE }
 enum WorkspaceCode { POS CALL_CENTER KITCHEN DISPATCH HR ACCOUNTING INVENTORY MANAGEMENT }
 enum WarehouseType { CENTRAL BRANCH }
 
+model AccountingAccount {
+ id String @id @default(cuid()) tenantId String tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict) code String name String nameAr String? type AccountingAccountType parentId String?
+ parent AccountingAccount? @relation("AccountTree",fields:[parentId],references:[id],onDelete:Restrict) children AccountingAccount[] @relation("AccountTree")
+ active Boolean @default(true) allowPosting Boolean @default(true) createdAt DateTime @default(now()) updatedAt DateTime @updatedAt journalLines JournalLine[]
+ @@unique([tenantId,code]) @@index([tenantId,type,active]) @@index([tenantId,parentId])
+}
+model JournalEntry {
+ id String @id @default(cuid()) tenantId String tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict) branchId String? branch Branch? @relation(fields:[branchId],references:[id],onDelete:Restrict)
+ entryNumber String entryDate DateTime postedAt DateTime @default(now()) description String sourceType String? sourceId String? status JournalEntryStatus @default(POSTED)
+ postedById String postedBy User @relation("PostedJournalEntries",fields:[postedById],references:[id],onDelete:Restrict) createdAt DateTime @default(now()) lines JournalLine[]
+ @@unique([tenantId,entryNumber]) @@unique([tenantId,sourceType,sourceId]) @@index([tenantId,branchId,entryDate]) @@index([tenantId,status,entryDate])
+}
+model JournalLine {
+ id String @id @default(cuid()) entryId String entry JournalEntry @relation(fields:[entryId],references:[id],onDelete:Cascade) branchId String? branch Branch? @relation(fields:[branchId],references:[id],onDelete:Restrict)
+ accountId String account AccountingAccount @relation(fields:[accountId],references:[id],onDelete:Restrict) debit Decimal @default(0) @db.Decimal(14,2) credit Decimal @default(0) @db.Decimal(14,2) memo String?
+ @@index([entryId]) @@index([accountId]) @@index([branchId])
+}
 model Tenant {
   id String @id @default(cuid())
   slug String @unique
@@ -116,7 +133,10 @@ model Tenant {
   active Boolean @default(true)
   currency String @default("EGP")
   branches Branch[]
+  accountingAccounts AccountingAccount[]
+  journalEntries JournalEntry[]
   users User[]
+  postedJournalEntries JournalEntry[] @relation("PostedJournalEntries")
   sessions Session[]
   warehouses Warehouse[]
   departments Department[]
@@ -154,6 +174,7 @@ model Branch {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   users User[]
   devices Device[]
+  journalEntries JournalEntry[]
   orders Order[]
   shifts Shift[]
   sessions Session[]
