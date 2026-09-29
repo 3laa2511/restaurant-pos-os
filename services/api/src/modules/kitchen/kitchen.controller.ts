@@ -6,7 +6,6 @@ import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import type { SyncResult } from '../sync/sync-contract.js';
-import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 import { KitchenService } from './kitchen.service.js';
 import { OptionalBranchQueryDto, OrderIdParamDto, TicketIdParamDto } from '../security/request.dto.js';
 import { KitchenTicketStatusDto } from './kitchen.dto.js';
