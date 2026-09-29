@@ -28,7 +28,7 @@ export class InventoryService {
 
   async receive(context:AuthContext,input:{branchId:string;supplierId?:string;reference?:string;items:Array<{ingredientId:string;quantityPurchaseUnit:number;unitCost:number}>;}) {
     const tenantId=assertTenantScope(context); assertBranchAccess(context,input.branchId); if(!input.items?.length)throw new Error('Receipt must contain at least one item');
-    return this.prisma.$transaction(async tx=>{
+    return this.prisma.$transaction(async tx => {\n      await setRlsContext(tx, context);
       const branch=await tx.branch.findFirst({where:{id:input.branchId,tenantId,active:true},select:{id:true}}); if(!branch)throw new Error('Branch not found');
       const items: Array<{ ingredientId:string; purchaseUnitFactor:number; qty:number; baseQty:number; unitCost:number; baseUnitCost:number; line:number }> = []; let total=0;
       for(const item of input.items){
@@ -57,7 +57,7 @@ export class InventoryService {
 
   async adjust(context:AuthContext,input:{branchId:string;ingredientId:string;quantityBaseUnit:number;direction:'IN'|'OUT';reason:string;idempotencyKey:string}){
     const tenantId=assertTenantScope(context); assertBranchAccess(context,input.branchId); const qty=n(input.quantityBaseUnit,'Quantity'); if(qty<=0)throw new Error('Quantity must be greater than zero');
-    return this.prisma.$transaction(async tx=>{
+    return this.prisma.$transaction(async tx => {\n      await setRlsContext(tx, context);
       const ingredient=await tx.ingredient.findFirst({where:{id:input.ingredientId,tenantId,active:true}}); if(!ingredient)throw new Error('Ingredient not found');
       const current=await tx.inventoryStockBalance.findUnique({where:{branchId_ingredientId:{branchId:input.branchId,ingredientId:input.ingredientId}}});
       const currentQty=current?Number(current.quantityBaseUnit):0; const next=input.direction==='IN'?currentQty+qty:currentQty-qty; if(next<0)throw new Error('Insufficient stock');
@@ -119,7 +119,7 @@ export class InventoryService {
 
   async approveTransfer(context: AuthContext, transferId: string) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.$transaction(async tx => {
+    return this.prisma.$transaction(async tx => {\n      await setRlsContext(tx, context);
       const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true } });
       if (!transfer) throw new Error('Transfer not found');
       if (transfer.fromWarehouse.branchId) assertBranchAccess(context, transfer.fromWarehouse.branchId);
@@ -131,7 +131,7 @@ export class InventoryService {
 
   async dispatchTransfer(context: AuthContext, transferId: string) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.$transaction(async tx => {
+    return this.prisma.$transaction(async tx => {\n      await setRlsContext(tx, context);
       const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
       if (!transfer) throw new Error('Transfer not found');
       if (transfer.fromWarehouse.branchId) assertBranchAccess(context, transfer.fromWarehouse.branchId);
@@ -155,7 +155,7 @@ export class InventoryService {
 
   async receiveTransfer(context: AuthContext, transferId: string) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.$transaction(async tx => {
+    return this.prisma.$transaction(async tx => {\n      await setRlsContext(tx, context);
       let transferAmount = 0;
       const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
       if (!transfer) throw new Error('Transfer not found');
@@ -181,7 +181,7 @@ export class InventoryService {
   async setRecipe(context:AuthContext,productId:string,input:{items:Array<{ingredientId:string;quantityBaseUnit:number;wastePercent?:number}>}){
     const tenantId=assertTenantScope(context);
     const product=await this.prisma.product.findFirst({where:{id:productId,tenantId},select:{id:true}}); if(!product)throw new Error('Product not found');
-    return this.prisma.$transaction(async tx=>{
+    return this.prisma.$transaction(async tx => {\n      await setRlsContext(tx, context);
       await tx.recipeIngredient.deleteMany({where:{productId,tenantId}});
       if(input.items?.length) {
         const ingredientIds = input.items.map((x) => x.ingredientId);
