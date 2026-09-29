@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentAuth } from '../auth/auth.decorators.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { PermissionGuard } from '../auth/permission.guard.js';
