@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsInt, IsOptional, IsString, Length, Min } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, IsString, Length } from 'class-validator';
 
 export class OptionalBranchQueryDto {
   @IsOptional() @IsString() @Length(1, 128) branchId?: string;
