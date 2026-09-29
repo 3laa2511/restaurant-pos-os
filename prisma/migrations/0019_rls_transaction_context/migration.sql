@@ -429,23 +429,6 @@ CREATE POLICY tenant_isolation ON "AuditLog"
     ))
   );
 
-DROP POLICY IF EXISTS tenant_isolation ON "RiskPolicy";
-CREATE POLICY tenant_isolation ON "RiskPolicy"
-  USING (EXISTS (
-    SELECT 1 FROM "Branch" b
-    WHERE "RiskPolicy"."branchId" IS NULL
-       OR (b.id = "RiskPolicy"."branchId"
-           AND app.tenant_visible(b."tenantId")
-           AND app.branch_visible(b.id))
-  ))
-  WITH CHECK (EXISTS (
-    SELECT 1 FROM "Branch" b
-    WHERE "RiskPolicy"."branchId" IS NULL
-       OR (b.id = "RiskPolicy"."branchId"
-           AND app.tenant_visible(b."tenantId")
-           AND app.branch_visible(b.id))
-  ));
-
 DROP POLICY IF EXISTS tenant_isolation ON "SyncOperation";
 CREATE POLICY tenant_isolation ON "SyncOperation"
   USING (EXISTS (
