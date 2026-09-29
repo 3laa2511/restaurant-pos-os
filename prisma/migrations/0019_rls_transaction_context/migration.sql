@@ -43,8 +43,8 @@ $$;
 
 DROP POLICY IF EXISTS tenant_isolation ON "Branch";
 CREATE POLICY tenant_isolation ON "Branch"
-  USING (app.tenant_visible("tenantId"))
-  WITH CHECK (app.tenant_visible("tenantId"));
+  USING (app.tenant_visible("tenantId") AND app.branch_visible("id"))
+  WITH CHECK (app.tenant_visible("tenantId") AND app.branch_visible("id"));
 
 DROP POLICY IF EXISTS tenant_isolation ON "AccountingAccount";
 CREATE POLICY tenant_isolation ON "AccountingAccount"
@@ -63,8 +63,14 @@ CREATE POLICY tenant_isolation ON "User"
 
 DROP POLICY IF EXISTS tenant_isolation ON "EmployeeProfile";
 CREATE POLICY tenant_isolation ON "EmployeeProfile"
-  USING (app.tenant_visible("tenantId"))
-  WITH CHECK (app.tenant_visible("tenantId"));
+  USING (app.tenant_visible("tenantId") AND EXISTS (
+    SELECT 1 FROM "User" u
+    WHERE u.id = "EmployeeProfile"."userId" AND app.branch_visible(u."branchId")
+  ))
+  WITH CHECK (app.tenant_visible("tenantId") AND EXISTS (
+    SELECT 1 FROM "User" u
+    WHERE u.id = "EmployeeProfile"."userId" AND app.branch_visible(u."branchId")
+  ));
 
 DROP POLICY IF EXISTS tenant_isolation ON "WorkSchedule";
 CREATE POLICY tenant_isolation ON "WorkSchedule"
@@ -83,8 +89,14 @@ CREATE POLICY tenant_isolation ON "PayrollPeriod"
 
 DROP POLICY IF EXISTS tenant_isolation ON "PayrollEntry";
 CREATE POLICY tenant_isolation ON "PayrollEntry"
-  USING (app.tenant_visible("tenantId"))
-  WITH CHECK (app.tenant_visible("tenantId"));
+  USING (app.tenant_visible("tenantId") AND EXISTS (
+    SELECT 1 FROM "User" u
+    WHERE u.id = "PayrollEntry"."userId" AND app.branch_visible(u."branchId")
+  ))
+  WITH CHECK (app.tenant_visible("tenantId") AND EXISTS (
+    SELECT 1 FROM "User" u
+    WHERE u.id = "PayrollEntry"."userId" AND app.branch_visible(u."branchId")
+  ));
 
 DROP POLICY IF EXISTS tenant_isolation ON "Supplier";
 CREATE POLICY tenant_isolation ON "Supplier"
@@ -123,13 +135,31 @@ CREATE POLICY tenant_isolation ON "Warehouse"
 
 DROP POLICY IF EXISTS tenant_isolation ON "WarehouseStockBalance";
 CREATE POLICY tenant_isolation ON "WarehouseStockBalance"
-  USING (app.tenant_visible("tenantId"))
-  WITH CHECK (app.tenant_visible("tenantId"));
+  USING (app.tenant_visible("tenantId") AND EXISTS (
+    SELECT 1 FROM "Warehouse" w
+    WHERE w.id = "WarehouseStockBalance"."warehouseId" AND app.branch_visible(w."branchId")
+  ))
+  WITH CHECK (app.tenant_visible("tenantId") AND EXISTS (
+    SELECT 1 FROM "Warehouse" w
+    WHERE w.id = "WarehouseStockBalance"."warehouseId" AND app.branch_visible(w."branchId")
+  ));
 
 DROP POLICY IF EXISTS tenant_isolation ON "InventoryTransfer";
 CREATE POLICY tenant_isolation ON "InventoryTransfer"
-  USING (app.tenant_visible("tenantId"))
-  WITH CHECK (app.tenant_visible("tenantId"));
+  USING (app.tenant_visible("tenantId") AND EXISTS (
+    SELECT 1 FROM "Warehouse" from_w
+    WHERE from_w.id = "InventoryTransfer"."fromWarehouseId" AND app.branch_visible(from_w."branchId")
+  ) AND EXISTS (
+    SELECT 1 FROM "Warehouse" to_w
+    WHERE to_w.id = "InventoryTransfer"."toWarehouseId" AND app.branch_visible(to_w."branchId")
+  ))
+  WITH CHECK (app.tenant_visible("tenantId") AND EXISTS (
+    SELECT 1 FROM "Warehouse" from_w
+    WHERE from_w.id = "InventoryTransfer"."fromWarehouseId" AND app.branch_visible(from_w."branchId")
+  ) AND EXISTS (
+    SELECT 1 FROM "Warehouse" to_w
+    WHERE to_w.id = "InventoryTransfer"."toWarehouseId" AND app.branch_visible(to_w."branchId")
+  ));
 
 DROP POLICY IF EXISTS tenant_isolation ON "Department";
 CREATE POLICY tenant_isolation ON "Department"
