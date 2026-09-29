@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { setRlsContext } from '../../database/rls-context.js';
 import { randomUUID } from 'node:crypto';
 import { Prisma, InventoryUnit } from '../../generated/prisma/client.js';
 import { AccountingService } from '../accounting/accounting.service.js';
