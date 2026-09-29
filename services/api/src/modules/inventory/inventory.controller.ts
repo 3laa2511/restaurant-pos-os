@@ -6,6 +6,7 @@ import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { InventoryService } from './inventory.service.js';
+import { OptionalBranchQueryDto, ProductIdParamDto, TransferIdParamDto, TransferStatusQueryDto } from '../security/request.dto.js';
 import { AdjustInventoryDto, CreateIngredientDto, CreateTransferDto, ReceiveInventoryDto, SetRecipeDto } from './inventory.dto.js';
 
 @Controller('inventory')
@@ -23,7 +24,7 @@ export class InventoryController {
 
   @Get('stock')
   @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
-  stock(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) { return this.inventory.listStock(context, branchId); }
+  stock(@CurrentAuth() context: AuthContext, @Query() query: OptionalBranchQueryDto) { return this.inventory.listStock(context, query.branchId); }
 
   @Post('receipts')
   @RequirePermission(PERMISSIONS.INVENTORY_PURCHASE)
@@ -39,7 +40,7 @@ export class InventoryController {
 
   @Get('transfers')
   @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
-  transfers(@CurrentAuth() context: AuthContext, @Query('status') status?: string) { return this.inventory.listTransfers(context, status); }
+  transfers(@CurrentAuth() context: AuthContext, @Query() query: TransferStatusQueryDto) { return this.inventory.listTransfers(context, query.status); }
 
   @Post('transfers')
   @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
@@ -47,7 +48,7 @@ export class InventoryController {
 
   @Post('transfers/:transferId/approve')
   @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
-  approveTransfer(@CurrentAuth() context: AuthContext, @Param('transferId') transferId: string) { return this.inventory.approveTransfer(context, transferId); }
+  approveTransfer(@CurrentAuth() context: AuthContext, @Param() params: TransferIdParamDto) { return this.inventory.approveTransfer(context, params.id); }
 
   @Post('transfers/:transferId/dispatch')
   @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
@@ -59,5 +60,5 @@ export class InventoryController {
 
   @Post('recipes/:productId')
   @RequirePermission(PERMISSIONS.RECIPE_MANAGE)
-  setRecipe(@CurrentAuth() context: AuthContext, @Param('productId') productId: string, @Body() input: SetRecipeDto) { return this.inventory.setRecipe(context, productId, input); }
+  setRecipe(@CurrentAuth() context: AuthContext, @Param() params: ProductIdParamDto, @Body() input: SetRecipeDto) { return this.inventory.setRecipe(context, params.id, input); }
 }
