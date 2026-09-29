@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { setRlsContext } from '../../database/rls-context.js';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -39,6 +40,7 @@ export class ShiftService {
     const operationId = randomUUID();
     try {
       return await runSerializable(() => this.prisma.$transaction(async (tx) => {
+          await setRlsContext(tx, context);
         const branch = await tx.branch.findFirst({ where: { id: input.branchId, tenantId }, select: { id: true, active: true } }); if (!branch?.active) throw new Error('Branch not found or inactive');
         const device = await tx.device.findFirst({ where: { id: input.deviceId, branch: { tenantId } }, select: { id: true, branchId: true, status: true, name: true } }); if (!device || device.branchId !== input.branchId || device.status !== 'ACTIVE') throw new Error('Device is not active in the selected branch');
         const openShift = await tx.shift.findFirst({ where: { branch: { tenantId }, status: 'OPEN', OR: [{ deviceId: input.deviceId }, { userId: context.userId }] }, select: { id: true, userId: true, deviceId: true } });
@@ -62,6 +64,7 @@ export class ShiftService {
     const operationId = randomUUID();
     try {
       return await runSerializable(() => this.prisma.$transaction(async (tx) => {
+          await setRlsContext(tx, context);
         const shift = await tx.shift.findFirst({ where: { id: input.shiftId, branch: { tenantId } }, select: { id: true, branchId: true, userId: true, deviceId: true, status: true, openingCash: true, openedAt: true } });
         if (!shift) throw new Error('Shift not found'); assertBranchAccess(context, shift.branchId); if (context.userId !== shift.userId && !context.permissions.includes(PERMISSIONS.REPORT_VIEW_FINANCIAL)) throw new Error('Only the shift owner or financial manager can close this shift'); if (context.deviceId && context.deviceId !== shift.deviceId) throw new Error('Shift device does not match the authenticated device');
         assertShiftCanClose({ ...shift, cashierId: shift.userId, openingCash: Number(shift.openingCash) });
