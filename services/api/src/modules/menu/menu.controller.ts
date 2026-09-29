@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentAuth } from '../auth/auth.decorators.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { PermissionGuard } from '../auth/permission.guard.js';
@@ -6,6 +6,7 @@ import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { MenuService, type BranchProductConfigInput } from './menu.service.js';
+import { BranchProductConfigDto } from './menu.dto.js';
 
 @Controller('menu')
 @UseGuards(AuthGuard)
@@ -33,9 +34,7 @@ export class MenuController {
   @Post('branch-products')
   @UseGuards(PermissionGuard)
   @RequirePermission(PERMISSIONS.MENU_MANAGE)
-  setBranchProduct(@CurrentAuth() context: AuthContext, @Body() body: BranchProductConfigInput) {
-    if (!body || typeof body !== 'object') throw new BadRequestException('Branch product configuration is required');
-    if (!body.branchId || !body.productId) throw new BadRequestException('branchId and productId are required');
-    return this.menuService.setBranchProduct(context, body);
+  setBranchProduct(@CurrentAuth() context: AuthContext, @Body() body: BranchProductConfigDto) {
+    return this.menuService.setBranchProduct(context, body as BranchProductConfigInput);
   }
 }
