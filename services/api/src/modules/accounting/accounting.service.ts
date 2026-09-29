@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { setRlsContext } from '../../database/rls-context.js';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -59,7 +60,7 @@ export class AccountingService {
   async postManual(context: AuthContext, input: { branchId?: string|null; sourceType?: string; sourceId?: string; description: string; lines: Line[] }) {
     assertPermission(context, PERMISSIONS.ACCOUNTING_POST);
     const tenantId = assertTenantScope(context);
-    return this.prisma.$transaction((tx) => this.post(tx, context, {
+    return this.prisma.$transaction(async (tx) => {\n      await setRlsContext(tx, context);\n      return this.post(tx, context, {
       sourceType: input.sourceType ?? 'MANUAL',
       sourceId: input.sourceId ?? randomUUID(),
       description: input.description,
