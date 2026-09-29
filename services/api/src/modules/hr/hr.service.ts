@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { setRlsContext } from '../../database/rls-context.js';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../database/prisma.service.js';
 import { hashPassword } from '../auth/auth.service.js';
@@ -63,6 +64,7 @@ export class HrService {
 
     const passwordHash = await hashPassword(password);
     return this.prisma.$transaction(async (tx) => {
+          await setRlsContext(tx, context);
       const role = await tx.role.findUnique({ where: { code: roleCode }, select: { id: true, code: true } });
       if (!role) throw new Error('Employee role is not seeded');
       const user = await tx.user.create({
@@ -120,6 +122,7 @@ export class HrService {
     if (periodEnd < periodStart) throw new Error('Payroll period end must be after start');
     const employees = await this.prisma.employeeProfile.findMany({ where: { tenantId, active: true }, select: { userId: true, baseSalary: true, overtimeRate: true } });
     return this.prisma.$transaction(async (tx) => {
+          await setRlsContext(tx, context);
       const period = await tx.payrollPeriod.create({ data: { id: randomUUID(), tenantId, name: required(input.name, 'Payroll name'), periodStart, periodEnd } });
       for (const employee of employees) {
         const bonus = money(input.bonuses?.[employee.userId] ?? 0, 'Bonus');
