@@ -8,6 +8,7 @@ import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { AccountingService } from './accounting.service.js';
 import { ManualJournalDto } from './accounting.dto.js';
+import { OptionalBranchQueryDto } from '../security/request.dto.js';
 
 @Controller('accounting')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -23,13 +24,13 @@ export class AccountingController {
 
   @Get('journal')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
-  journal(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) {
-    return this.accounting.journal(context, branchId);
+  journal(@CurrentAuth() context: AuthContext, @Query() query: OptionalBranchQueryDto) {
+    return this.accounting.journal(context, query.branchId);
   }
 
   @Get('trial-balance')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   trialBalance(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) {
-    return this.accounting.trialBalance(context, branchId);
+    return this.accounting.trialBalance(context, query.branchId);
   }
 }
