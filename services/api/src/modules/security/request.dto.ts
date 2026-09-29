@@ -1,41 +1,16 @@
-import { IsDateString, IsOptional, IsString, Length } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsOptional, IsString, Length, Min } from 'class-validator';
 
 export class OptionalBranchQueryDto {
-  @IsOptional()
-  @IsString()
-  @Length(1, 128)
-  branchId?: string;
+  @IsOptional() @IsString() @Length(1, 128) branchId?: string;
 }
-
 export class DateRangeBranchQueryDto extends OptionalBranchQueryDto {
-  @IsOptional()
-  @IsDateString()
-  from?: string;
-
-  @IsOptional()
-  @IsDateString()
-  to?: string;
+  @IsOptional() @IsDateString() from?: string;
+  @IsOptional() @IsDateString() to?: string;
 }
-
 export class IdParamDto {
-  @IsString()
-  @Length(1, 128)
-  id!: string;
+  @IsString() @Length(1, 128) id!: string;
 }
-
 export class TransferStatusQueryDto {
-  @IsOptional()
-  @IsString()
-  @Length(1, 32)
+  @IsOptional() @IsIn(['DRAFT', 'APPROVED', 'DISPATCHED', 'RECEIVED', 'CANCELLED'])
   status?: string;
-}
-
-export class CashDrawerBalanceQueryDto {
-  @IsString()
-  @Length(1, 128)
-  shiftId!: string;
-
-  @IsString()
-  @Length(1, 128)
-  deviceId!: string;
 }
