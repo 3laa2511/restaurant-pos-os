@@ -474,4 +474,4 @@ CREATE POLICY tenant_isolation ON "InventoryTransferItem"
       AND app.tenant_visible(t."tenantId")
   ));
 
--- Tenant remains outside business-data RLS because authentication must establish tenant context before protected queries.\n-- Session/auth access is isolated in the enforcement phase.\n
+-- RiskPolicy is intentionally excluded: nullable branchId without tenantId cannot prove tenant ownership for central policies. Phase 5 schema hardening must add tenantId before enabling RLS on this table.\n\n-- Tenant remains outside business-data RLS because authentication must establish tenant context before protected queries.\n-- Session/auth access is isolated in the enforcement phase.\n
