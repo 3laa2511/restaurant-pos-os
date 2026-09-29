@@ -6,6 +6,7 @@ import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { CashDrawerService, type CreateCashDrawerInput, type RecordCashMovementInput } from './cash-drawer.service.js';
+import { CreateCashDrawerDto, RecordCashMovementDto } from './cash-drawer.dto.js';
 
 @Controller('cash-drawers')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -14,9 +15,8 @@ export class CashDrawerController {
 
   @Post()
   @RequirePermission(PERMISSIONS.CASH_DRAWER_MANAGE)
-  create(@CurrentAuth() context: AuthContext, @Body() body: CreateCashDrawerInput) {
-    if (!body || typeof body !== 'object') throw new BadRequestException('Cash drawer body is required');
-    return this.cashDrawers.create(context, body);
+  create(@CurrentAuth() context: AuthContext, @Body() body: CreateCashDrawerDto) {
+    return this.cashDrawers.create(context, body as CreateCashDrawerInput);
   }
 
   @Get(':drawerId/balance')
@@ -27,8 +27,7 @@ export class CashDrawerController {
 
   @Post('movements')
   @RequirePermission(PERMISSIONS.CASH_DRAWER_MANAGE)
-  movement(@CurrentAuth() context: AuthContext, @Body() body: RecordCashMovementInput) {
-    if (!body || typeof body !== 'object') throw new BadRequestException('Cash movement body is required');
-    return this.cashDrawers.recordMovement(context, body);
+  movement(@CurrentAuth() context: AuthContext, @Body() body: RecordCashMovementDto) {
+    return this.cashDrawers.recordMovement(context, body as RecordCashMovementInput);
   }
 }
