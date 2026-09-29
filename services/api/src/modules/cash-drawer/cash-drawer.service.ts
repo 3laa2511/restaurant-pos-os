@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { setRlsContext } from '../../database/rls-context.js';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -74,6 +75,7 @@ export class CashDrawerService {
       const operationId = randomUUID();
       try {
         return await this.prisma.$transaction(async (tx) => {
+          await setRlsContext(tx, context);
           const drawer = await tx.cashDrawer.findFirst({ where: { id: input.drawerId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, active: true } });
           if (!drawer || !drawer.active) throw new Error('Cash drawer not found or inactive'); assertBranchAccess(context, drawer.branchId);
           if (drawer.deviceId !== input.deviceId) throw new Error('Cash drawer does not belong to the selected device');
