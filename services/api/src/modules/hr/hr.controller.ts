@@ -7,6 +7,7 @@ import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { HrService } from './hr.service.js';
+import { DateRangeBranchQueryDto, PayrollPeriodIdParamDto } from '../security/request.dto.js';
 import { AttendanceDto, CreateEmployeeDto, CreatePayrollPeriodDto } from './hr.dto.js';
 
 @Controller('hr')
@@ -16,7 +17,7 @@ export class HrController {
 
   @Get('employees')
   @RequirePermission(PERMISSIONS.HR_EMPLOYEE_MANAGE)
-  listEmployees(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) { return this.hr.listEmployees(context, branchId); }
+  listEmployees(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) { return this.hr.listEmployees(context, query.branchId); }
 
   @Post('employees')
   @RequirePermission(PERMISSIONS.HR_EMPLOYEE_MANAGE)
@@ -24,7 +25,7 @@ export class HrController {
 
   @Get('attendance')
   @RequirePermission(PERMISSIONS.HR_ATTENDANCE_MANAGE)
-  listAttendance(@CurrentAuth() context: AuthContext, @Query('from') from?: string, @Query('to') to?: string, @Query('branchId') branchId?: string) { return this.hr.listAttendance(context, { from, to, branchId }); }
+  listAttendance(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) { return this.hr.listAttendance(context, query); }
 
   @Post('attendance/check-in')
   @RequirePermission(PERMISSIONS.HR_ATTENDANCE_MANAGE)
@@ -41,7 +42,7 @@ export class HrController {
   @Post('payroll/periods/:id/approve')
   @Throttle({ default: { limit: 10, ttl: 60_000, blockDuration: 120_000 } })
   @RequirePermission(PERMISSIONS.HR_PAYROLL_MANAGE)
-  approvePayrollPeriod(@CurrentAuth() context: AuthContext, @Param('id') id: string) { return this.hr.approvePayrollPeriod(context, id); }
+  approvePayrollPeriod(@CurrentAuth() context: AuthContext, @Param() params: PayrollPeriodIdParamDto) { return this.hr.approvePayrollPeriod(context, params.id); }
 
   @Post('payroll/periods/:id/pay')
   @Throttle({ default: { limit: 10, ttl: 60_000, blockDuration: 120_000 } })
