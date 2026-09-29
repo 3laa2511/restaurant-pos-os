@@ -8,6 +8,8 @@ import type { AuthContext } from '../auth/authorization.types.js';
 import type { SyncEnvelope, SyncResult } from '../sync/sync-contract.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 import { KitchenService } from './kitchen.service.js';
+import { OptionalBranchQueryDto, OrderIdParamDto, TicketIdParamDto } from '../security/request.dto.js';
+import { KitchenTicketStatusDto } from './kitchen.dto.js';
 import { KitchenSyncService } from './kitchen-sync.service.js';
 
 const KITCHEN_STATUSES: readonly KitchenTicketStatus[] = [
@@ -41,31 +43,24 @@ export class KitchenController {
 
   @Get('tickets')
   @RequirePermission(PERMISSIONS.ORDER_VIEW)
-  tickets(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) {
-    return this.kitchen.listTickets(context, branchId);
+  tickets(@CurrentAuth() context: AuthContext, @Query() query: OptionalBranchQueryDto) {
+    return this.kitchen.listTickets(context, query.branchId);
   }
 
   @Post('orders/:orderId/tickets/materialize')
   @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
-  materialize(@CurrentAuth() context: AuthContext, @Param('orderId') orderId: string) {
-    return this.kitchen.materializeTickets(context, orderId);
+  materialize(@CurrentAuth() context: AuthContext, @Param() params: OrderIdParamDto) {
+    return this.kitchen.materializeTickets(context, params.id);
   }
 
   @Patch('ticket/:ticketId/status')
   @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
   transitionTicket(
     @CurrentAuth() context: AuthContext,
-    @Param('ticketId') ticketId: string,
-    @Body() body: { target?: string; reason?: string; expectedVersion?: number },
+    @Param() params: TicketIdParamDto,
+    @Body() body: KitchenTicketStatusDto,
   ) {
-    if (!body.target) throw new Error('target is required');
-    return this.kitchen.transitionTicket(
-      context,
-      ticketId,
-      parseTarget(body.target),
-      body.reason,
-      parseExpectedVersion(body.expectedVersion),
-    );
+    return this.kitchen.transitionTicket(context, params.id, body.target, body.reason, body.expectedVersion);
   }
 
   @Post('tickets/sync')
@@ -82,10 +77,9 @@ export class KitchenController {
   @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
   transition(
     @CurrentAuth() context: AuthContext,
-    @Param('orderId') orderId: string,
-    @Body() body: { target?: string; reason?: string },
+    @Param() params: OrderIdParamDto,
+    @Body() body: KitchenTicketStatusDto,
   ) {
-    if (!body.target) throw new Error('target is required');
-    return this.kitchen.transition(context, orderId, parseTarget(body.target), body.reason);
+    return this.kitchen.transition(context, params.id, body.target, body.reason);
   }
 }
