@@ -52,11 +52,11 @@ export class InventoryController {
 
   @Post('transfers/:transferId/dispatch')
   @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
-  dispatchTransfer(@CurrentAuth() context: AuthContext, @Param('transferId') transferId: string) { return this.inventory.dispatchTransfer(context, transferId); }
+  dispatchTransfer(@CurrentAuth() context: AuthContext, @Param() params: TransferIdParamDto) { return this.inventory.dispatchTransfer(context, params.id); }
 
   @Post('transfers/:transferId/receive')
   @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
-  receiveTransfer(@CurrentAuth() context: AuthContext, @Param('transferId') transferId: string) { return this.inventory.receiveTransfer(context, transferId); }
+  receiveTransfer(@CurrentAuth() context: AuthContext, @Param() params: TransferIdParamDto) { return this.inventory.receiveTransfer(context, params.id); }
 
   @Post('recipes/:productId')
   @RequirePermission(PERMISSIONS.RECIPE_MANAGE)
