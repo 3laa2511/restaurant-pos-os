@@ -47,9 +47,9 @@ export class HrController {
   @Post('payroll/periods/:id/pay')
   @Throttle({ default: { limit: 10, ttl: 60_000, blockDuration: 120_000 } })
   @RequirePermission(PERMISSIONS.HR_PAYROLL_MANAGE)
-  payPayrollPeriod(@CurrentAuth() context: AuthContext, @Param('id') id: string) { return this.hr.payPayrollPeriod(context, id); }
+  payPayrollPeriod(@CurrentAuth() context: AuthContext, @Param() params: PayrollPeriodIdParamDto) { return this.hr.payPayrollPeriod(context, params.id); }
 
   @Get('payroll/periods/:id')
   @RequirePermission(PERMISSIONS.HR_PAYROLL_VIEW)
-  getPayrollPeriod(@CurrentAuth() context: AuthContext, @Param('id') id: string) { return this.hr.getPayrollPeriod(context, id); }
+  getPayrollPeriod(@CurrentAuth() context: AuthContext, @Param() params: PayrollPeriodIdParamDto) { return this.hr.getPayrollPeriod(context, params.id); }
 }
