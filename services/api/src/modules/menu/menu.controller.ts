@@ -6,6 +6,7 @@ import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { MenuService, type BranchProductConfigInput } from './menu.service.js';
+import { OptionalBranchQueryDto } from '../security/request.dto.js';
 import { BranchProductConfigDto } from './menu.dto.js';
 
 @Controller('menu')
@@ -14,8 +15,8 @@ export class MenuController {
   constructor(private readonly menuService: MenuService) {}
 
   @Get()
-  async listActiveMenu(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) {
-    const categories = await this.menuService.listActiveMenu(context, branchId);
+  async listActiveMenu(@CurrentAuth() context: AuthContext, @Query() query: OptionalBranchQueryDto) {
+    const categories = await this.menuService.listActiveMenu(context, query.branchId);
     return categories.map((category) => ({
       id: category.id,
       name: category.name,
