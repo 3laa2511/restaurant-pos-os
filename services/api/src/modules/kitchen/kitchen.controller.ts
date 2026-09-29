@@ -5,33 +5,13 @@ import { PermissionGuard } from '../auth/permission.guard.js';
 import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
-import type { SyncEnvelope, SyncResult } from '../sync/sync-contract.js';
+import type { SyncResult } from '../sync/sync-contract.js';
 import type { KitchenTicketStatus } from './kitchen-ticket.policy.js';
 import { KitchenService } from './kitchen.service.js';
 import { OptionalBranchQueryDto, OrderIdParamDto, TicketIdParamDto } from '../security/request.dto.js';
 import { KitchenTicketStatusDto } from './kitchen.dto.js';
+import { SyncEnvelopeDto } from '../sync/sync.dto.js';
 import { KitchenSyncService } from './kitchen-sync.service.js';
-
-const KITCHEN_STATUSES: readonly KitchenTicketStatus[] = [
-  'SENT_TO_KITCHEN',
-  'PREPARING',
-  'READY',
-  'COMPLETED',
-  'CANCELLED',
-];
-
-function parseTarget(value: string): KitchenTicketStatus {
-  if (!KITCHEN_STATUSES.includes(value as KitchenTicketStatus)) {
-    throw new Error('target must be SENT_TO_KITCHEN, PREPARING, READY, COMPLETED, or CANCELLED');
-  }
-  return value as KitchenTicketStatus;
-}
-
-function parseExpectedVersion(value?: number): number | undefined {
-  if (value === undefined) return undefined;
-  if (!Number.isInteger(value) || value < 1) throw new Error('expectedVersion must be a positive integer');
-  return value;
-}
 
 @Controller('kitchen')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -65,7 +45,7 @@ export class KitchenController {
 
   @Post('tickets/sync')
   @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
-  syncTicket(@CurrentAuth() context: AuthContext, @Body() envelope: SyncEnvelope): Promise<SyncResult> {
+  syncTicket(@CurrentAuth() context: AuthContext, @Body() envelope: SyncEnvelopeDto): Promise<SyncResult> {
     return this.kitchenSync.submit(context, envelope);
   }
 
