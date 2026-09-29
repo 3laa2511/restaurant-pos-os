@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { setRlsContext } from '../../database/rls-context.js';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
@@ -59,6 +60,7 @@ export class SyncService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+          await setRlsContext(tx, context);
         const shift = await tx.shift.findFirst({ where: { id: payload.payment.shiftId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, status: true } });
         if (!shift) throw new Error('Shift not found');
         if (shift.branchId !== envelope.branchId) throw new Error('Shift branch does not match the sync branch');
