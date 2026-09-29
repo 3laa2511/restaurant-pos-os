@@ -30,7 +30,7 @@ export class AccountingController {
 
   @Get('trial-balance')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
-  trialBalance(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) {
+  trialBalance(@CurrentAuth() context: AuthContext, @Query() query: OptionalBranchQueryDto) {
     return this.accounting.trialBalance(context, query.branchId);
   }
 }
