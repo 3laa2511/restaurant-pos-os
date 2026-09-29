@@ -140,7 +140,7 @@ export class HrService {
 
   async approvePayrollPeriod(context: AuthContext, id: string) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.$transaction(async tx => {
+    return this.prisma.$transaction(async tx => {\n      await setRlsContext(tx, context);
       const period = await tx.payrollPeriod.findFirst({ where: { id, tenantId }, include: { entries: { include: { user: { select: { branchId: true } } } } } });
       if (!period) throw new Error('Payroll period not found');
       if (period.status !== 'DRAFT') throw new Error('Only draft payroll periods can be approved');
@@ -154,7 +154,7 @@ export class HrService {
 
   async payPayrollPeriod(context: AuthContext, id: string) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.$transaction(async tx => {
+    return this.prisma.$transaction(async tx => {\n      await setRlsContext(tx, context);
       const period = await tx.payrollPeriod.findFirst({ where: { id, tenantId }, include: { entries: true } });
       if (!period) throw new Error('Payroll period not found');
       if (period.status !== 'APPROVED') throw new Error('Only approved payroll periods can be paid');
