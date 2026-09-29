@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { setRlsContext } from '../../database/rls-context.js';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -34,6 +35,7 @@ export class PaymentService {
       const operationId = randomUUID();
       try {
         return await this.prisma.$transaction(async (tx) => {
+          await setRlsContext(tx, context);
           const order = await tx.order.findFirst({ where: { id: input.orderId, branch: { tenantId } }, select: { id: true, branchId: true, status: true, total: true, version: true } });
           if (!order) throw new Error('Order not found'); assertBranchAccess(context, order.branchId);
           const shift = await tx.shift.findFirst({ where: { id: input.shiftId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, status: true } });
