@@ -13,6 +13,7 @@ function context(...permissions: AuthContext['permissions']): AuthContext {
 
 function prismaMock() {
   const tx = {
+    $executeRaw: jest.fn().mockResolvedValue(0),
     payment: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
     shift: { findUnique: jest.fn() },
     paymentAdjustment: { findMany: jest.fn(), create: jest.fn() },
@@ -30,7 +31,6 @@ function prismaMock() {
   const audit: AuditMock = { recordWithClient: jest.fn() };
   audit.recordWithClient.mockResolvedValue({ id: 'audit-1', riskScore: 70, riskLevel: 'HIGH' });
   const accounting = { postPaymentAdjustment: jest.fn().mockResolvedValue({ id: 'journal-1' }) };
-  return { prisma, tx, audit, accounting };
   return { prisma, tx, audit, accounting };
 }
 
@@ -61,6 +61,7 @@ describe('RefundService', () => {
     expect(tx.paymentAdjustment.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ paymentId: 'payment-1', amount: '40.00', type: 'REFUND', actorUserId: 'user-1' }) }));
     expect(tx.cashDrawerMovement.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ drawerId: 'drawer-1', type: 'REFUND', direction: 'OUT', amount: '40.00', sourceType: 'PAYMENT_ADJUSTMENT', sourceId: expect.any(String) }) }));
     expect(audit.recordWithClient).toHaveBeenCalled();
+    expect(accounting.postPaymentAdjustment).toHaveBeenCalledWith(tx, expect.objectContaining({ tenantId: 'tenant-1', branchId: 'branch-1' }), expect.objectContaining({ adjustmentId: expect.any(String), amount: 40, type: 'REFUND' }));
   });
 
   it('fully refunds the last remaining payment and marks the order REFUNDED', async () => {
