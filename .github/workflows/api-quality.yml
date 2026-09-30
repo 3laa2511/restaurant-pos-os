@@ -12,19 +12,18 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: services/api
+        working-directory: .
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6.0.9
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 10.15.0
           run_install: false
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-        working-directory: .
-      - run: pnpm generate
-      - run: pnpm typecheck
-      - run: pnpm test -- --runInBand
+      - run: pnpm --filter @restaurant-pos/api generate
+      - run: pnpm --filter @restaurant-pos/api typecheck
+      - run: pnpm --filter @restaurant-pos/api test -- --runInBand
