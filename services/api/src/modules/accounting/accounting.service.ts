@@ -3,6 +3,7 @@ import { setRlsContext } from '../../database/rls-context.js';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import { withRlsContext } from '../../database/rls-context.js';
 import { assertBranchAccess, assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 
@@ -71,5 +72,5 @@ export class AccountingService {
 
   async trialBalance(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.journalLine.groupBy({
+    return withRlsContext(this.prisma, context, (tx) => tx.journalLine.groupBy({
       by: ['accountId'],
