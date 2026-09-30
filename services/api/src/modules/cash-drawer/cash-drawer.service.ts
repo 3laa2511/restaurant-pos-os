@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { setRlsContext } from '../../database/rls-context.js';
+import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -32,24 +32,28 @@ export class CashDrawerService {
   async create(context: AuthContext, input: CreateCashDrawerInput) {
     assertPermission(context, PERMISSIONS.CASH_DRAWER_MANAGE); assertTenantScope(context); text(input.branchId, 'Branch'); text(input.deviceId, 'Device'); text(input.name, 'Drawer name'); assertBranchAccess(context, input.branchId);
     if (context.deviceId !== input.deviceId) throw new Error('Cash drawer device does not match the authenticated device');
-    const device = await this.prisma.device.findFirst({ where: { id: input.deviceId, branchId: input.branchId, branch: { tenantId: context.tenantId!, active: true } }, select: { id: true, branchId: true, status: true } });
-    if (!device || device.status !== 'ACTIVE') throw new Error('Device is not active in the selected branch');
-    try { return await this.prisma.cashDrawer.create({ data: { id: randomUUID(), branchId: input.branchId, deviceId: input.deviceId, name: input.name.trim() } }); }
-    catch (error) { if (isUnique(error)) throw new Error('A cash drawer already exists for this device'); throw error; }
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const device = await tx.device.findFirst({ where: { id: input.deviceId, branchId: input.branchId, branch: { tenantId: context.tenantId!, active: true } }, select: { id: true, branchId: true, status: true } });
+      if (!device || device.status !== 'ACTIVE') throw new Error('Device is not active in the selected branch');
+      try { return await tx.cashDrawer.create({ data: { id: randomUUID(), branchId: input.branchId, deviceId: input.deviceId, name: input.name.trim() } }); }
+      catch (error) { if (isUnique(error)) throw new Error('A cash drawer already exists for this device'); throw error; }
+    });
   }
 
   async getBalance(context: AuthContext, drawerId: string, shiftId: string, deviceId: string): Promise<CashDrawerBalance> {
     assertPermission(context, PERMISSIONS.CASH_DRAWER_VIEW); const tenantId = assertTenantScope(context); text(drawerId, 'Drawer'); text(shiftId, 'Shift'); text(deviceId, 'Device');
     if (context.branchId) assertBranchAccess(context, context.branchId);
     if (context.deviceId !== deviceId) throw new Error('Cash drawer device does not match the authenticated device');
-    const drawer = await this.prisma.cashDrawer.findFirst({ where: { id: drawerId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, active: true } });
-    if (!drawer || !drawer.active) throw new Error('Cash drawer not found or inactive'); assertBranchAccess(context, drawer.branchId);
-    if (drawer.deviceId !== deviceId) throw new Error('Cash drawer does not belong to the selected device');
-    const shift = await this.prisma.shift.findFirst({ where: { id: shiftId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, status: true } });
-    if (!shift) throw new Error('Shift not found'); if (shift.branchId !== drawer.branchId || shift.deviceId !== drawer.deviceId) throw new Error('Shift does not belong to the cash drawer');
-    const movements = await this.prisma.cashDrawerMovement.findMany({ where: { drawerId, shiftId, branch: { tenantId } }, select: { amount: true, direction: true } });
-    const balance = money(movements.reduce((total, movement) => total + (movement.direction === 'IN' ? Number(movement.amount) : -Number(movement.amount)), 0));
-    return { drawerId: drawer.id, branchId: drawer.branchId, deviceId: drawer.deviceId, shiftId: shift.id, balance };
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const drawer = await tx.cashDrawer.findFirst({ where: { id: drawerId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, active: true } });
+      if (!drawer || !drawer.active) throw new Error('Cash drawer not found or inactive'); assertBranchAccess(context, drawer.branchId);
+      if (drawer.deviceId !== deviceId) throw new Error('Cash drawer does not belong to the selected device');
+      const shift = await tx.shift.findFirst({ where: { id: shiftId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, status: true } });
+      if (!shift) throw new Error('Shift not found'); if (shift.branchId !== drawer.branchId || shift.deviceId !== drawer.deviceId) throw new Error('Shift does not belong to the cash drawer');
+      const movements = await tx.cashDrawerMovement.findMany({ where: { drawerId, shiftId, branch: { tenantId } }, select: { amount: true, direction: true } });
+      const balance = money(movements.reduce((total, movement) => total + (movement.direction === 'IN' ? Number(movement.amount) : -Number(movement.amount)), 0));
+      return { drawerId: drawer.id, branchId: drawer.branchId, deviceId: drawer.deviceId, shiftId: shift.id, balance };
+    });
   }
 
   async recordMovement(context: AuthContext, input: RecordCashMovementInput) {
@@ -62,10 +66,14 @@ export class CashDrawerService {
     if (input.type === 'PAY_OUT' && direction !== 'OUT') throw new Error('Pay-out must be an OUT movement');
     if (input.type === 'PAY_IN' && direction !== 'IN') throw new Error('Pay-in must be an IN movement');
     const requestHash = hash({ ...input, direction });
-    const existing = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-    if (existing) {
-      const owner = await this.prisma.branch.findFirst({ where: { id: existing.branchId, tenantId }, select: { id: true } });
+    const existing = await withRlsContext(this.prisma, context, async (tx) => {
+      const found = await tx.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+      if (!found) return null;
+      const owner = await tx.branch.findFirst({ where: { id: found.branchId, tenantId }, select: { id: true } });
       if (!owner) throw new Error('Idempotency key is already in use');
+      return found;
+    });
+    if (existing) {
       if (existing.requestHash !== requestHash) throw new Error('Idempotency key was reused with a different cash movement');
       if (existing.result) return existing.result as unknown as { operationId: string; movementId: string; balance: number };
     }
@@ -95,10 +103,14 @@ export class CashDrawerService {
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       } catch (error) {
         if (isUnique(error)) {
-          const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-          if (winner) {
-            const owner = await this.prisma.branch.findFirst({ where: { id: winner.branchId, tenantId }, select: { id: true } });
+          const winner = await withRlsContext(this.prisma, context, async (tx) => {
+            const found = await tx.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+            if (!found) return null;
+            const owner = await tx.branch.findFirst({ where: { id: found.branchId, tenantId }, select: { id: true } });
             if (!owner) throw new Error('Idempotency key is already in use');
+            return found;
+          });
+          if (winner) {
             if (winner.requestHash !== requestHash) throw new Error('Idempotency key was reused with a different cash movement');
             if (winner.result) return winner.result as unknown as { operationId: string; movementId: string; balance: number };
           }
