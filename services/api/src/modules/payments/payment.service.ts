@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { setRlsContext } from '../../database/rls-context.js';
+import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -28,7 +28,7 @@ export class PaymentService {
     if (!Number.isInteger(input.clientSequence) || input.clientSequence < 0) throw new Error('clientSequence must be a non-negative integer');
     if (context.deviceId !== input.deviceId) throw new Error('Payment device does not match the authenticated device');
     const requestHash = createHash('sha256').update(JSON.stringify({ ...input, allocations: input.allocations })).digest('hex');
-    const existing = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+    const existing = await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }));
     if (existing) return this.existingResult(existing.result, existing.requestHash, requestHash, existing.operationId);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -79,7 +79,7 @@ export class PaymentService {
           return result;
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       } catch (error) {
-        if (isUniqueConstraintError(error)) { const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }); if (winner) return this.existingResult(winner.result, winner.requestHash, requestHash, winner.operationId); }
+        if (isUniqueConstraintError(error)) { const winner = await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } })); if (winner) return this.existingResult(winner.result, winner.requestHash, requestHash, winner.operationId); }
         if (!isSerializationConflict(error) || attempt === 2) throw error;
       }
     }
