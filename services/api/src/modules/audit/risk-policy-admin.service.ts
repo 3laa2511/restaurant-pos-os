@@ -102,8 +102,11 @@ export class RiskPolicyAdminService {
 
   async list(context: AuthContext, branchId?: string, action?: string, includeDisabled = true) {
     this.authorize(context, branchId);
+    const tenantId = context.tenantId?.trim();
+    if (!tenantId) throw new Error('Risk policy tenant context is required');
     return withRlsContext(this.prisma, context, (tx) => tx.riskPolicy.findMany({
       where: {
+        tenantId,
         ...(branchId ? { branchId } : context.branchId ? { branchId: context.branchId } : {}),
         ...(action?.trim() ? { action: action.trim() } : {}),
         ...(includeDisabled ? {} : { enabled: true }),
@@ -115,8 +118,10 @@ export class RiskPolicyAdminService {
   async create(context: AuthContext, input: RiskPolicyWriteInput) {
     this.authorize(context, input.branchId);
     const data = this.normalize(input);
-    return this.prisma.$transaction(async (tx) => {
-      const created = await tx.riskPolicy.create({ data });
+    const tenantId = context.tenantId?.trim();
+    if (!tenantId) throw new Error('Risk policy tenant context is required');
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const created = await tx.riskPolicy.create({ data: { ...data, tenantId } });
       await tx.auditLog.create({
         data: {
           actorUserId: context.userId,
