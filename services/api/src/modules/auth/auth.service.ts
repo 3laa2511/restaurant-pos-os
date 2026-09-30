@@ -89,7 +89,11 @@ export class AuthService {
         throw new UnauthorizedException('Invalid credentials');
       }
 
-      const selectedBranchId = user.branchId;
+      let selectedBranchId = user.branchId;
+      if (user.branchId !== null && input.branchId !== undefined && input.branchId !== user.branchId) {
+        throw new UnauthorizedException('User is not assigned to this branch');
+      }
+
       await setRlsContext(tx, {
         tenantId: user.tenantId,
         branchId: selectedBranchId,
@@ -97,19 +101,22 @@ export class AuthService {
         sessionId: 'preauth',
       });
 
-      if (user.branchId !== null && input.branchId !== undefined && input.branchId !== user.branchId) {
-        throw new UnauthorizedException('User is not assigned to this branch');
-      }
-
-      let deviceId: string | null = null;
-
       if (input.branchId !== undefined) {
         const branch = await tx.branch.findFirst({
           where: { id: input.branchId, tenantId: user.tenantId },
           select: { id: true, active: true },
         });
         if (!branch?.active) throw new UnauthorizedException('Branch is unavailable');
+        selectedBranchId = input.branchId;
+        await setRlsContext(tx, {
+          tenantId: user.tenantId,
+          branchId: selectedBranchId,
+          userId: user.id,
+          sessionId: 'preauth',
+        });
       }
+
+      let deviceId: string | null = null;
 
       if (input.deviceCode) {
         const device = await tx.device.findUnique({
