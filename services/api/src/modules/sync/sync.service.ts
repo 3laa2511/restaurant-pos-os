@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { setRlsContext } from '../../database/rls-context.js';
+import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
@@ -42,17 +42,19 @@ export class SyncService {
     const tenantId = assertTenantScope(context);
     validateSyncEnvelope(envelope);
     this.assertDeviceScope(context, envelope.deviceId, envelope.branchId);
-    const branch = await this.prisma.branch.findFirst({ where: { id: envelope.branchId, tenantId, active: true }, select: { id: true } });
-    if (!branch) throw new Error('Forbidden: branch does not belong to the authenticated tenant');
     const requestHash = createHash('sha256').update(JSON.stringify(envelope)).digest('hex');
-    const existing = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: envelope.idempotencyKey } });
-    if (existing) {
+    const preflight = await withRlsContext(this.prisma, context, async (tx) => {
+      const branch = await tx.branch.findFirst({ where: { id: envelope.branchId, tenantId, active: true }, select: { id: true } });
+      if (!branch) throw new Error('Forbidden: branch does not belong to the authenticated tenant');
+      const existing = await tx.syncOperation.findUnique({ where: { idempotencyKey: envelope.idempotencyKey } });
+      if (!existing) return null;
       if (existing.branchId !== envelope.branchId) throw new Error('Idempotency key is already in use');
-      const owner = await this.prisma.branch.findFirst({ where: { id: existing.branchId, tenantId }, select: { id: true } });
+      const owner = await tx.branch.findFirst({ where: { id: existing.branchId, tenantId }, select: { id: true } });
       if (!owner) throw new Error('Idempotency key is already in use');
-      return this.resultForExisting(existing, requestHash);
-    }
-    if (envelope.operation !== 'CHECKOUT' || envelope.entityType !== 'ORDER') return this.rejectUnsupportedOperation(envelope, requestHash);
+      return existing;
+    });
+    if (preflight) return this.resultForExisting(preflight, requestHash);
+    if (envelope.operation !== 'CHECKOUT' || envelope.entityType !== 'ORDER') return this.rejectUnsupportedOperation(context, envelope, requestHash);
     const operationId = randomUUID();
     const payload = assertCheckoutPayload(envelope.payload, envelope);
     assertPermission(context, PERMISSIONS.ORDER_CREATE);
@@ -96,12 +98,14 @@ export class SyncService {
         return applied;
       });
     } catch (error) {
-      const raced = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: envelope.idempotencyKey } });
-      if (raced) {
-        const owner = await this.prisma.branch.findFirst({ where: { id: raced.branchId, tenantId }, select: { id: true } });
-        if (!owner || raced.branchId !== envelope.branchId) throw new Error('Idempotency key is already in use');
-        return this.resultForExisting(raced, requestHash);
-      }
+      const raced = await withRlsContext(this.prisma, context, async (tx) => {
+        const found = await tx.syncOperation.findUnique({ where: { idempotencyKey: envelope.idempotencyKey } });
+        if (!found) return null;
+        const owner = await tx.branch.findFirst({ where: { id: found.branchId, tenantId }, select: { id: true } });
+        if (!owner || found.branchId !== envelope.branchId) throw new Error('Idempotency key is already in use');
+        return found;
+      });
+      if (raced) return this.resultForExisting(raced, requestHash);
       throw error;
     }
   }
@@ -111,12 +115,12 @@ export class SyncService {
     const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
     const branchIds = context.branchId
       ? [context.branchId]
-      : (await this.prisma.branch.findMany({
+      : (await withRlsContext(this.prisma, context, (tx) => tx.branch.findMany({
           where: { tenantId, active: true },
           select: { id: true },
-        })).map((branch) => branch.id);
+        }))).map((branch) => branch.id);
 
-    return this.prisma.syncOperation.findMany({
+    return withRlsContext(this.prisma, context, (tx) => tx.syncOperation.findMany({
       where: {
         status: 'RECEIVED',
         branchId: { in: branchIds },
@@ -136,12 +140,12 @@ export class SyncService {
         payload: true,
         status: true,
       },
-    });
+    }));
   }
-  private async rejectUnsupportedOperation(envelope: SyncEnvelope, requestHash: string): Promise<SyncResult> {
+  private async rejectUnsupportedOperation(context: AuthContext, envelope: SyncEnvelope, requestHash: string): Promise<SyncResult> {
     const operationId = randomUUID();
     const result: SyncResult = { status: 'REJECTED', operationId, reason: 'Unsupported sync operation; completed POS checkouts must use CHECKOUT' };
-    await this.prisma.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: envelope.deviceId, branchId: envelope.branchId, operation: envelope.operation, entityType: envelope.entityType, entityId: envelope.entityId, idempotencyKey: envelope.idempotencyKey, clientSequence: envelope.clientSequence, occurredAt: new Date(envelope.occurredAt), payload: envelope.payload, requestHash, status: 'REJECTED', result, updatedAt: new Date() } });
+    await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: envelope.deviceId, branchId: envelope.branchId, operation: envelope.operation, entityType: envelope.entityType, entityId: envelope.entityId, idempotencyKey: envelope.idempotencyKey, clientSequence: envelope.clientSequence, occurredAt: new Date(envelope.occurredAt), payload: envelope.payload, requestHash, status: 'REJECTED', result, updatedAt: new Date() } }));
     return result;
   }
 
