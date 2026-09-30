@@ -18,8 +18,12 @@ const context: AuthContext = {
 function buildPrisma() {
   const prisma = {
     auditLog: { findMany: jest.fn() as AsyncMock },
+    $transaction: jest.fn(),
   };
   prisma.auditLog.findMany.mockResolvedValue([]);
+  prisma.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
+    callback({ $executeRaw: jest.fn().mockResolvedValue(4), auditLog: prisma.auditLog }),
+  );
   return prisma;
 }
 
