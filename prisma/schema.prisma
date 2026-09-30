@@ -141,6 +141,7 @@ model Tenant {
   accountingAccounts AccountingAccount[]
   journalEntries JournalEntry[]
   postedJournalEntries JournalEntry[] @relation("PostedJournalEntries")
+  riskPolicies RiskPolicy[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([active])
