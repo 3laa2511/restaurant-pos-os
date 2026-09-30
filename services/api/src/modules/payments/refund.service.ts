@@ -51,7 +51,7 @@ export class RefundService {
     if (!Number.isInteger(input.clientSequence) || input.clientSequence < 0) throw new Error('clientSequence must be a non-negative integer');
 
     const requestHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
-    const existing = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+    const existing = await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }));
     if (existing) return this.existingResult(existing.result, existing.requestHash, requestHash, existing.operationId);
 
     const operationId = randomUUID();
@@ -123,7 +123,7 @@ export class RefundService {
       });
     } catch (error) {
       if (isUniqueConstraintError(error)) {
-        const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+        const winner = await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }));
         if (winner) return this.existingResult(winner.result, winner.requestHash, requestHash, winner.operationId);
       }
       throw error;
