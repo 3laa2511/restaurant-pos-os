@@ -74,6 +74,20 @@ export async function withLoginRlsContext<T>(
   });
 }
 
+export async function withSessionBootstrapRlsContext<T>(
+  prisma: PrismaServiceLike,
+  tokenHash: string,
+  work: (tx: RlsTransaction) => Promise<T>,
+): Promise<T> {
+  if (!tokenHash) throw new Error('RLS session token hash is required');
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      SELECT set_config('app.session_token_hash', ${tokenHash}, true)
+    `;
+    return work(tx);
+  });
+}
+
 export interface PrismaServiceLike {
   $transaction<T>(
     fn: (tx: RlsTransaction) => Promise<T>,
