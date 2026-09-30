@@ -9,7 +9,10 @@ const mockPrisma = () => {
   $executeRaw: jest.fn().mockResolvedValue(4),
   $transaction: jest.fn(async (callback: (tx: typeof prisma) => Promise<any>) => callback(prisma)),
   user: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
-  branch: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
+  branch: {
+    findUnique: jest.fn<(args: MockArgs) => MockResult>(),
+    findFirst: jest.fn<(args: MockArgs) => MockResult>(),
+  },
   device: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
   session: {
     create: jest.fn<(args: MockArgs) => MockResult>(),
