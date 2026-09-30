@@ -72,7 +72,7 @@ describe('PaymentService.settleSplitPayment', () => {
 
   it('denies settlement when the authenticated session has no tenant scope', async () => {
     const { prisma } = buildPrisma();
-    const service = new PaymentService(prisma as unknown as PrismaService);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
     await expect(service.settleSplitPayment({ ...context, tenantId: null }, { orderId: 'order-1', shiftId: 'shift-1', allocations: [{ method: 'CASH', amount: 250 }], idempotencyKey: 'checkout-no-tenant', deviceId: 'device-1', clientSequence: 47 })).rejects.toThrow('tenant scope is required');
     expect(prisma.syncOperation.findUnique).not.toHaveBeenCalled();
   });
@@ -80,7 +80,7 @@ describe('PaymentService.settleSplitPayment', () => {
   it('does not charge an already-paid order again', async () => {
     const { prisma, tx } = buildPrisma();
     tx.payment.findMany.mockResolvedValue([{ id: 'payment-existing' }]);
-    const service = new PaymentService(prisma as unknown as PrismaService);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
     await expect(service.settleSplitPayment(context, { orderId: 'order-1', shiftId: 'shift-1', allocations: [{ method: 'CASH', amount: 250 }], idempotencyKey: 'checkout-2', deviceId: 'device-1', clientSequence: 43 })).rejects.toThrow('already has payments');
     expect(tx.payment.create).not.toHaveBeenCalled();
     expect(tx.order.updateMany).not.toHaveBeenCalled();
@@ -92,7 +92,7 @@ describe('PaymentService.settleSplitPayment', () => {
     const input = { orderId: 'order-1', shiftId: 'shift-1', allocations: [{ method: 'CASH' as const, amount: 250 }], idempotencyKey: 'checkout-3', deviceId: 'device-1', clientSequence: 44 };
     const hash = createHash('sha256').update(JSON.stringify({ ...input, allocations: input.allocations })).digest('hex');
     prisma.syncOperation.findUnique.mockResolvedValue({ operationId: 'operation-1', requestHash: hash, result: stored });
-    const service = new PaymentService(prisma as unknown as PrismaService);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
     await expect(service.settleSplitPayment(context, input)).resolves.toEqual(stored);
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(tx.payment.create).not.toHaveBeenCalled();
@@ -106,7 +106,7 @@ describe('PaymentService.settleSplitPayment', () => {
     const uniqueError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: '7.10.0' });
     prisma.syncOperation.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ operationId: 'operation-winner', requestHash: hash, result: stored });
     tx.syncOperation.create.mockRejectedValueOnce(uniqueError);
-    const service = new PaymentService(prisma as unknown as PrismaService);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
     await expect(service.settleSplitPayment(context, input)).resolves.toEqual(stored);
     expect(prisma.syncOperation.findUnique).toHaveBeenCalledTimes(2);
   });
