@@ -2,7 +2,7 @@ import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } fr
 import { promisify } from 'node:util';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
-import { setRlsContext, withLoginRlsContext, withRlsContext } from '../../database/rls-context.js';
+import { setRlsContext, withLoginRlsContext, withRlsContext, withSessionBootstrapRlsContext } from '../../database/rls-context.js';
 import { permissionsForRole } from './authorization.rules.js';
 import { buildAuthContext } from './session.types.js';
 import { workspacesForAccess } from './workspace.constants.js';
@@ -190,17 +190,19 @@ export class AuthService {
     if (!accessToken.trim()) throw new UnauthorizedException('Authentication required');
 
     const tokenHash = hashToken(accessToken);
-    const bootstrap = await this.prisma.session.findUnique({
-      where: { tokenHash },
-      select: {
-        id: true,
-        tenantId: true,
-        branchId: true,
-        userId: true,
-        expiresAt: true,
-        revokedAt: true,
-      },
-    });
+    const bootstrap = await withSessionBootstrapRlsContext(this.prisma, tokenHash, async (tx) =>
+      tx.session.findUnique({
+        where: { tokenHash },
+        select: {
+          id: true,
+          tenantId: true,
+          branchId: true,
+          userId: true,
+          expiresAt: true,
+          revokedAt: true,
+        },
+      }),
+    );
 
     if (!bootstrap || bootstrap.revokedAt !== null || bootstrap.expiresAt <= new Date()) {
       throw new UnauthorizedException('Session is expired or revoked');
