@@ -51,6 +51,29 @@ export async function withRlsContext<T>(
   });
 }
 
+export async function setLoginRlsContext(
+  tx: RlsTransaction,
+  username: string,
+): Promise<void> {
+  const normalized = username.trim();
+  if (!normalized) throw new Error('RLS login username is required');
+
+  await tx.$executeRaw`
+    SELECT set_config('app.login_username', ${normalized}, true)
+  `;
+}
+
+export async function withLoginRlsContext<T>(
+  prisma: PrismaServiceLike,
+  username: string,
+  work: (tx: RlsTransaction) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await setLoginRlsContext(tx, username);
+    return work(tx);
+  });
+}
+
 export interface PrismaServiceLike {
   $transaction<T>(
     fn: (tx: RlsTransaction) => Promise<T>,
