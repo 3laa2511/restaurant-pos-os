@@ -41,7 +41,7 @@ function buildPrisma() {
 describe('PaymentService.settleSplitPayment', () => {
   it('persists mixed payment settlement atomically and applies the authenticated tenant to order, shift, and transition', async () => {
     const { prisma, tx } = buildPrisma();
-    const service = new PaymentService(prisma as unknown as PrismaService);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
     const result = await service.settleSplitPayment(context, {
       orderId: 'order-1', shiftId: 'shift-1',
       allocations: [{ method: 'CASH', amount: 100, receivedCash: 120 }, { method: 'CARD', amount: 150, reference: 'card-123' }],
@@ -64,7 +64,7 @@ describe('PaymentService.settleSplitPayment', () => {
   it('cannot settle an order belonging to another tenant', async () => {
     const { prisma, tx } = buildPrisma();
     tx.order.findFirst.mockResolvedValue(null);
-    const service = new PaymentService(prisma as unknown as PrismaService);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
     await expect(service.settleSplitPayment(context, { orderId: 'foreign-order', shiftId: 'shift-1', allocations: [{ method: 'CASH', amount: 250 }], idempotencyKey: 'checkout-cross-tenant', deviceId: 'device-1', clientSequence: 46 })).rejects.toThrow('Order not found');
     expect(tx.payment.create).not.toHaveBeenCalled();
     expect(tx.order.updateMany).not.toHaveBeenCalled();
