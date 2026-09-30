@@ -106,17 +106,19 @@ export class InventoryService {
     const tenantId = assertTenantScope(context);
     if (input.fromWarehouseId === input.toWarehouseId) throw new Error('Source and destination warehouses must be different');
     if (!input.items?.length) throw new Error('Transfer must contain at least one item');
-    const warehouses = await this.prisma.warehouse.findMany({ where: { tenantId, id: { in: [input.fromWarehouseId, input.toWarehouseId] }, active: true } });
-    if (warehouses.length !== 2) throw new Error('Warehouse not found');
-    for (const w of warehouses) if (w.branchId) assertBranchAccess(context, w.branchId);
-    const ingredientIds = input.items.map(x => x.ingredientId);
-    const ingredients = await this.prisma.ingredient.findMany({ where: { tenantId, id: { in: ingredientIds }, active: true }, select: { id: true } });
-    if (ingredients.length !== new Set(ingredientIds).size) throw new Error('Transfer contains an invalid ingredient');
-    for (const item of input.items) { const qty = n(item.quantityBaseUnit, 'Transfer quantity'); if (qty <= 0) throw new Error('Transfer quantity must be greater than zero'); }
-    const transferNumber = 'TR-' + Date.now() + '-' + randomUUID().slice(0, 8).toUpperCase();
-    return this.prisma.inventoryTransfer.create({
-      data: { id: randomUUID(), tenantId, transferNumber, fromWarehouseId: input.fromWarehouseId, toWarehouseId: input.toWarehouseId, status: 'REQUESTED', requestedById: context.userId, requestedAt: new Date(), notes: input.notes?.trim() || null, items: { create: input.items.map(x => ({ id: randomUUID(), ingredientId: x.ingredientId, quantityBaseUnit: n(x.quantityBaseUnit, 'Transfer quantity'), unitCost: 0 })) } },
-      include: { items: true },
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const warehouses = await tx.warehouse.findMany({ where: { tenantId, id: { in: [input.fromWarehouseId, input.toWarehouseId] }, active: true } });
+      if (warehouses.length !== 2) throw new Error('Warehouse not found');
+      for (const w of warehouses) if (w.branchId) assertBranchAccess(context, w.branchId);
+      const ingredientIds = input.items.map(x => x.ingredientId);
+      const ingredients = await tx.ingredient.findMany({ where: { tenantId, id: { in: ingredientIds }, active: true }, select: { id: true } });
+      if (ingredients.length !== new Set(ingredientIds).size) throw new Error('Transfer contains an invalid ingredient');
+      for (const item of input.items) { const qty = n(item.quantityBaseUnit, 'Transfer quantity'); if (qty <= 0) throw new Error('Transfer quantity must be greater than zero'); }
+      const transferNumber = 'TR-' + Date.now() + '-' + randomUUID().slice(0, 8).toUpperCase();
+      return tx.inventoryTransfer.create({
+        data: { id: randomUUID(), tenantId, transferNumber, fromWarehouseId: input.fromWarehouseId, toWarehouseId: input.toWarehouseId, status: 'REQUESTED', requestedById: context.userId, requestedAt: new Date(), notes: input.notes?.trim() || null, items: { create: input.items.map(x => ({ id: randomUUID(), ingredientId: x.ingredientId, quantityBaseUnit: n(x.quantityBaseUnit, 'Transfer quantity'), unitCost: 0 })) } },
+        include: { items: true },
+      });
     });
   }
 
@@ -186,9 +188,9 @@ export class InventoryService {
 
   async setRecipe(context:AuthContext,productId:string,input:{items:Array<{ingredientId:string;quantityBaseUnit:number;wastePercent?:number}>}){
     const tenantId=assertTenantScope(context);
-    const product=await this.prisma.product.findFirst({where:{id:productId,tenantId},select:{id:true}}); if(!product)throw new Error('Product not found');
-    return this.prisma.$transaction(async tx => {
-      await setRlsContext(tx, context);
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const product=await tx.product.findFirst({where:{id:productId,tenantId},select:{id:true}});
+      if(!product)throw new Error('Product not found');
       await tx.recipeIngredient.deleteMany({where:{productId,tenantId}});
       if(input.items?.length) {
         const ingredientIds = input.items.map((x) => x.ingredientId);
