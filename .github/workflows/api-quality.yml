@@ -47,7 +47,6 @@ jobs:
           psql "$RLS_ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
           CREATE ROLE rls_app LOGIN PASSWORD 'rls_app' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
           GRANT CONNECT ON DATABASE restaurant_pos_test TO rls_app;
-          GRANT USAGE ON SCHEMA public, app TO rls_app;
           SQL
       - name: Apply migrations
         working-directory: services/api
