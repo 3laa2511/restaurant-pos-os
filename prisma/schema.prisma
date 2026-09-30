@@ -1236,6 +1236,8 @@ model AuditLog {
 }
 model RiskPolicy {
   id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   action String
   branchId String?
   branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
@@ -1250,8 +1252,8 @@ model RiskPolicy {
   enabled Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  @@index([action, branchId, enabled])
-  @@index([effectiveFrom, effectiveTo])
+  @@index([tenantId, action, branchId, enabled])
+  @@index([tenantId, effectiveFrom, effectiveTo])
 }
 model SyncOperation {
   id String @id @default(cuid())
