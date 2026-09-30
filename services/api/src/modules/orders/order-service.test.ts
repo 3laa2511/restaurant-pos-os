@@ -88,7 +88,7 @@ describe('OrderService', () => {
       type: 'TAKEAWAY',
       status: OrderStatus.DRAFT,
       total: '25.00',
-    });
+    }, context);
 
     expect(await service.findById(context, 'order-tenant-2')).toBeNull();
     await expect(
