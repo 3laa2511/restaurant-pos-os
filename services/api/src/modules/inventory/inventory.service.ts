@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { setRlsContext } from '../../database/rls-context.js';
+import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
 import { randomUUID } from 'node:crypto';
 import { Prisma, InventoryUnit } from '../../generated/prisma/client.js';
 import { AccountingService } from '../accounting/accounting.service.js';
@@ -12,18 +12,19 @@ export class InventoryService {
   constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingService) {}
 
   async listIngredients(context: AuthContext) {
-    return this.prisma.ingredient.findMany({ where:{ tenantId:assertTenantScope(context), active:true }, orderBy:{name:'asc'} });
+    const tenantId = assertTenantScope(context);
+    return withRlsContext(this.prisma, context, (tx) => tx.ingredient.findMany({ where:{ tenantId, active:true }, orderBy:{name:'asc'} }));
   }
 
   async createIngredient(context: AuthContext,input:{sku:string;name:string;nameAr?:string;baseUnit:string;purchaseUnit:string;purchaseUnitFactor:number;reorderLevel?:number}) {
     const tenantId=assertTenantScope(context);
     const factor=n(input.purchaseUnitFactor,'Purchase unit factor'); if(factor<=0)throw new Error('Purchase unit factor must be greater than zero');
-    return this.prisma.ingredient.create({data:{id:randomUUID(),tenantId,sku:input.sku.trim(),name:input.name.trim(),nameAr:input.nameAr?.trim()||null,baseUnit:input.baseUnit as InventoryUnit,purchaseUnit:input.purchaseUnit as InventoryUnit,purchaseUnitFactor:factor,reorderLevel:n(input.reorderLevel??0,'Reorder level')}});
+    return withRlsContext(this.prisma, context, (tx) => tx.ingredient.create({data:{id:randomUUID(),tenantId,sku:input.sku.trim(),name:input.name.trim(),nameAr:input.nameAr?.trim()||null,baseUnit:input.baseUnit as InventoryUnit,purchaseUnit:input.purchaseUnit as InventoryUnit,purchaseUnitFactor:factor,reorderLevel:n(input.reorderLevel??0,'Reorder level')}}));
   }
 
   async listStock(context:AuthContext,branchId?:string){
     const tenantId=assertTenantScope(context); if(branchId)assertBranchAccess(context,branchId);
-    return this.prisma.inventoryStockBalance.findMany({where:{tenantId,...(branchId?{branchId}: {})},include:{ingredient:true,branch:{select:{id:true,code:true,name:true}}},orderBy:{ingredient:{name:'asc'}}});
+    return withRlsContext(this.prisma, context, (tx) => tx.inventoryStockBalance.findMany({where:{tenantId,...(branchId?{branchId}: {})},include:{ingredient:true,branch:{select:{id:true,code:true,name:true}}},orderBy:{ingredient:{name:'asc'}}}));
   }
 
   async receive(context:AuthContext,input:{branchId:string;supplierId?:string;reference?:string;items:Array<{ingredientId:string;quantityPurchaseUnit:number;unitCost:number}>;}) {
@@ -73,18 +74,18 @@ export class InventoryService {
 
   async listWarehouses(context: AuthContext) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.warehouse.findMany({
+    return withRlsContext(this.prisma, context, (tx) => tx.warehouse.findMany({
       where: context.branchId
         ? { tenantId, active: true, OR: [{ branchId: context.branchId }, { type: 'CENTRAL' }] }
         : { tenantId, active: true },
       include: { branch: { select: { id: true, code: true, name: true } } },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
-    });
+    }));
   }
 
   async listTransfers(context: AuthContext, status?: string) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.inventoryTransfer.findMany({
+    return withRlsContext(this.prisma, context, (tx) => tx.inventoryTransfer.findMany({
       where: {
         tenantId,
         ...(status ? { status } : {}),
@@ -98,7 +99,7 @@ export class InventoryService {
         items: { include: { ingredient: { select: { id: true, sku: true, name: true, baseUnit: true } } } },
       },
       orderBy: { createdAt: 'desc' },
-    });
+    }));
   }
 
   async createTransfer(context: AuthContext, input: { fromWarehouseId: string; toWarehouseId: string; items: Array<{ ingredientId: string; quantityBaseUnit: number }>; notes?: string }) {
