@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
-import { setRlsContext } from '../../database/rls-context.js';
+import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AccountingService } from '../accounting/accounting.service.js';
@@ -66,7 +66,7 @@ export class RefundService {
       try {
         return await this.prisma.$transaction(async (tx) => {
           await setRlsContext(tx, context);
-        const payment = await tx.payment.findUnique({
+          const payment = await tx.payment.findUnique({
           where: { id: input.paymentId },
           select: { id: true, orderId: true, shiftId: true, amount: true, method: true, status: true, order: { select: { id: true, branchId: true, status: true } } },
         });
