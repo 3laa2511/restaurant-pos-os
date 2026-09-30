@@ -60,7 +60,7 @@ export class OrderService {
       type: input.type,
       status: OrderStatus.DRAFT,
       total: input.total,
-    });
+    }, context);
 
     const occurredAt = new Date();
     await this.events.append({
@@ -90,7 +90,7 @@ export class OrderService {
   async findById(context: AuthContext, id: string): Promise<CreateOrderRecord | null> {
     assertPermission(context, PERMISSIONS.ORDER_VIEW);
     const tenantId = assertTenantScope(context);
-    const order = await this.orders.findById(id.trim(), tenantId);
+    const order = await this.orders.findById(id.trim(), tenantId, context);
     if (order) assertBranchAccess(context, order.branchId);
     return order;
   }
@@ -103,10 +103,10 @@ export class OrderService {
   ): Promise<CreateOrderRecord> {
     assertPermission(context, PERMISSIONS.ORDER_CONFIRM);
     const tenantId = assertTenantScope(context);
-    const current = await this.orders.findById(id.trim(), tenantId);
+    const current = await this.orders.findById(id.trim(), tenantId, context);
     if (!current) throw new Error('Order not found');
     assertBranchAccess(context, current.branchId);
-    return this.orders.transition(id.trim(), tenantId, expectedVersion, status);
+    return this.orders.transition(id.trim(), tenantId, expectedVersion, status, context);
   }
 
   private async nextOrderNumber(branchId: string): Promise<string> {
