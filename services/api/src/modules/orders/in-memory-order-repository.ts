@@ -1,15 +1,16 @@
 import type { CreateOrderRecord, OrderRepository } from './order-repository.port.js';
 import type { OrderStatus } from './order-status.js';
+import type { AuthContext } from '../auth/authorization.types.js';
 
 export class InMemoryOrderRepository implements OrderRepository {
   private readonly records = new Map<string, CreateOrderRecord>();
 
-  async findById(id: string, tenantId: string): Promise<CreateOrderRecord | null> {
+  async findById(id: string, tenantId: string, _context: AuthContext): Promise<CreateOrderRecord | null> {
     const record = this.records.get(id);
     return record?.tenantId === tenantId ? record : null;
   }
 
-  async create(input: Omit<CreateOrderRecord, 'version'>): Promise<CreateOrderRecord> {
+  async create(input: Omit<CreateOrderRecord, 'version'>, _context: AuthContext): Promise<CreateOrderRecord> {
     const record: CreateOrderRecord = { ...input, version: 1 };
     this.records.set(record.id, record);
     return record;
@@ -20,6 +21,7 @@ export class InMemoryOrderRepository implements OrderRepository {
     tenantId: string,
     expectedVersion: number,
     status: OrderStatus,
+    _context: AuthContext,
   ): Promise<CreateOrderRecord> {
     const current = this.records.get(id);
     if (!current || current.tenantId !== tenantId) throw new Error('Order not found in tenant scope');
