@@ -67,7 +67,7 @@ describe('RefundService', () => {
     const { prisma, tx, audit } = prismaMock();
     setupPayment(tx);
     tx.payment.findMany.mockResolvedValue([{ amount: '100.00', status: 'REFUNDED', adjustments: [{ amount: '100.00' }] }]);
-    const service = new RefundService(prisma as never, audit as never);
+    const service = new RefundService(prisma as never, audit as never, { postPaymentAdjustment: jest.fn().mockResolvedValue({ id: 'journal-1' }) } as never);
     const result = await service.refundPayment(context(PERMISSIONS.PAYMENT_REFUND), { ...baseInput, amount: 100, idempotencyKey: 'refund-2' });
     expect(result.paymentStatus).toBe('REFUNDED');
     expect(result.orderStatus).toBe('REFUNDED');
@@ -77,7 +77,7 @@ describe('RefundService', () => {
   it('requires the dedicated void permission', async () => {
     const { prisma, tx, audit } = prismaMock();
     setupPayment(tx);
-    const service = new RefundService(prisma as never, audit as never);
+    const service = new RefundService(prisma as never, audit as never, { postPaymentAdjustment: jest.fn().mockResolvedValue({ id: 'journal-1' }) } as never);
     await expect(service.voidPayment(context(PERMISSIONS.PAYMENT_REFUND), { ...baseInput, amount: 100, idempotencyKey: 'void-permission' })).rejects.toThrow('Forbidden: missing permission payment.void');
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -85,7 +85,7 @@ describe('RefundService', () => {
   it('rejects a void after a partial refund even when the caller has void permission', async () => {
     const { prisma, tx, audit } = prismaMock();
     setupPayment(tx, 'PARTIALLY_REFUNDED');
-    const service = new RefundService(prisma as never, audit as never);
+    const service = new RefundService(prisma as never, audit as never, { postPaymentAdjustment: jest.fn().mockResolvedValue({ id: 'journal-1' }) } as never);
     await expect(service.voidPayment(context(PERMISSIONS.PAYMENT_VOID), { ...baseInput, amount: 100, idempotencyKey: 'void-1' })).rejects.toThrow('cannot be voided');
     expect(prisma.$transaction).toHaveBeenCalled();
     expect(tx.paymentAdjustment.create).not.toHaveBeenCalled();
