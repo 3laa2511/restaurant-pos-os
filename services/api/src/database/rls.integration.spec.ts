@@ -48,7 +48,7 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
       await client.query(
         `SELECT
           set_config('app.tenant_id',$1,true),
-          set_config('app.branch_id,$2,true),
+          set_config('app.branch_id',$2,true),
           set_config('app.user_id',$3,true),
           set_config('app.session_id',$4,true)`,
         [tenantId, branchId ?? '', randomUUID(), randomUUID()],
