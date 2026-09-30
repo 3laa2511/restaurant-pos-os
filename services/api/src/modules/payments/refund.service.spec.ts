@@ -29,7 +29,9 @@ function prismaMock() {
   } as any;
   const audit: AuditMock = { recordWithClient: jest.fn() };
   audit.recordWithClient.mockResolvedValue({ id: 'audit-1', riskScore: 70, riskLevel: 'HIGH' });
-  return { prisma, tx, audit };
+  const accounting = { postPaymentAdjustment: jest.fn().mockResolvedValue({ id: 'journal-1' }) };
+  return { prisma, tx, audit, accounting };
+  return { prisma, tx, audit, accounting };
 }
 
 const baseInput = {
@@ -49,10 +51,10 @@ function setupPayment(tx: any, status: string = 'PAID') {
 
 describe('RefundService', () => {
   it('persists a partial cash refund and records the immutable drawer movement', async () => {
-    const { prisma, tx, audit } = prismaMock();
+    const { prisma, tx, audit, accounting } = prismaMock();
     setupPayment(tx);
     tx.payment.findMany.mockResolvedValue([{ amount: '100.00', status: 'PARTIALLY_REFUNDED', adjustments: [{ amount: '40.00' }] }]);
-    const service = new RefundService(prisma as never, audit as never);
+    const service = new RefundService(prisma as never, audit as never, accounting as never);
     const result = await service.refundPayment(context(PERMISSIONS.PAYMENT_REFUND), baseInput);
     expect(result.paymentStatus).toBe('PARTIALLY_REFUNDED');
     expect(result.orderStatus).toBe('CLOSED');
