@@ -29,6 +29,7 @@ export function buildAuthContext(
 ): AuthContext {
   assertSessionActive(session);
   return {
+    sessionId: session.sessionId,
     userId: session.userId,
     tenantId: session.tenantId,
     branchId: session.branchId,
