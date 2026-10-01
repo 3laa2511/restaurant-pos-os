@@ -140,7 +140,7 @@ export class AuthService {
         throw new UnauthorizedException('User is not authorized for this workspace');
       }
 
-      const workspace = input.workspace ?? availableWorkspaces[0];
+      const workspace: WorkspaceCode = input.workspace ?? availableWorkspaces[0]!;
       const accessToken = randomBytes(32).toString('base64url');
       const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
 
@@ -200,6 +200,8 @@ export class AuthService {
           userId: true,
           expiresAt: true,
           revokedAt: true,
+          workspace: true,
+          deviceId: true,
         },
       }),
     );
@@ -260,6 +262,7 @@ export class AuthService {
             deviceId: session.deviceId,
             expiresAt: session.expiresAt,
             revokedAt: session.revokedAt,
+            workspace: session.workspace as WorkspaceCode,
           },
           roles,
           permissions,
