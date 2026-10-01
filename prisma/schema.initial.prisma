@@ -1,20 +1,73 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../services/api/src/generated/prisma"
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
 
-enum UserStatus { ACTIVE INACTIVE SUSPENDED }
-enum OrderSource { POS CALL_CENTER MOBILE WEB QR AGGREGATOR }
-enum OrderType { DINE_IN TAKEAWAY DELIVERY }
-enum OrderStatus { DRAFT CONFIRMED SENT_TO_KITCHEN PREPARING READY ASSIGNED OUT_FOR_DELIVERY DELIVERED CLOSED CANCELLED VOIDED REFUNDED FAILED }
-enum PaymentStatus { PENDING PAID PARTIALLY_REFUNDED REFUNDED VOIDED FAILED }
-enum ShiftStatus { OPEN CLOSED }
-enum DeviceStatus { ACTIVE INACTIVE BLOCKED }
-enum RoleCode { CASHIER CALL_CENTER_OPERATOR CALL_CENTER_SUPERVISOR KITCHEN DISPATCHER BRANCH_MANAGER CENTRAL_ADMIN OWNER }
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+enum OrderSource {
+  POS
+  CALL_CENTER
+  MOBILE
+  WEB
+  QR
+  AGGREGATOR
+}
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+}
+enum OrderStatus {
+  DRAFT
+  CONFIRMED
+  SENT_TO_KITCHEN
+  PREPARING
+  READY
+  ASSIGNED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CLOSED
+  CANCELLED
+  VOIDED
+  REFUNDED
+  FAILED
+}
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  VOIDED
+  FAILED
+}
+enum PaymentAdjustmentType {
+  REFUND
+  VOID
+}
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+enum DeviceStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+enum RoleCode {
+  CASHIER
+  CALL_CENTER_OPERATOR
+  CALL_CENTER_SUPERVISOR
+  KITCHEN
+  DISPATCHER
+  BRANCH_MANAGER
+  CENTRAL_ADMIN
+  OWNER
+}
 
 model Branch {
   id String @id @default(cuid())
@@ -26,6 +79,7 @@ model Branch {
   devices Device[]
   orders Order[]
   shifts Shift[]
+  sessions Session[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -42,6 +96,7 @@ model User {
   shifts Shift[]
   auditLogs AuditLog[]
   devices Device[]
+  sessions Session[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -81,8 +136,25 @@ model Device {
   branch Branch @relation(fields: [branchId], references: [id])
   userId String?
   user User? @relation(fields: [userId], references: [id])
+  shifts Shift[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+model Session {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branchId String?
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  deviceId String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  lastSeenAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@index([deviceId, revokedAt])
 }
 model Category {
   id String @id @default(cuid())
@@ -120,6 +192,7 @@ model Order {
   customer Customer? @relation(fields: [customerId], references: [id])
   items OrderItem[]
   payments Payment[]
+  paymentAdjustments PaymentAdjustment[]
   events OrderEvent[]
   total Decimal @db.Decimal(12, 2)
   createdAt DateTime @default(now())
@@ -174,12 +247,39 @@ model Payment {
   id String @id @default(cuid())
   orderId String
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  shiftId String
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Restrict)
   amount Decimal @db.Decimal(12, 2)
   method String
+  reference String?
+  receivedAmount Decimal? @db.Decimal(12, 2)
+  changeAmount Decimal @default(0) @db.Decimal(12, 2)
   status PaymentStatus @default(PENDING)
   idempotencyKey String @unique
+  adjustments PaymentAdjustment[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+model PaymentAdjustment {
+  id String @id @default(cuid())
+  paymentId String
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  shiftId String
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  type PaymentAdjustmentType
+  amount Decimal @db.Decimal(12, 2)
+  reason String
+  reference String?
+  actorUserId String
+  deviceId String?
+  idempotencyKey String @unique
+  operationId String @unique
+  createdAt DateTime @default(now())
+  @@index([paymentId, createdAt])
+  @@index([orderId, createdAt])
+  @@index([shiftId, createdAt])
 }
 model Shift {
   id String @id @default(cuid())
@@ -187,11 +287,18 @@ model Shift {
   branch Branch @relation(fields: [branchId], references: [id])
   userId String
   user User @relation(fields: [userId], references: [id])
+  deviceId String
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  payments Payment[]
+  paymentAdjustments PaymentAdjustment[]
   status ShiftStatus @default(OPEN)
   openingCash Decimal @db.Decimal(12, 2)
   closingCash Decimal? @db.Decimal(12, 2)
   openedAt DateTime @default(now())
   closedAt DateTime?
+  @@index([branchId, status])
+  @@index([userId, status])
+  @@index([deviceId, status])
 }
 model AuditLog {
   id String @id @default(cuid())
