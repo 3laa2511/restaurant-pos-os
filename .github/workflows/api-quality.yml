@@ -48,6 +48,18 @@ jobs:
         run: pnpm exec prisma migrate diff --from-empty --to-schema=../../prisma/schema.initial.prisma --script > /tmp/initial.sql && cat /tmp/initial.sql
         working-directory: services/api
 
+      - name: Validate reconstructed baseline migration
+        run: |
+          cp /tmp/initial.sql prisma/migrations/0001_initial/migration.sql
+          test -s prisma/migrations/0001_initial/migration.sql
+
+      - name: Upload reconstructed baseline SQL
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconstructed-initial-migration
+          path: prisma/migrations/0001_initial/migration.sql
+          if-no-files-found: error
+
       - name: Apply migrations
         working-directory: services/api
         run: pnpm exec prisma migrate deploy --schema ../../prisma/schema.prisma
