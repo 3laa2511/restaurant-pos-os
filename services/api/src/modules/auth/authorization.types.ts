@@ -9,6 +9,8 @@ export interface AuthContext {
   tenantId: string | null;
   branchId: string | null;
   deviceId: string | null;
+  /** Session resolved by authentication; required for transaction-local RLS context. */
+  sessionId: string;
   workspace: WorkspaceCode;
   roles: readonly RoleCode[];
   permissions: readonly PermissionCode[];
