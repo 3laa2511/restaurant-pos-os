@@ -130,7 +130,7 @@ export class AccountingService {
     context: AuthContext,
     input: { orderId: string; branchId: string; amount: number; payments: Array<{ method: string; amount: number }> },
   ) {
-    const tenantId = assertTenantScope(context);
+    assertTenantScope(context);
     assertBranchAccess(context, input.branchId);
     const lines: Line[] = [];
     for (const payment of input.payments) {
