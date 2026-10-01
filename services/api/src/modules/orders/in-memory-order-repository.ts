@@ -6,11 +6,13 @@ export class InMemoryOrderRepository implements OrderRepository {
   private readonly records = new Map<string, CreateOrderRecord>();
 
   async findById(id: string, tenantId: string, _context: AuthContext): Promise<CreateOrderRecord | null> {
+    void _context;
     const record = this.records.get(id);
     return record?.tenantId === tenantId ? record : null;
   }
 
   async create(input: Omit<CreateOrderRecord, 'version'>, _context: AuthContext): Promise<CreateOrderRecord> {
+    void _context;
     const record: CreateOrderRecord = { ...input, version: 1 };
     this.records.set(record.id, record);
     return record;
@@ -23,6 +25,7 @@ export class InMemoryOrderRepository implements OrderRepository {
     status: OrderStatus,
     _context: AuthContext,
   ): Promise<CreateOrderRecord> {
+    void _context;
     const current = this.records.get(id);
     if (!current || current.tenantId !== tenantId) throw new Error('Order not found in tenant scope');
     if (current.version !== expectedVersion) {
