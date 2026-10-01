@@ -7,7 +7,7 @@ import { PermissionGuard } from '../auth/permission.guard.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { PaymentService, type PersistSplitPaymentInput } from './payment.service.js';
-import { RefundService, type PaymentAdjustmentInput } from './refund.service.js';
+import { RefundService } from './refund.service.js';
 import { PaymentAdjustmentDto, SettlePaymentDto } from './payment.dto.js';
 
 function requireDevice(context: AuthContext): string {
