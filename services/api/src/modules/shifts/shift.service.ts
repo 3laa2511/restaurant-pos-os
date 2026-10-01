@@ -27,7 +27,7 @@ export class ShiftService {
   async current(context: AuthContext): Promise<CurrentShiftResult | null> {
     const tenantId = assertTenantScope(context);
     if (!context.branchId || !context.deviceId) throw new Error('Authenticated branch and device are required'); assertBranchAccess(context, context.branchId);
-    const shift = await withRlsContext(this.prisma, context, (tx) => tx.shift.findFirst({ where: { branchId: context.branchId, branch: { tenantId }, deviceId: context.deviceId, status: 'OPEN' }, select: { id: true, branchId: true, deviceId: true, userId: true, status: true, openingCash: true, openedAt: true } }));
+    const shift = await withRlsContext(this.prisma, context, (tx) => tx.shift.findFirst({ where: { branchId, branch: { tenantId }, deviceId, status: 'OPEN' }, select: { id: true, branchId: true, deviceId: true, userId: true, status: true, openingCash: true, openedAt: true } }));
     if (!shift) return null; if (shift.userId !== context.userId && !context.permissions.includes(PERMISSIONS.REPORT_VIEW_FINANCIAL)) throw new Error('The active shift belongs to another cashier');
     return { shiftId: shift.id, branchId: shift.branchId, deviceId: shift.deviceId, cashierId: shift.userId, status: 'OPEN', openingCash: Number(shift.openingCash), openedAt: shift.openedAt.toISOString() };
   }
