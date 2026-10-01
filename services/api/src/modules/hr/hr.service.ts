@@ -51,7 +51,7 @@ export class HrService {
     const baseSalary = money(input.baseSalary, 'Base salary');
     const overtimeRate = money(input.overtimeRate ?? 0, 'Overtime rate');
     const roleCode = input.roleCode ?? RoleCode.CASHIER;
-    const privilegedRoles = [RoleCode.BRANCH_MANAGER, RoleCode.HR_MANAGER, RoleCode.ACCOUNTANT, RoleCode.INVENTORY_MANAGER, RoleCode.CENTRAL_ADMIN, RoleCode.OWNER];
+    const privilegedRoles: RoleCode[] = [RoleCode.BRANCH_MANAGER, RoleCode.HR_MANAGER, RoleCode.ACCOUNTANT, RoleCode.INVENTORY_MANAGER, RoleCode.CENTRAL_ADMIN, RoleCode.OWNER];
     if (privilegedRoles.includes(roleCode) && !context.permissions.includes(PERMISSIONS.USER_MANAGE)) {
       throw new Error('Only user administrators can assign privileged employee roles');
     }
