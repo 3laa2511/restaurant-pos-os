@@ -76,7 +76,7 @@ export class MenuService {
     return this.prisma.branchProduct.upsert({
       where: { branchId_productId: { branchId, productId: product.id } },
       update: {
-        priceOverride: input.priceOverride === undefined ? undefined : input.priceOverride === null ? null : input.priceOverride.toFixed(2),
+        ...(input.priceOverride === undefined ? {} : { priceOverride: input.priceOverride === null ? null : input.priceOverride.toFixed(2) }),
         enabled: input.enabled ?? true,
         available: input.available ?? true,
       },
