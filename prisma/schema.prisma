@@ -712,12 +712,14 @@ model Session {
   device Device? @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   expiresAt DateTime
   revokedAt DateTime?
+  workspace WorkspaceCode @default(POS)
   lastSeenAt DateTime @default(now())
   createdAt DateTime @default(now())
   @@index([userId, revokedAt])
   @@index([tenantId, revokedAt])
   @@index([expiresAt])
   @@index([deviceId, revokedAt])
+  @@index([workspace, revokedAt])
 }
 
 model Category {
