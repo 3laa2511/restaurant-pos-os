@@ -32,7 +32,7 @@ export class AccountingService {
   async ensureAccount(tx: Db, tenantId: string, code: string, name: string, type: AccountType, nameAr?: string) {
     return tx.accountingAccount.upsert({
       where: { tenantId_code: { tenantId, code } },
-      update: { active: true, name, nameAr: nameAr ?? undefined, type },
+      update: { active: true, name, ...(nameAr === undefined ? {} : { nameAr }), type },
       create: { id: randomUUID(), tenantId, code, name, nameAr: nameAr ?? null, type },
     });
   }
@@ -119,7 +119,7 @@ export class AccountingService {
         sourceType: input.sourceType ?? 'MANUAL',
         sourceId: input.sourceId ?? randomUUID(),
         description: input.description,
-        branchId: input.branchId,
+        ...(input.branchId === undefined ? {} : { branchId: input.branchId }),
         lines: input.lines,
       });
     });
