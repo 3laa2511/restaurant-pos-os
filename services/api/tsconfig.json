@@ -6,10 +6,18 @@
     "target": "ES2022",
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"],
+    "types": [
+      "node",
+      "jest"
+    ],
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/*.spec.ts",
+    "src/**/*.test.ts"
+  ]
 }
