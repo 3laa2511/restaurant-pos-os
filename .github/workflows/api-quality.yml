@@ -79,4 +79,4 @@ jobs:
         run: pnpm --filter @restaurant-pos/api typecheck
 
       - name: Unit and integration tests
-        run: pnpm --filter @restaurant-pos/api test -- --runInBand
+        run: pnpm --filter @restaurant-pos/api test --runInBand
