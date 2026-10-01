@@ -3,6 +3,8 @@ import { assertKitchenStationAccess, type AuthContext } from '../auth/authorizat
 import type { KitchenStation } from '../../generated/prisma/enums.js';
 
 const context = (kitchenStation?: KitchenStation | null): AuthContext => ({
+  sessionId: 's',
+  workspace: 'KITCHEN',
   userId: 'u',
   tenantId: 'tenant-1',
   branchId: 'b',
