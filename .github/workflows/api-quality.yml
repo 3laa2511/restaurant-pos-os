@@ -45,7 +45,7 @@ jobs:
           SQL
 
       - name: Generate historical baseline SQL
-        run: pnpm exec prisma migrate diff --from-empty --to-schema ../../prisma/schema.initial.prisma --script > /tmp/initial.sql && cat /tmp/initial.sql
+        run: pnpm exec prisma migrate diff --from-empty --to-schema=../../prisma/schema.initial.prisma --script > /tmp/initial.sql && cat /tmp/initial.sql
         working-directory: services/api
 
       - name: Apply migrations
