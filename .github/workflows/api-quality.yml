@@ -44,6 +44,10 @@ jobs:
           GRANT CONNECT ON DATABASE restaurant_pos_test TO rls_app;
           SQL
 
+      - name: Generate historical baseline SQL
+        run: pnpm exec prisma migrate diff --from-empty --to-schema ../../prisma/schema.initial.prisma --script > /tmp/initial.sql && cat /tmp/initial.sql
+        working-directory: services/api
+
       - name: Apply migrations
         working-directory: services/api
         run: pnpm exec prisma migrate deploy --schema ../../prisma/schema.prisma
