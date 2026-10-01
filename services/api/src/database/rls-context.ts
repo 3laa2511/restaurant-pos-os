@@ -1,4 +1,4 @@
-import { Prisma } from '../../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
 import type { AuthContext } from '../modules/auth/authorization.types.js';
 
 export const RLS_TENANT_SETTING = 'app.tenant_id';
