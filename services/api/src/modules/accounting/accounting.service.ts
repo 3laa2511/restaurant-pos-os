@@ -112,7 +112,7 @@ export class AccountingService {
     input: { branchId?: string | null; sourceType?: string; sourceId?: string; description: string; lines: Line[] },
   ) {
     assertPermission(context, PERMISSIONS.ACCOUNTING_POST);
-    const tenantId = assertTenantScope(context);
+    assertTenantScope(context);
     return this.prisma.$transaction(async (tx) => {
       await setRlsContext(tx, context);
       return this.post(tx, context, {
