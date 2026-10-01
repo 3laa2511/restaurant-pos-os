@@ -12,6 +12,7 @@ enum UserStatus {
   INACTIVE
   SUSPENDED
 }
+
 enum OrderSource {
   POS
   CALL_CENTER
@@ -20,11 +21,13 @@ enum OrderSource {
   QR
   AGGREGATOR
 }
+
 enum OrderType {
   DINE_IN
   TAKEAWAY
   DELIVERY
 }
+
 enum OrderStatus {
   DRAFT
   CONFIRMED
@@ -40,6 +43,7 @@ enum OrderStatus {
   REFUNDED
   FAILED
 }
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -47,19 +51,23 @@ enum PaymentStatus {
   REFUNDED
   VOIDED
 }
+
 enum PaymentAdjustmentType {
   REFUND
   VOID
 }
+
 enum ShiftStatus {
   OPEN
   CLOSED
 }
+
 enum DeviceStatus {
   ACTIVE
   INACTIVE
   BLOCKED
 }
+
 enum RoleCode {
   CASHIER
   CALL_CENTER_OPERATOR
@@ -73,6 +81,7 @@ enum RoleCode {
   ACCOUNTANT
   INVENTORY_MANAGER
 }
+
 enum CashDrawerMovementType {
   OPENING_FLOAT
   SALE
@@ -82,15 +91,18 @@ enum CashDrawerMovementType {
   PAY_OUT
   ADJUSTMENT
 }
+
 enum CashDrawerDirection {
   IN
   OUT
 }
+
 enum KitchenStation {
   KITCHEN
   BEVERAGE
   PACKING
 }
+
 enum KitchenTicketStatus {
   SENT_TO_KITCHEN
   PREPARING
@@ -106,12 +118,14 @@ enum AttendanceStatus {
   LEAVE
   OFF_DAY
 }
+
 enum PayrollStatus {
   DRAFT
   APPROVED
   PAID
   CANCELLED
 }
+
 enum InventoryUnit {
   GRAM
   KILOGRAM
@@ -122,6 +136,7 @@ enum InventoryUnit {
   BOX
   PACK
 }
+
 enum InventoryMovementType {
   PURCHASE
   CONSUMPTION
@@ -131,6 +146,7 @@ enum InventoryMovementType {
   TRANSFER_IN
   TRANSFER_OUT
 }
+
 enum AccountingAccountType {
   ASSET
   LIABILITY
@@ -138,10 +154,12 @@ enum AccountingAccountType {
   REVENUE
   EXPENSE
 }
+
 enum JournalEntryStatus {
   POSTED
   VOIDED
 }
+
 enum WorkspaceCode {
   POS
   CALL_CENTER
@@ -152,6 +170,7 @@ enum WorkspaceCode {
   INVENTORY
   MANAGEMENT
 }
+
 enum WarehouseType {
   CENTRAL
   BRANCH
@@ -327,12 +346,14 @@ model Role {
   userLinks UserRole[]
   permissions RolePermission[]
 }
+
 model Permission {
   id String @id @default(cuid())
   code String @unique
   name String
   roles RolePermission[]
 }
+
 model UserRole {
   userId String
   roleId String
@@ -340,6 +361,7 @@ model UserRole {
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
   @@id([userId, roleId])
 }
+
 model RolePermission {
   roleId String
   permissionId String
@@ -368,6 +390,7 @@ model EmployeeProfile {
   @@unique([tenantId, employeeCode])
   @@index([tenantId, active])
 }
+
 model WorkSchedule {
   id String @id @default(cuid())
   tenantId String
@@ -386,6 +409,7 @@ model WorkSchedule {
   @@index([tenantId, userId, weekday, active])
   @@index([branchId, weekday, active])
 }
+
 model AttendanceRecord {
   id String @id @default(cuid())
   tenantId String
@@ -411,6 +435,7 @@ model AttendanceRecord {
   @@index([tenantId, workDate, status])
   @@index([branchId, workDate])
 }
+
 model PayrollPeriod {
   id String @id @default(cuid())
   tenantId String
@@ -425,6 +450,7 @@ model PayrollPeriod {
   @@unique([tenantId, periodStart, periodEnd])
   @@index([tenantId, status, periodStart])
 }
+
 model PayrollEntry {
   id String @id @default(cuid())
   tenantId String
@@ -443,6 +469,7 @@ model PayrollEntry {
   @@unique([periodId, userId])
   @@index([tenantId, userId])
 }
+
 model Supplier {
   id String @id @default(cuid())
   tenantId String
@@ -456,6 +483,7 @@ model Supplier {
   @@unique([tenantId, name])
   @@index([tenantId, active])
 }
+
 model Ingredient {
   id String @id @default(cuid())
   tenantId String
@@ -479,6 +507,7 @@ model Ingredient {
   @@unique([tenantId, sku])
   @@index([tenantId, active])
 }
+
 model InventoryStockBalance {
   id String @id @default(cuid())
   tenantId String
@@ -493,6 +522,7 @@ model InventoryStockBalance {
   @@unique([branchId, ingredientId])
   @@index([tenantId, branchId])
 }
+
 model InventoryReceipt {
   id String @id @default(cuid())
   tenantId String
@@ -508,6 +538,7 @@ model InventoryReceipt {
   createdAt DateTime @default(now())
   @@index([tenantId, branchId, receivedAt])
 }
+
 model InventoryReceiptItem {
   id String @id @default(cuid())
   receiptId String
@@ -520,6 +551,7 @@ model InventoryReceiptItem {
   totalCost Decimal @db.Decimal(12, 2)
   @@index([ingredientId])
 }
+
 model InventoryMovement {
   id String @id @default(cuid())
   tenantId String
@@ -542,6 +574,7 @@ model InventoryMovement {
   @@index([tenantId, warehouseId, ingredientId, createdAt])
   @@index([ingredientId, createdAt])
 }
+
 model RecipeIngredient {
   id String @id @default(cuid())
   tenantId String
@@ -698,6 +731,7 @@ model Category {
   products Product[]
   @@index([tenantId, active, sortOrder])
 }
+
 model Product {
   id String @id @default(cuid())
   tenantId String
@@ -761,6 +795,7 @@ model Order {
   updatedAt DateTime @updatedAt
   @@unique([branchId, orderNumber])
 }
+
 model OrderItem {
   id String @id @default(cuid())
   orderId String
@@ -774,6 +809,7 @@ model OrderItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
 model OrderEvent {
   id String @id @default(cuid())
   eventId String @unique
@@ -787,6 +823,7 @@ model OrderEvent {
   createdAt DateTime @default(now())
   @@index([orderId, occurredAt])
 }
+
 model KitchenTicket {
   id String @id @default(cuid())
   orderId String
@@ -810,6 +847,7 @@ model KitchenTicket {
   @@index([branchId, status, updatedAt])
   @@index([orderId, status])
 }
+
 model KitchenTicketItem {
   id String @id @default(cuid())
   ticketId String
@@ -837,6 +875,7 @@ model Customer {
   @@unique([tenantId, phone])
   @@index([tenantId])
 }
+
 model CustomerAddress {
   id String @id @default(cuid())
   customerId String
@@ -864,6 +903,7 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
 model PaymentAdjustment {
   id String @id @default(cuid())
   paymentId String
@@ -885,6 +925,7 @@ model PaymentAdjustment {
   @@index([orderId, createdAt])
   @@index([shiftId, createdAt])
 }
+
 model Shift {
   id String @id @default(cuid())
   branchId String
@@ -905,6 +946,7 @@ model Shift {
   @@index([userId, status])
   @@index([deviceId, status])
 }
+
 model CashDrawer {
   id String @id @default(cuid())
   branchId String
@@ -918,6 +960,7 @@ model CashDrawer {
   updatedAt DateTime @updatedAt
   @@index([branchId, active])
 }
+
 model CashDrawerMovement {
   id String @id @default(cuid())
   drawerId String
@@ -946,6 +989,7 @@ model CashDrawerMovement {
   @@index([branchId, occurredAt])
   @@index([userId, occurredAt])
 }
+
 model AuditLog {
   id String @id @default(cuid())
   actorUserId String?
@@ -959,6 +1003,7 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorUserId, createdAt])
 }
+
 model RiskPolicy {
   id String @id @default(cuid())
   tenantId String
@@ -980,6 +1025,7 @@ model RiskPolicy {
   @@index([tenantId, action, branchId, enabled])
   @@index([tenantId, effectiveFrom, effectiveTo])
 }
+
 model SyncOperation {
   id String @id @default(cuid())
   operationId String @unique
@@ -999,35 +1045,6 @@ model SyncOperation {
   updatedAt DateTime @updatedAt
   @@index([deviceId, clientSequence])
   @@index([status, createdAt])
-}model User {
-  id String @id @default(cuid())
-  username String @unique
-  displayName String
-  passwordHash String
-  status UserStatus @default(ACTIVE)
-  tenantId String
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  branchId String?
-  branch Branch? @relation(fields: [branchId], references: [id])
-  departmentId String?
-  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  kitchenStation KitchenStation?
-  roleLinks UserRole[]
-  orders Order[] @relation("CreatedOrders")
-  shifts Shift[]
-  auditLogs AuditLog[]
-  devices Device[]
-  requestedInventoryTransfers InventoryTransfer[] @relation("TransferRequestedBy")
-  approvedInventoryTransfers InventoryTransfer[] @relation("TransferApprovedBy")
-  sessions Session[]
-  cashDrawerMovements CashDrawerMovement[]
-  employeeProfile EmployeeProfile?
-  attendanceRecords AttendanceRecord[]
-  workSchedules WorkSchedule[]
-  payrollEntries PayrollEntry[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@index([tenantId, status])
-  @@index([tenantId, departmentId])
 }
+
 
