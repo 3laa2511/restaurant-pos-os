@@ -258,6 +258,7 @@ model AccountingAccount {
   parentId String?
   parent AccountingAccount? @relation("AccountTree", fields: [parentId], references: [id], onDelete: Restrict)
   children AccountingAccount[] @relation("AccountTree")
+  journalLines JournalLine[]
   active Boolean @default(true)
   allowPosting Boolean @default(true)
   createdAt DateTime @default(now())
@@ -321,6 +322,7 @@ model User {
   kitchenStation KitchenStation?
   roleLinks UserRole[]
   orders Order[] @relation("CreatedOrders")
+  postedJournalEntries JournalEntry[] @relation("PostedJournalEntries")
   shifts Shift[]
   auditLogs AuditLog[]
   devices Device[]
