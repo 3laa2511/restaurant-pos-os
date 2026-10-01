@@ -100,14 +100,14 @@ enum KitchenTicketStatus {
 }
 
 
-enum AttendanceStatus { PRESENT LATE ABSENT LEAVE OFF_DAY }
-enum PayrollStatus { DRAFT APPROVED PAID CANCELLED }
-enum InventoryUnit { GRAM KILOGRAM BAG MILLILITER LITER PIECE BOX PACK }
-enum InventoryMovementType { PURCHASE CONSUMPTION WASTE ADJUSTMENT_IN ADJUSTMENT_OUT TRANSFER_IN TRANSFER_OUT }
-enum AccountingAccountType { ASSET LIABILITY EQUITY REVENUE EXPENSE }
-enum JournalEntryStatus { POSTED VOIDED }
-enum WorkspaceCode { POS CALL_CENTER KITCHEN DISPATCH HR ACCOUNTING INVENTORY MANAGEMENT }
-enum WarehouseType { CENTRAL BRANCH }
+enum AttendanceStatus {\n  PRESENT\n  LATE\n  ABSENT\n  LEAVE\n  OFF_DAY\n}
+enum PayrollStatus {\n  DRAFT\n  APPROVED\n  PAID\n  CANCELLED\n}
+enum InventoryUnit {\n  GRAM\n  KILOGRAM\n  BAG\n  MILLILITER\n  LITER\n  PIECE\n  BOX\n  PACK\n}
+enum InventoryMovementType {\n  PURCHASE\n  CONSUMPTION\n  WASTE\n  ADJUSTMENT_IN\n  ADJUSTMENT_OUT\n  TRANSFER_IN\n  TRANSFER_OUT\n}
+enum AccountingAccountType {\n  ASSET\n  LIABILITY\n  EQUITY\n  REVENUE\n  EXPENSE\n}
+enum JournalEntryStatus {\n  POSTED\n  VOIDED\n}
+enum WorkspaceCode {\n  POS\n  CALL_CENTER\n  KITCHEN\n  DISPATCH\n  HR\n  ACCOUNTING\n  INVENTORY\n  MANAGEMENT\n}
+enum WarehouseType {\n  CENTRAL\n  BRANCH\n}
 
 model Tenant {
   id String @id @default(cuid())
