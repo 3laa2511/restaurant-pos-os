@@ -33,7 +33,8 @@ function buildPrisma() {
   tx.cashDrawerMovement.create.mockResolvedValue({});
   tx.orderEvent.create.mockResolvedValue({});
   tx.auditLog.create.mockResolvedValue({});
-  tx.syncOperation.findUnique.mockResolvedValue(null);\n  tx.syncOperation.create.mockResolvedValue({});
+  tx.syncOperation.findUnique.mockResolvedValue(null);
+  tx.syncOperation.create.mockResolvedValue({});
   const prisma = { syncOperation: { findUnique: jest.fn() as AsyncMock }, $transaction: jest.fn(async (callback: any) => callback(tx)) };
   prisma.syncOperation.findUnique.mockResolvedValue(null);
   return { prisma, tx };
