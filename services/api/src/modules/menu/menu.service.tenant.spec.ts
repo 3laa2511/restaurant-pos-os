@@ -5,7 +5,7 @@ import { WORKSPACES } from '../auth/workspace.constants.js';
 
 describe('MenuService tenant and branch isolation', () => {
   it('loads the tenant catalog and applies branch-specific overrides', async () => {
-    const categoryFindMany = jest.fn<() => Promise<unknown>>().mockResolvedValue([
+    const categoryFindMany = jest.fn<any>().mockResolvedValue([
       {
         id: 'cat-1',
         name: 'Meals',
