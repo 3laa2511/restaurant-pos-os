@@ -4,7 +4,7 @@ import type { AuthContext } from '../auth/authorization.types.js';
 import { ShiftService } from './shift.service.js';
 
 const context = (overrides: Partial<AuthContext> = {}): AuthContext => ({
-  userId: 'cashier-1', tenantId: 'tenant-1', branchId: 'branch-1', deviceId: 'device-1', roles: [],
+  userId: 'cashier-1', tenantId: 'tenant-1', branchId: 'branch-1', deviceId: 'device-1', sessionId: 'session-1', workspace: 'POS', roles: [],
   permissions: [PERMISSIONS.SHIFT_OPEN, PERMISSIONS.SHIFT_CLOSE], ...overrides,
 });
 
