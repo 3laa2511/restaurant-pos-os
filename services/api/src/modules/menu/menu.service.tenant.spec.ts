@@ -33,12 +33,12 @@ describe('MenuService tenant and branch isolation', () => {
       tenantId: 'tenant-a',
       branchId: 'branch-a',
       deviceId: 'device-a',
+      sessionId: 'session-a',
       workspace: WORKSPACES.POS,
       roles: [],
       permissions: [],
       kitchenStation: null,
     } satisfies AuthContext;
-
 
     const result = await service.listActiveMenu(context);
 
@@ -53,8 +53,8 @@ describe('MenuService tenant and branch isolation', () => {
       where: { tenantId: 'tenant-a', branchId: 'branch-a' },
       select: { productId: true, priceOverride: true, enabled: true, available: true },
     });
-    expect(result[0].products).toHaveLength(1);
-    expect(result[0].products[0].price).toBe(120);
+    expect(result[0]!.products).toHaveLength(1);
+    expect(result[0]!.products[0]!.price).toBe(120);
   });
 
   it('denies catalog access when the authenticated session has no tenant scope', async () => {
@@ -65,6 +65,7 @@ describe('MenuService tenant and branch isolation', () => {
       tenantId: null,
       branchId: null,
       deviceId: null,
+      sessionId: 'session-a',
       workspace: WORKSPACES.POS,
       roles: [],
       permissions: [],
