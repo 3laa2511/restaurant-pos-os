@@ -21,7 +21,7 @@ function buildPrisma() {
     cashDrawerMovement: { findMany: jest.fn(), create: jest.fn() },
     orderEvent: { create: jest.fn() },
     auditLog: { create: jest.fn() },
-    syncOperation: { create: jest.fn() },
+    syncOperation: { findUnique: jest.fn(), create: jest.fn() },
   } as any;
   tx.order.findFirst.mockResolvedValue({ id: 'order-1', branchId: 'branch-1', status: 'CONFIRMED', total: { toString: () => '250.00' }, version: 3 });
   tx.order.updateMany.mockResolvedValue({ count: 1 });
@@ -33,7 +33,7 @@ function buildPrisma() {
   tx.cashDrawerMovement.create.mockResolvedValue({});
   tx.orderEvent.create.mockResolvedValue({});
   tx.auditLog.create.mockResolvedValue({});
-  tx.syncOperation.create.mockResolvedValue({});
+  tx.syncOperation.findUnique.mockResolvedValue(null);\n  tx.syncOperation.create.mockResolvedValue({});
   const prisma = { syncOperation: { findUnique: jest.fn() as AsyncMock }, $transaction: jest.fn(async (callback: any) => callback(tx)) };
   prisma.syncOperation.findUnique.mockResolvedValue(null);
   return { prisma, tx };
