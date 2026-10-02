@@ -20,7 +20,7 @@ function baseTransaction() {
     shift: { findFirst: mock(), create: mock(), updateMany: mock() },
     cashDrawer: { upsert: mock() },
     cashDrawerMovement: { findMany: mock(), create: mock() },
-    syncOperation: { create: mock() },
+    syncOperation: { findUnique: mock(), create: mock() },
   } as any;
   return tx;
 }
