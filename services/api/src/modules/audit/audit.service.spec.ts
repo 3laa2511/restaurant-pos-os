@@ -24,7 +24,7 @@ function buildPrisma() {
   };
   prisma.auditLog.findMany.mockResolvedValue([]);
   prisma.$transaction.mockImplementation(async (callback) =>
-    callback({ $executeRaw: jest.fn<any>().mockResolvedValue(4), auditLog: prisma.auditLog } as any),
+    callback({ $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(4), auditLog: prisma.auditLog } as any),
   );
   return prisma;
 }
