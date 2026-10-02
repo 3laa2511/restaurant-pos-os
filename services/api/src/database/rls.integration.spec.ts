@@ -19,7 +19,7 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
 
   beforeAll(async () => {
     await admin.query(
-      `INSERT INTO "Tenant" ("id","slug","name") VALUES ($1,$2,$3),($4,$5,$6)`,
+      `INSERT INTO "Tenant" ("id","slug","name","createdAt","updatedAt") VALUES ($1,$2,$3,now(),now()),($4,$5,$6,now(),now())`,
       [ids.tenantA, `rls-a-${ids.tenantA}`, 'RLS Tenant A', ids.tenantB, `rls-b-${ids.tenantB}`, 'RLS Tenant B'],
     );
     await admin.query(
