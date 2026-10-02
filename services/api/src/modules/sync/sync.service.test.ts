@@ -20,6 +20,8 @@ const authContext: AuthContext = {
   tenantId: 'tenant-1',
   branchId: 'BR01',
   deviceId: 'POS01',
+  sessionId: 'session-1',
+  workspace: 'POS',
   roles: ['CASHIER'],
   permissions: ['order.create'],
 };
