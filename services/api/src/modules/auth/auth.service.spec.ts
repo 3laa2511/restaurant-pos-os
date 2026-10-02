@@ -6,7 +6,7 @@ type MockResult = Promise<any>;
 
 const mockPrisma = () => {
   const prisma = {
-    $executeRaw: jest.fn<any>().mockResolvedValue(4),
+    $executeRaw: jest.fn<() => Promise<number>>().mockResolvedValue(4),
     $transaction: jest.fn(async (callback: (tx: typeof prisma) => Promise<any>) => callback(prisma)),
     user: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
     branch: {
