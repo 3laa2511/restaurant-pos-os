@@ -22,7 +22,7 @@ function prismaMock() {
     order: { update: jest.fn() },
     orderEvent: { create: jest.fn() },
     auditLog: { create: jest.fn() },
-    syncOperation: { create: jest.fn() },
+    syncOperation: { findUnique: jest.fn(), create: jest.fn() },
   } as any;
   const prisma = {
     syncOperation: { findUnique: jest.fn() as AsyncMock },
@@ -46,6 +46,7 @@ function setupPayment(tx: any, status: string = 'PAID') {
   tx.paymentAdjustment.create.mockResolvedValue({ id: 'adjustment-1' });
   tx.cashDrawer.findUnique.mockResolvedValue({ id: 'drawer-1', branchId: 'branch-1', active: true });
   tx.cashDrawerMovement.create.mockResolvedValue({ id: 'movement-1' });
+  tx.syncOperation.findUnique.mockResolvedValue(null);
   tx.syncOperation.create.mockResolvedValue({});
 }
 
