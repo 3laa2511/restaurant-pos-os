@@ -72,7 +72,7 @@ describe('RiskPolicyAdminService', () => {
     expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'RISK_POLICY_DISABLED', metadata: { before: { enabled: true }, after: { enabled: false } } }) }));
   });
   it('lists only enabled policies when requested', async () => {
-    const { prisma } = buildPrisma(); const service = new RiskPolicyAdminService(prisma as unknown as PrismaService); await service.list(context, undefined, 'PAYMENT_REFUND', false);
-    expect(prisma.riskPolicy.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ action: 'PAYMENT_REFUND', enabled: true }) }));
+    const { prisma, tx } = buildPrisma(); const service = new RiskPolicyAdminService(prisma as unknown as PrismaService); await service.list(context, undefined, 'PAYMENT_REFUND', false);
+    expect(tx.riskPolicy.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ action: 'PAYMENT_REFUND', enabled: true }) }));
   });
 });
