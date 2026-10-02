@@ -5,7 +5,7 @@ import { WORKSPACES } from '../auth/workspace.constants.js';
 
 describe('MenuService tenant and branch isolation', () => {
   it('loads the tenant catalog and applies branch-specific overrides', async () => {
-    const categoryFindMany = jest.fn().mockResolvedValue([
+    const categoryFindMany = jest.fn<any>().mockResolvedValue([
       {
         id: 'cat-1',
         name: 'Meals',
@@ -17,11 +17,11 @@ describe('MenuService tenant and branch isolation', () => {
         ],
       },
     ]);
-    const branchProductFindMany = jest.fn().mockResolvedValue([
+    const branchProductFindMany = jest.fn<any>().mockResolvedValue([
       { productId: 'prod-1', priceOverride: 120, enabled: true, available: true },
       { productId: 'prod-2', priceOverride: null, enabled: false, available: true },
     ]);
-    const branchFindFirst = jest.fn().mockResolvedValue({ id: 'branch-a' });
+    const branchFindFirst = jest.fn<any>().mockResolvedValue({ id: 'branch-a' });
     const service = new MenuService({
       category: { findMany: categoryFindMany },
       branchProduct: { findMany: branchProductFindMany },
