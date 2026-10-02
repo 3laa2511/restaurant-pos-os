@@ -14,7 +14,7 @@ const auditMock = () => ({ recordWithClient: mock() });
 
 function baseTransaction() {
   const tx = {
-    $executeRaw: jest.fn<any>().mockResolvedValue(1),
+    $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(1),
     branch: { findFirst: mock() },
     device: { findFirst: mock() },
     shift: { findFirst: mock(), create: mock(), updateMany: mock() },
