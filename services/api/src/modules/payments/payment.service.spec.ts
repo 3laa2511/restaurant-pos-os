@@ -93,10 +93,10 @@ describe('PaymentService.settleSplitPayment', () => {
     const stored = { operationId: 'operation-1', orderId: 'order-1', status: 'PAID', totalPaid: 250, change: 0, paymentIds: ['payment-1'] };
     const input = { orderId: 'order-1', shiftId: 'shift-1', allocations: [{ method: 'CASH' as const, amount: 250 }], idempotencyKey: 'checkout-3', deviceId: 'device-1', clientSequence: 44 };
     const hash = createHash('sha256').update(JSON.stringify({ ...input, allocations: input.allocations })).digest('hex');
-    prisma.syncOperation.findUnique.mockResolvedValue({ operationId: 'operation-1', requestHash: hash, result: stored });
+    tx.syncOperation.findUnique.mockResolvedValue({ operationId: 'operation-1', requestHash: hash, result: stored });
     const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
     await expect(service.settleSplitPayment(context, input)).resolves.toEqual(stored);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(tx.payment.create).not.toHaveBeenCalled();
   });
 
@@ -106,10 +106,11 @@ describe('PaymentService.settleSplitPayment', () => {
     const input = { orderId: 'order-1', shiftId: 'shift-1', allocations: [{ method: 'CASH' as const, amount: 250 }], idempotencyKey: 'checkout-race', deviceId: 'device-1', clientSequence: 45 };
     const hash = createHash('sha256').update(JSON.stringify({ ...input, allocations: input.allocations })).digest('hex');
     const uniqueError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: '7.10.0' });
-    prisma.syncOperation.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ operationId: 'operation-winner', requestHash: hash, result: stored });
+    tx.syncOperation.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ operationId: 'operation-winner', requestHash: hash, result: stored });
     tx.syncOperation.create.mockRejectedValueOnce(uniqueError);
     const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
     await expect(service.settleSplitPayment(context, input)).resolves.toEqual(stored);
-    expect(prisma.syncOperation.findUnique).toHaveBeenCalledTimes(2);
+    expect(tx.syncOperation.findUnique).toHaveBeenCalledTimes(2);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(3);
   });
 });
