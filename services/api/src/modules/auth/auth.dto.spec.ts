@@ -24,7 +24,7 @@ describe('LoginDto server-side validation', () => {
   });
 
   it('rejects unknown workspace values', async () => {
-    const errors = await errorsFor({ username: 'cashier01', password: 'correct-password', workspace: 'ACCOUNTING' as never });
+    const errors = await errorsFor({ username: 'cashier01', password: 'correct-password', workspace: 'NOT_A_WORKSPACE' as never });
     expect(errors.some((error) => error.property === 'workspace')).toBe(true);
   });
 });
