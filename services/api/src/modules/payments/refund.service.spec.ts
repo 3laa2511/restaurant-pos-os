@@ -83,7 +83,7 @@ describe('RefundService', () => {
     const service = new RefundService(prisma as never, audit as never, accounting as never);
 
     await expect(service.refundPayment(context(PERMISSIONS.PAYMENT_REFUND), baseInput)).rejects.toThrow('accounting-post-failed');
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(tx.paymentAdjustment.create).toHaveBeenCalledTimes(1);
     expect(tx.payment.update).toHaveBeenCalledTimes(1);
     expect(tx.cashDrawerMovement.create).toHaveBeenCalledTimes(1);
