@@ -104,7 +104,7 @@ describe('RefundService', () => {
     const result = await service.refundPayment(context(PERMISSIONS.PAYMENT_REFUND), input);
 
     expect(result).toEqual(stored);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(accounting.postPaymentAdjustment).not.toHaveBeenCalled();
     expect(tx.paymentAdjustment.create).not.toHaveBeenCalled();
   });
