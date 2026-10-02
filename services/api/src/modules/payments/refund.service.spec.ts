@@ -98,6 +98,7 @@ describe('RefundService', () => {
     const stored = { operationId: 'operation-1', paymentId: 'payment-1', orderId: 'order-1', type: 'REFUND', amount: 40, paymentStatus: 'PARTIALLY_REFUNDED', orderStatus: 'CLOSED' };
     const requestHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
     prisma.syncOperation.findUnique.mockResolvedValue({ operationId: stored.operationId, requestHash, result: stored });
+    tx.syncOperation.findUnique.mockResolvedValue({ operationId: stored.operationId, requestHash, result: stored });
 
     const service = new RefundService(prisma as never, audit as never, accounting as never);
     const result = await service.refundPayment(context(PERMISSIONS.PAYMENT_REFUND), input);
