@@ -45,8 +45,8 @@ describeIfConfigured('PostgreSQL payment transaction integrity', () => {
 
   beforeAll(async () => {
     await admin.query(
-      `INSERT INTO "Tenant" ("id","slug","name")
-       VALUES ($1,$2,$3)`,
+      `INSERT INTO "Tenant" ("id","slug","name","createdAt","updatedAt")
+       VALUES ($1,$2,$3,now(),now())`,
       [ids.tenant, `payment-integrity-${ids.tenant}`, 'Payment Integrity Tenant'],
     );
     await admin.query(
