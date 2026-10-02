@@ -28,7 +28,7 @@ const authContext: AuthContext = {
 
 function createPrismaMock() {
   const records = new Map<string, any>();
-  const tx = { $executeRaw: async (..._args: any[]) => 1, branch: { findFirst: async ({ where }: any) => where.id === 'BR01' && where.tenantId === 'tenant-1' && where.active === true ? { id: 'BR01' } : null, findMany: async ({ where }: any) => where.tenantId === 'tenant-1' && where.active === true ? [{ id: 'BR01' }] : [] }, syncOperation: { findUnique: async ({ where }: any) => records.get(where.idempotencyKey) ?? null, create: async ({ data }: any) => { if (records.has(data.idempotencyKey)) throw new Error('unique violation'); records.set(data.idempotencyKey, data); return data; }, findMany: async () => [...records.values()].filter((record) => record.status === 'RECEIVED') } };
+  const tx = { $executeRaw: async (..._args: any[]) => 1, branch: { findFirst: async ({ where }: any) => where.id === 'BR01' && where.tenantId === 'tenant-1' && where.active === true ? { id: 'BR01' } : (where.id === 'BR01' && where.tenantId === 'tenant-1' ? { id: 'BR01' } : null), findMany: async ({ where }: any) => where.tenantId === 'tenant-1' && where.active === true ? [{ id: 'BR01' }] : [] }, syncOperation: { findUnique: async ({ where }: any) => records.get(where.idempotencyKey) ?? null, create: async ({ data }: any) => { if (records.has(data.idempotencyKey)) throw new Error('unique violation'); records.set(data.idempotencyKey, data); return data; }, findMany: async () => [...records.values()].filter((record) => record.status === 'RECEIVED') } };
   return {
     branch: {
       findFirst: async ({ where }: any) =>
