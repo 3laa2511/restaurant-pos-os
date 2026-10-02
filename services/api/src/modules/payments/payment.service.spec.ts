@@ -13,6 +13,7 @@ type AsyncMock = jest.Mock<(...args: any[]) => Promise<unknown>>;
 
 function buildPrisma() {
   const tx = {
+    $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(1),
     order: { findFirst: jest.fn(), updateMany: jest.fn() },
     shift: { findFirst: jest.fn() },
     payment: { findMany: jest.fn(), create: jest.fn() },
