@@ -11,6 +11,8 @@ const context: AuthContext = {
   tenantId: 'tenant-1',
   branchId: 'branch-1',
   deviceId: 'device-1',
+  sessionId: 'session-1',
+  workspace: 'MANAGEMENT',
   roles: [],
   permissions: [PERMISSIONS.AUDIT_VIEW],
 };
@@ -21,8 +23,8 @@ function buildPrisma() {
     $transaction: jest.fn(),
   };
   prisma.auditLog.findMany.mockResolvedValue([]);
-  prisma.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
-    callback({ $executeRaw: jest.fn().mockResolvedValue(4), auditLog: prisma.auditLog }),
+  prisma.$transaction.mockImplementation(async (callback) =>
+    callback({ $executeRaw: jest.fn().mockResolvedValue(4) as any, auditLog: prisma.auditLog } as any),
   );
   return prisma;
 }
