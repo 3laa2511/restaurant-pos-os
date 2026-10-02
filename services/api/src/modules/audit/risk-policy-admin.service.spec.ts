@@ -57,7 +57,7 @@ describe('RiskPolicyAdminService', () => {
     await expect(service.create(branchContext, validInput({ branchId: 'branch-2' }))).rejects.toThrow('branch access denied');
   });
   it('updates a policy while preserving the existing effectiveFrom when omitted', async () => {
-    const { prisma, tx } = buildPrisma(); const existing = policy({ effectiveFrom: new Date('2026-02-01T00:00:00.000Z') }); prisma.riskPolicy.findUnique.mockResolvedValue(existing); tx.riskPolicy.update.mockResolvedValue(policy({ baseScore: 75 }));
+    const { prisma, tx } = buildPrisma(); const existing = policy({ effectiveFrom: new Date('2026-02-01T00:00:00.000Z') }); tx.riskPolicy.findFirst.mockResolvedValue(existing); tx.riskPolicy.update.mockResolvedValue(policy({ baseScore: 75 }));
     const service = new RiskPolicyAdminService(prisma as unknown as PrismaService);
     const input = { ...validInput({ baseScore: 75 }) };
     delete input.effectiveFrom;
@@ -66,7 +66,7 @@ describe('RiskPolicyAdminService', () => {
     expect(tx.auditLog.create).toHaveBeenCalledTimes(1);
   });
   it('toggles enabled state and records the before/after state', async () => {
-    const { prisma, tx } = buildPrisma(); prisma.riskPolicy.findUnique.mockResolvedValue(policy({ enabled: true })); tx.riskPolicy.update.mockResolvedValue(policy({ enabled: false }));
+    const { prisma, tx } = buildPrisma(); tx.riskPolicy.findFirst.mockResolvedValue(policy({ enabled: true })); tx.riskPolicy.update.mockResolvedValue(policy({ enabled: false }));
     const service = new RiskPolicyAdminService(prisma as unknown as PrismaService); await service.setEnabled(context, 'policy-1', false);
     expect(tx.riskPolicy.update).toHaveBeenCalledWith({ where: { id: 'policy-1' }, data: { enabled: false } });
     expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'RISK_POLICY_DISABLED', metadata: { before: { enabled: true }, after: { enabled: false } } }) }));
