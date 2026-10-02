@@ -70,8 +70,8 @@ describeIfConfigured('PostgreSQL payment transaction integrity', () => {
       [ids.shift, ids.branch, ids.user, ids.device],
     );
     await admin.query(
-      `INSERT INTO "CashDrawer" ("id","branchId","deviceId","name","active")
-       VALUES ($1,$2,$3,$4,true)`,
+      `INSERT INTO "CashDrawer" ("id","branchId","deviceId","name","active","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,true,now(),now())`,
       [ids.drawer, ids.branch, ids.device, 'Payment Integrity Drawer'],
     );
     await admin.query(
