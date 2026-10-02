@@ -13,7 +13,7 @@ function context(...permissions: AuthContext['permissions']): AuthContext {
 
 function prismaMock() {
   const tx = {
-    $executeRaw: jest.fn().mockResolvedValue(0),
+    $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(0),
     payment: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
     shift: { findUnique: jest.fn() },
     paymentAdjustment: { findMany: jest.fn(), create: jest.fn() },
