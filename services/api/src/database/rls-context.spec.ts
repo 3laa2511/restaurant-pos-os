@@ -1,8 +1,8 @@
-import { setRlsContext, withRlsContext } from './rls-context.js';
+import { setRlsContext, withRlsContext, type PrismaServiceLike, type RlsTransaction } from './rls-context.js';
 
 describe('RLS transaction context', () => {
   it('rejects an incomplete security context', async () => {
-    const tx = { $executeRaw: jest.fn() } as never;
+    const tx = { $executeRaw: jest.fn() } as unknown as RlsTransaction;
     await expect(
       setRlsContext(tx, {
         tenantId: '',
@@ -17,7 +17,7 @@ describe('RLS transaction context', () => {
 
   it('sets tenant, branch, user and session context on the transaction', async () => {
     const executeRaw = jest.fn().mockResolvedValue(4);
-    const tx = { $executeRaw: executeRaw } as never;
+    const tx = { $executeRaw: executeRaw } as unknown as RlsTransaction;
 
     await setRlsContext(tx, {
       tenantId: 'tenant-1',
@@ -37,10 +37,9 @@ describe('RLS transaction context', () => {
   });
 
   it('creates the transaction first and runs business work through the same tx', async () => {
-    const tx = { $executeRaw: jest.fn().mockResolvedValue(4) } as never;
-    const prisma = {
-      $transaction: jest.fn(async (callback: (value: typeof tx) => Promise<string>) => callback(tx)),
-    };
+    const tx = { $executeRaw: jest.fn().mockResolvedValue(4) } as unknown as RlsTransaction;
+    const transaction = jest.fn(async (callback: (value: RlsTransaction) => Promise<string>) => callback(tx));
+    const prisma = { $transaction: transaction } as unknown as PrismaServiceLike;
     const work = jest.fn(async () => 'ok');
 
     await expect(
@@ -56,7 +55,7 @@ describe('RLS transaction context', () => {
       ),
     ).resolves.toBe('ok');
 
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(transaction).toHaveBeenCalledTimes(1);
     expect(work).toHaveBeenCalledWith(tx);
   });
 });
