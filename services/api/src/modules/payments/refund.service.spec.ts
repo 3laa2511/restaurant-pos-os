@@ -96,7 +96,7 @@ describe('RefundService', () => {
     const { prisma, tx, audit, accounting } = prismaMock();
     const input = { ...baseInput, idempotencyKey: 'duplicate-1' };
     const stored = { operationId: 'operation-1', paymentId: 'payment-1', orderId: 'order-1', type: 'REFUND', amount: 40, paymentStatus: 'PARTIALLY_REFUNDED', orderStatus: 'CLOSED' };
-    const requestHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const requestHash = createHash('sha256').update(JSON.stringify({ ...input, type: 'REFUND' })).digest('hex');
     prisma.syncOperation.findUnique.mockResolvedValue({ operationId: stored.operationId, requestHash, result: stored });
     tx.syncOperation.findUnique.mockResolvedValue({ operationId: stored.operationId, requestHash, result: stored });
 
