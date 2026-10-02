@@ -31,7 +31,7 @@ describe('RLS transaction context', () => {
     expect(Array.isArray(template)).toBe(true);
     expect(template.join(' ')).toContain('set_config');
     expect(template.join(' ')).toContain('set_config');
-    expect(executeRaw.mock.calls[0]).toHaveLength(2);
+    expect(executeRaw.mock.calls[0]).toHaveLength(9);
   });
 
   it('creates the transaction first and runs business work through the same tx', async () => {
