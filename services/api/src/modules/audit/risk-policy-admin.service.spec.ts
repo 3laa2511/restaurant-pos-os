@@ -13,9 +13,9 @@ function policy(overrides: Record<string, unknown> = {}) {
 }
 
 function buildPrisma() {
-  const tx = { $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(1), riskPolicy: { create: jest.fn() as AsyncMock, update: jest.fn() as AsyncMock }, auditLog: { create: jest.fn() as AsyncMock } };
+  const tx = { $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(1), riskPolicy: { findFirst: jest.fn() as AsyncMock, findMany: jest.fn() as AsyncMock, create: jest.fn() as AsyncMock, update: jest.fn() as AsyncMock }, auditLog: { create: jest.fn() as AsyncMock } };
   const prisma = { riskPolicy: { findMany: jest.fn() as AsyncMock, findUnique: jest.fn() as AsyncMock, create: jest.fn() as AsyncMock, update: jest.fn() as AsyncMock }, $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)) };
-  tx.riskPolicy.create.mockResolvedValue(policy()); tx.riskPolicy.update.mockResolvedValue(policy()); tx.auditLog.create.mockResolvedValue({});
+  tx.riskPolicy.findFirst.mockResolvedValue(policy()); tx.riskPolicy.findMany.mockResolvedValue([]); tx.riskPolicy.create.mockResolvedValue(policy()); tx.riskPolicy.update.mockResolvedValue(policy()); tx.auditLog.create.mockResolvedValue({});
   prisma.riskPolicy.create.mockResolvedValue(policy()); prisma.riskPolicy.update.mockResolvedValue(policy()); prisma.riskPolicy.findUnique.mockResolvedValue(policy()); prisma.riskPolicy.findMany.mockResolvedValue([]);
   return { prisma, tx };
 }
