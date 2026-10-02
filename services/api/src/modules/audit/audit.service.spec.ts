@@ -20,7 +20,7 @@ const context: AuthContext = {
 function buildPrisma() {
   const prisma = {
     auditLog: { findMany: jest.fn() as AsyncMock },
-    $transaction: jest.fn(),
+    $transaction: jest.fn<(...args: any[]) => Promise<unknown>>(),
   };
   prisma.auditLog.findMany.mockResolvedValue([]);
   prisma.$transaction.mockImplementation(async (callback) =>
