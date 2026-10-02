@@ -8,7 +8,7 @@ type AsyncMock = jest.Mock<(...args: any[]) => Promise<unknown>>;
 type AuditMock = { recordWithClient: AsyncMock };
 
 function context(...permissions: AuthContext['permissions']): AuthContext {
-  return { userId: 'user-1', tenantId: 'tenant-1', branchId: 'branch-1', deviceId: 'device-1', roles: [], permissions };
+  return { userId: 'user-1', tenantId: 'tenant-1', branchId: 'branch-1', deviceId: 'device-1', sessionId: 'session-1', workspace: 'POS', roles: [], permissions };
 }
 
 function prismaMock() {
@@ -30,7 +30,7 @@ function prismaMock() {
   } as any;
   const audit: AuditMock = { recordWithClient: jest.fn() };
   audit.recordWithClient.mockResolvedValue({ id: 'audit-1', riskScore: 70, riskLevel: 'HIGH' });
-  const accounting = { postPaymentAdjustment: jest.fn().mockResolvedValue({ id: 'journal-1' }) };
+  const accounting = { postPaymentAdjustment: jest.fn<(...args: any[]) => Promise<unknown>>().mockResolvedValue({ id: 'journal-1' }) };
   return { prisma, tx, audit, accounting };
 }
 
@@ -68,7 +68,7 @@ describe('RefundService', () => {
     const { prisma, tx, audit } = prismaMock();
     setupPayment(tx);
     tx.payment.findMany.mockResolvedValue([{ amount: '100.00', status: 'REFUNDED', adjustments: [{ amount: '100.00' }] }]);
-    const service = new RefundService(prisma as never, audit as never, { postPaymentAdjustment: jest.fn().mockResolvedValue({ id: 'journal-1' }) } as never);
+    const service = new RefundService(prisma as never, audit as never, { postPaymentAdjustment: jest.fn<(...args: any[]) => Promise<unknown>>().mockResolvedValue({ id: 'journal-1' }) } as never);
     const result = await service.refundPayment(context(PERMISSIONS.PAYMENT_REFUND), { ...baseInput, amount: 100, idempotencyKey: 'refund-2' });
     expect(result.paymentStatus).toBe('REFUNDED');
     expect(result.orderStatus).toBe('REFUNDED');
@@ -124,7 +124,7 @@ describe('RefundService', () => {
   it('requires the dedicated void permission', async () => {
     const { prisma, tx, audit } = prismaMock();
     setupPayment(tx);
-    const service = new RefundService(prisma as never, audit as never, { postPaymentAdjustment: jest.fn().mockResolvedValue({ id: 'journal-1' }) } as never);
+    const service = new RefundService(prisma as never, audit as never, { postPaymentAdjustment: jest.fn<(...args: any[]) => Promise<unknown>>().mockResolvedValue({ id: 'journal-1' }) } as never);
     await expect(service.voidPayment(context(PERMISSIONS.PAYMENT_REFUND), { ...baseInput, amount: 100, idempotencyKey: 'void-permission' })).rejects.toThrow('Forbidden: missing permission payment.void');
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -132,7 +132,7 @@ describe('RefundService', () => {
   it('rejects a void after a partial refund even when the caller has void permission', async () => {
     const { prisma, tx, audit } = prismaMock();
     setupPayment(tx, 'PARTIALLY_REFUNDED');
-    const service = new RefundService(prisma as never, audit as never, { postPaymentAdjustment: jest.fn().mockResolvedValue({ id: 'journal-1' }) } as never);
+    const service = new RefundService(prisma as never, audit as never, { postPaymentAdjustment: jest.fn<(...args: any[]) => Promise<unknown>>().mockResolvedValue({ id: 'journal-1' }) } as never);
     await expect(service.voidPayment(context(PERMISSIONS.PAYMENT_VOID), { ...baseInput, amount: 100, idempotencyKey: 'void-1' })).rejects.toThrow('cannot be voided');
     expect(prisma.$transaction).toHaveBeenCalled();
     expect(tx.paymentAdjustment.create).not.toHaveBeenCalled();
