@@ -5,7 +5,7 @@ import type { AuthContext } from '../auth/authorization.types.js';
 import type { PrismaService } from '../../database/prisma.service.js';
 
 type AsyncMock = jest.Mock<(...args: any[]) => Promise<unknown>>;
-const context: AuthContext = { userId: 'admin-1', tenantId: 'tenant-1', branchId: null, deviceId: 'device-1', roles: [], permissions: [PERMISSIONS.AUDIT_POLICY_MANAGE] };
+const context: AuthContext = { userId: 'admin-1', tenantId: 'tenant-1', branchId: null, deviceId: 'device-1', sessionId: 'session-1', workspace: 'MANAGEMENT', roles: [], permissions: [PERMISSIONS.AUDIT_POLICY_MANAGE] };
 const branchContext: AuthContext = { ...context, branchId: 'branch-1' };
 
 function policy(overrides: Record<string, unknown> = {}) {
