@@ -1,5 +1,8 @@
 name: API Quality Gate
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [main, 'feat/**']
@@ -59,6 +62,16 @@ jobs:
           name: reconstructed-initial-migration
           path: prisma/migrations/0001_initial/migration.sql
           if-no-files-found: error
+
+      - name: Persist reconstructed baseline migration
+        if: github.event_name == 'push'
+        working-directory: services/api
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add prisma/migrations/0001_initial/migration.sql
+          git diff --cached --quiet || git commit -m "chore: persist reconstructed initial migration"
+          git push origin HEAD:${GITHUB_REF_NAME}
 
       - name: Apply migrations
         working-directory: services/api
