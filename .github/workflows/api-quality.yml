@@ -1,8 +1,5 @@
 name: API Quality Gate
 
-permissions:
-  contents: write
-
 on:
   push:
     branches: [main, 'feat/**']
@@ -46,31 +43,6 @@ jobs:
           CREATE ROLE rls_app LOGIN PASSWORD 'rls_app' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
           GRANT CONNECT ON DATABASE restaurant_pos_test TO rls_app;
           SQL
-
-      - name: Generate historical baseline SQL
-        run: pnpm exec prisma migrate diff --from-empty --to-schema=../../prisma/schema.initial.prisma --script > /tmp/initial.sql && cat /tmp/initial.sql
-        working-directory: services/api
-
-      - name: Validate reconstructed baseline migration
-        run: |
-          cp /tmp/initial.sql prisma/migrations/0001_initial/migration.sql
-          test -s prisma/migrations/0001_initial/migration.sql
-
-      - name: Upload reconstructed baseline SQL
-        uses: actions/upload-artifact@v4
-        with:
-          name: reconstructed-initial-migration
-          path: prisma/migrations/0001_initial/migration.sql
-          if-no-files-found: error
-
-      - name: Persist reconstructed baseline migration
-        if: github.event_name == 'push'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add prisma/migrations/0001_initial/migration.sql
-          git diff --cached --quiet || git commit -m "chore: persist reconstructed initial migration"
-          git push origin HEAD:${GITHUB_REF_NAME}
 
       - name: Apply migrations
         working-directory: services/api
