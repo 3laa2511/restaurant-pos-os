@@ -65,7 +65,6 @@ jobs:
 
       - name: Persist reconstructed baseline migration
         if: github.event_name == 'push'
-        working-directory: services/api
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
