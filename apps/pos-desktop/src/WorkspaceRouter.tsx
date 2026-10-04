@@ -32,6 +32,8 @@ async function apiGet<T>(path: string): Promise<T> {
 type EmployeeRow = { employeeCode: string; jobTitle: string; baseSalary: string | number; user: { displayName: string; status: string; branchId: string | null } };
 type AccountingRow = { code: string; name: string; nameAr: string | null; type: string; debit: number; credit: number; balance: number };
 type StockRow = { quantityBaseUnit: string | number; averageCostPerBaseUnit: string | number; ingredient: { sku: string; name: string; nameAr: string | null; baseUnit: string }; branch: { code: string; name: string } };
+type OperationalOrder = { id: string; orderNumber: string; status: string; type: string; source: string; total: string | number; createdAt: string; updatedAt: string; customer: { name: string | null; phone: string; addresses: Array<{ address: string; area: string | null }> } | null; branch: { code: string; name: string } };
+type ManagementOverview = { orders: Array<{ status: string; count: number; total: number }>; customers: number; branches: number };
 
 function WorkspaceShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return <main style={{ minHeight: '100vh', background: '#090d12', color: '#e8edf5', fontFamily: 'Inter, system-ui, sans-serif', padding: 24, direction: 'rtl' }}><section style={{ width: '100%', maxWidth: 1200, margin: '0 auto' }}><div style={{ marginBottom: 22 }}><div style={{ fontSize: 11, color: '#7b8896', marginBottom: 8 }}>RESTAURANT POS OS / WORKSPACE</div><h1 style={{ margin: 0 }}>{title}</h1><p style={{ color: '#9ca8b5', lineHeight: 1.8, marginBottom: 0 }}>{description}</p></div>{children}</section></main>;
@@ -61,6 +63,37 @@ function ReadWorkspace({ workspace }: { workspace: 'HR' | 'ACCOUNTING' | 'INVENT
   </WorkspaceShell>;
 }
 
+function OperationalWorkspace({ workspace }: { workspace: 'CALL_CENTER' | 'DISPATCH' | 'MANAGEMENT' }) {
+  const [data, setData] = useState<OperationalOrder[] | ManagementOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  async function load() {
+    setLoading(true); setError('');
+    try {
+      if (workspace === 'MANAGEMENT') setData(await apiGet<ManagementOverview>('operations/management/overview'));
+      else if (workspace === 'CALL_CENTER') setData(await apiGet<OperationalOrder[]>('operations/call-center/orders'));
+      else setData(await apiGet<OperationalOrder[]>('operations/dispatch/orders'));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'تعذر تحميل البيانات'); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void load(); }, [workspace]);
+  const session = getDesktopSession();
+  return <WorkspaceShell title={labels[workspace]} description="مساحة تشغيلية مرتبطة مباشرة ببيانات الطلبات والصلاحيات المركزية.">
+    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ fontSize: 11, color: '#7b8896' }}>Branch: {session?.user.branchId ?? 'ALL'}</span><button type="button" onClick={() => void load()} disabled={loading} style={{ border: '1px solid #334150', borderRadius: 9, padding: '9px 14px', background: '#111820', color: '#e8edf5' }}>{loading ? 'جاري التحميل…' : 'تحديث'}</button></div>
+    {error && <div style={{ marginBottom: 14, padding: 12, borderRadius: 10, border: '1px solid #63373a', color: '#f0a7a7', background: '#211214' }}>{error}</div>}
+    {loading && !data && <div style={{ padding: 30, textAlign: 'center', color: '#7b8896' }}>جاري تحميل بيانات المساحة…</div>}
+    {workspace !== 'MANAGEMENT' && data && <DataTable headers={['رقم الطلب','العميل','الهاتف','الحالة','الفرع','الإجمالي']} rows={(data as OperationalOrder[]).map(o => [o.orderNumber,o.customer?.name || 'بدون اسم',o.customer?.phone || '—',o.status,o.branch.name || o.branch.code,Number(o.total).toFixed(2)+' ج.م'])} />}
+    {workspace === 'MANAGEMENT' && data && <div style={{ display: 'grid', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 12 }}>
+        <div style={{ padding: 18, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b' }}><div style={{ color:'#7b8896', fontSize:11 }}>الفروع</div><strong style={{ fontSize:26 }}>{(data as ManagementOverview).branches}</strong></div>
+        <div style={{ padding: 18, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b' }}><div style={{ color:'#7b8896', fontSize:11 }}>العملاء</div><strong style={{ fontSize:26 }}>{(data as ManagementOverview).customers}</strong></div>
+        <div style={{ padding: 18, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b' }}><div style={{ color:'#7b8896', fontSize:11 }}>حالات الطلبات</div><strong style={{ fontSize:26 }}>{(data as ManagementOverview).orders.reduce((sum, row) => sum + row.count, 0)}</strong></div>
+      </div>
+      <DataTable headers={['الحالة','عدد الطلبات','الإجمالي']} rows={(data as ManagementOverview).orders.map(r => [r.status,r.count,Number(r.total).toFixed(2)+' ج.م'])} />
+    </div>}
+  </WorkspaceShell>;
+}
+
 export function WorkspaceRouter() {
   const session = getDesktopSession();
   if (!session) return null;
@@ -68,15 +101,6 @@ export function WorkspaceRouter() {
   if (session.workspace === 'POS') return <RealPosApp />;
   if (session.workspace === 'KITCHEN') return <KitchenDisplay />;
   if (session.workspace === 'HR' || session.workspace === 'ACCOUNTING' || session.workspace === 'INVENTORY') return <ReadWorkspace workspace={session.workspace} />;
-
-  return (
-    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#090d12', color: '#e8edf5', fontFamily: 'Inter, system-ui, sans-serif', padding: 24, direction: 'rtl' }}>
-      <section style={{ width: '100%', maxWidth: 620, padding: 30, border: '1px solid #26313d', borderRadius: 18, background: '#0e141b' }}>
-        <div style={{ fontSize: 11, color: '#7b8896', marginBottom: 8 }}>RESTAURANT POS OS / WORKSPACE</div>
-        <h1 style={{ margin: 0 }}>{labels[session.workspace] ?? session.workspace}</h1>
-        <p style={{ color: '#9ca8b5', lineHeight: 1.8 }}>تم تسجيل الدخول إلى مساحة العمل المصرّح بها. هذا القسم لم يُفعّل له تدفق تشغيلي كامل بعد، ولن يتم منح صلاحيات أو بيانات من أقسام أخرى.</p>
-        <div style={{ padding: 12, borderRadius: 10, background: '#111820', color: '#7b8896', fontSize: 11 }}>Workspace: {session.workspace}</div>
-      </section>
-    </main>
-  );
+  if (session.workspace === 'CALL_CENTER' || session.workspace === 'DISPATCH' || session.workspace === 'MANAGEMENT') return <OperationalWorkspace workspace={session.workspace} />;
+  return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#090d12', color: '#e8edf5', padding: 24, direction: 'rtl' }}><section><h1>{labels[session.workspace] ?? session.workspace}</h1><p>مساحة العمل غير مفعّلة تشغيليًا.</p></section></main>;
 }
