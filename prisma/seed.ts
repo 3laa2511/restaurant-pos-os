@@ -19,6 +19,8 @@ const permissions = [
   ['cash_drawer.manage', 'Manage cash drawer movements'],
   ['report.view_operational', 'View operational reports'],
   ['report.view_financial', 'View financial reports'],
+  ['business_cycle.view', 'View business cycles'],
+  ['business_cycle.manage', 'Manage business cycles'],
   ['user.manage', 'Manage users'],
   ['menu.manage', 'Manage menu'],
   ['inventory.manage', 'Manage inventory'],
