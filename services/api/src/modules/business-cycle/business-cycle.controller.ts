@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { PermissionGuard } from '../auth/permission.guard.js';
 import { RequirePermission } from '../auth/permission.decorator.js';
@@ -13,7 +13,7 @@ export class BusinessCycleController {
   constructor(private readonly cycles: BusinessCycleService) {}
   @Get('current')
   @RequirePermission(PERMISSIONS.BUSINESS_CYCLE_VIEW)
-  current(@CurrentAuth() context: AuthContext, @Body('branchId') branchId: string) {
+  current(@CurrentAuth() context: AuthContext, @Query('branchId') branchId: string) {
     if (!branchId) throw new Error('branchId is required');
     return this.cycles.current(context, branchId);
   }
