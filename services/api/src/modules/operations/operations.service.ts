@@ -13,7 +13,7 @@ export class OperationsService {
     if (branchId) assertBranchAccess(context, branchId);
     return withRlsContext(this.prisma, context, async (tx) =>
       tx.order.findMany({
-        where: { tenantId, ...(branchId ? { branchId } : {}), source: 'CALL_CENTER' },
+        where: { branch: { tenantId, ...(branchId ? { id: branchId } : {}) }, source: 'CALL_CENTER' },
         orderBy: { createdAt: 'desc' },
         take: 100,
         include: { customer: { include: { addresses: true } }, items: true, branch: true },
@@ -27,8 +27,7 @@ export class OperationsService {
     return withRlsContext(this.prisma, context, async (tx) =>
       tx.order.findMany({
         where: {
-          tenantId,
-          ...(branchId ? { branchId } : {}),
+          branch: { tenantId, ...(branchId ? { id: branchId } : {}) },
           type: 'DELIVERY',
           status: { in: ['CONFIRMED', 'SENT_TO_KITCHEN', 'PREPARING', 'READY', 'ASSIGNED', 'OUT_FOR_DELIVERY'] },
         },
@@ -43,7 +42,7 @@ export class OperationsService {
     const tenantId = assertTenantScope(context);
     if (branchId) assertBranchAccess(context, branchId);
     return withRlsContext(this.prisma, context, async (tx) => {
-      const where = { tenantId, ...(branchId ? { branchId } : {}) };
+      const where = { branch: { tenantId, ...(branchId ? { id: branchId } : {}) } };
       const [orders, customers, branches] = await Promise.all([
         tx.order.groupBy({ by: ['status'], where, _count: { _all: true }, _sum: { total: true } }),
         tx.customer.count({ where: { tenantId } }),
