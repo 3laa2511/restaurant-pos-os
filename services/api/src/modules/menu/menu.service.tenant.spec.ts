@@ -22,11 +22,17 @@ describe('MenuService tenant and branch isolation', () => {
       { productId: 'prod-2', priceOverride: null, enabled: false, available: true },
     ]);
     const branchFindFirst = jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ id: 'branch-a' });
-    const service = new MenuService({
+    const executeRaw = jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(1);
+    const tx = {
+      $executeRaw: executeRaw,
       category: { findMany: categoryFindMany },
       branchProduct: { findMany: branchProductFindMany },
       branch: { findFirst: branchFindFirst },
-    } as never);
+    };
+    const prisma = {
+      $transaction: jest.fn(async (work: (transaction: typeof tx) => Promise<any>) => work(tx)),
+    };
+    const service = new MenuService(prisma as never);
 
     const context = {
       userId: 'user-1',
@@ -42,6 +48,8 @@ describe('MenuService tenant and branch isolation', () => {
 
     const result = await service.listActiveMenu(context);
 
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(executeRaw).toHaveBeenCalledTimes(1);
     expect(branchFindFirst).toHaveBeenCalledWith({
       where: { id: 'branch-a', tenantId: 'tenant-a', active: true },
       select: { id: true },
