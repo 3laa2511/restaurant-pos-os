@@ -34,7 +34,7 @@ type AccountingRow = { code: string; name: string; nameAr: string | null; type: 
 type StockRow = { quantityBaseUnit: string | number; averageCostPerBaseUnit: string | number; ingredient: { sku: string; name: string; nameAr: string | null; baseUnit: string }; branch: { code: string; name: string } };
 
 function WorkspaceShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
-  return <main style={{ minHeight: '100vh', background: '#090d12', color: '#e8edf5', fontFamily: 'Inter, system-ui, sans-serif', padding: 24, direction: 'rtl' }}><section style={{ width: '100%', maxWidth: 1200, margin: '0 auto' }}><div style={{ marginBottom: 22 }}><div style={{ fontSize: 11, color: '#7b8896', marginBottom: 8 }}>BO'SH SYSTEM / WORKSPACE</div><h1 style={{ margin: 0 }}>{title}</h1><p style={{ color: '#9ca8b5', lineHeight: 1.8, marginBottom: 0 }}>{description}</p></div>{children}</section></main>;
+  return <main style={{ minHeight: '100vh', background: '#090d12', color: '#e8edf5', fontFamily: 'Inter, system-ui, sans-serif', padding: 24, direction: 'rtl' }}><section style={{ width: '100%', maxWidth: 1200, margin: '0 auto' }}><div style={{ marginBottom: 22 }}><div style={{ fontSize: 11, color: '#7b8896', marginBottom: 8 }}>RESTAURANT POS OS / WORKSPACE</div><h1 style={{ margin: 0 }}>{title}</h1><p style={{ color: '#9ca8b5', lineHeight: 1.8, marginBottom: 0 }}>{description}</p></div>{children}</section></main>;
 }
 function DataTable({ headers, rows }: { headers: string[]; rows: Array<ReactNode[]> }) {
   return <div style={{ overflowX: 'auto', border: '1px solid #26313d', borderRadius: 14, background: '#0e141b' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}><thead><tr>{headers.map((h) => <th key={h} style={{ textAlign: 'right', padding: 13, borderBottom: '1px solid #26313d', color: '#8e9baa' }}>{h}</th>)}</tr></thead><tbody>{rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j} style={{ padding: 13, borderBottom: '1px solid #1b252f' }}>{cell}</td>)}</tr>)}</tbody></table></div>;
@@ -51,7 +51,7 @@ function ReadWorkspace({ workspace }: { workspace: 'HR' | 'ACCOUNTING' | 'INVENT
   }
   useEffect(() => { void load(); }, [workspace]);
   const session = getDesktopSession();
-  return <WorkspaceShell title={labels[workspace]} description="واجهة تشغيل فعلية مرتبطة بالـAPI المركزي، والصلاحيات والعزل يظلّان من مسؤولية الـBackend.">
+  return <WorkspaceShell title={labels[workspace]} description="عرض تشغيلي للبيانات المرتبطة بالـAPI المركزي. العمليات الحساسة والصلاحيات والعزل تظل من مسؤولية الـBackend.">
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ fontSize: 11, color: '#7b8896' }}>Branch: {session?.user.branchId ?? 'ALL'}</span><button type="button" onClick={() => void load()} disabled={loading} style={{ border: '1px solid #334150', borderRadius: 9, padding: '9px 14px', background: '#111820', color: '#e8edf5' }}>{loading ? 'جاري التحميل…' : 'تحديث'}</button></div>
     {error && <div style={{ marginBottom: 14, padding: 12, borderRadius: 10, border: '1px solid #63373a', color: '#f0a7a7', background: '#211214' }}>{error}</div>}
     {loading && !data && <div style={{ padding: 30, textAlign: 'center', color: '#7b8896' }}>جاري تحميل بيانات المساحة…</div>}
@@ -72,9 +72,9 @@ export function WorkspaceRouter() {
   return (
     <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#090d12', color: '#e8edf5', fontFamily: 'Inter, system-ui, sans-serif', padding: 24, direction: 'rtl' }}>
       <section style={{ width: '100%', maxWidth: 620, padding: 30, border: '1px solid #26313d', borderRadius: 18, background: '#0e141b' }}>
-        <div style={{ fontSize: 11, color: '#7b8896', marginBottom: 8 }}>BO'SH SYSTEM / WORKSPACE</div>
+        <div style={{ fontSize: 11, color: '#7b8896', marginBottom: 8 }}>RESTAURANT POS OS / WORKSPACE</div>
         <h1 style={{ margin: 0 }}>{labels[session.workspace] ?? session.workspace}</h1>
-        <p style={{ color: '#9ca8b5', lineHeight: 1.8 }}>تم تسجيل الدخول إلى مساحة العمل المصرّح بها. واجهة هذا القسم ستُربط بالـAPI الخاص بها بدون منح صلاحيات أو بيانات من أقسام أخرى.</p>
+        <p style={{ color: '#9ca8b5', lineHeight: 1.8 }}>تم تسجيل الدخول إلى مساحة العمل المصرّح بها. هذا القسم لم يُفعّل له تدفق تشغيلي كامل بعد، ولن يتم منح صلاحيات أو بيانات من أقسام أخرى.</p>
         <div style={{ padding: 12, borderRadius: 10, background: '#111820', color: '#7b8896', fontSize: 11 }}>Workspace: {session.workspace}</div>
       </section>
     </main>
