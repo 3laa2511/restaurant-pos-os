@@ -29,6 +29,8 @@ export const PERMISSIONS = {
   CASH_DRAWER_MANAGE: 'cash_drawer.manage',
   REPORT_VIEW_OPERATIONAL: 'report.view_operational',
   REPORT_VIEW_FINANCIAL: 'report.view_financial',
+  BUSINESS_CYCLE_VIEW: 'business_cycle.view',
+  BUSINESS_CYCLE_MANAGE: 'business_cycle.manage',
   USER_MANAGE: 'user.manage',
   MENU_MANAGE: 'menu.manage',
   INVENTORY_MANAGE: 'inventory.manage',
