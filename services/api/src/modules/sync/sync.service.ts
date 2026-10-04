@@ -3,6 +3,7 @@ import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { assertBranchAccess, assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
+import { AccountingService } from '../accounting/accounting.service.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { SyncEnvelope, SyncResult, validateSyncEnvelope } from './sync-contract.js';
 
@@ -36,7 +37,7 @@ function assertCheckoutPayload(payload: unknown, envelope: SyncEnvelope): Checko
 
 @Injectable()
 export class SyncService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingService) {}
 
   async submit(context: AuthContext, envelope: SyncEnvelope): Promise<SyncResult> {
     const tenantId = assertTenantScope(context);
@@ -89,6 +90,8 @@ export class SyncService {
           if (!drawer || !drawer.active || drawer.branchId !== envelope.branchId) throw new Error('An active cash drawer is required for cash checkout sync');
           await tx.cashDrawerMovement.create({ data: { id: randomUUID(), drawerId: drawer.id, branchId: envelope.branchId, deviceId: envelope.deviceId, shiftId: payload.payment.shiftId, userId: context.userId, type: 'SALE', direction: 'IN', amount: payload.payment.amount.toFixed(2), reason: `Synced cash sale for order ${payload.id}`, sourceType: 'SYNC_CHECKOUT', sourceId: operationId, idempotencyKey: `${envelope.idempotencyKey}:drawer:sale`, operationId: `${operationId}:sale`, metadata: jsonValue({ orderId: payload.id, paymentId: payload.payment.paymentId, clientSequence: envelope.clientSequence }), occurredAt: new Date(envelope.occurredAt) } });
         }
+
+        await this.accounting.postSale(tx, context, { orderId: payload.id, branchId: envelope.branchId, amount: payload.total, payments: [{ method: payload.payment.method, amount: payload.payment.amount }] });
 
         const eventPayload = { operationId, source: 'OFFLINE_SYNC', paymentId: payload.payment.paymentId, total: payload.total };
         await tx.orderEvent.create({ data: { id: randomUUID(), eventId: randomUUID(), orderId: payload.id, type: 'ORDER_SYNCED_AND_PAID', actorUserId: context.userId, deviceId: envelope.deviceId, payload: jsonValue(eventPayload), occurredAt: new Date(envelope.occurredAt) } });
