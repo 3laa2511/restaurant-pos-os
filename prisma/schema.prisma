@@ -184,6 +184,7 @@ model Tenant {
   active Boolean @default(true)
   currency String @default("EGP")
   branches Branch[]
+  businessCycles BusinessCycle[]
   users User[]
   sessions Session[]
   warehouses Warehouse[]
@@ -225,6 +226,7 @@ model Branch {
   journalEntries JournalEntry[]
   devices Device[]
   orders Order[]
+  businessCycles BusinessCycle[]
   shifts Shift[]
   sessions Session[]
   cashDrawers CashDrawer[]
@@ -322,6 +324,8 @@ model User {
   roleLinks UserRole[]
   orders Order[] @relation("CreatedOrders")
   postedJournalEntries JournalEntry[] @relation("PostedJournalEntries")
+  openedBusinessCycles BusinessCycle[] @relation("BusinessCycleOpenedBy")
+  closedBusinessCycles BusinessCycle[] @relation("BusinessCycleClosedBy")
   shifts Shift[]
   auditLogs AuditLog[]
   devices Device[]
@@ -774,6 +778,29 @@ model BranchProduct {
   @@index([productId, branchId])
 }
 
+
+model BusinessCycle {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  name String
+  status String @default("OPEN")
+  openedById String
+  openedBy User @relation("BusinessCycleOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  closedById String?
+  closedBy User? @relation("BusinessCycleClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+  openedAt DateTime @default(now())
+  closedAt DateTime?
+  closeSummary Json?
+  orders Order[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([tenantId, branchId, status])
+  @@index([tenantId, branchId, openedAt])
+}
+
 model Order {
   id String @id @default(cuid())
   orderNumber String
@@ -783,6 +810,8 @@ model Order {
   version Int @default(1)
   branchId String
   branch Branch @relation(fields: [branchId], references: [id])
+  cycleId String?
+  cycle BusinessCycle? @relation(fields: [cycleId], references: [id], onDelete: Restrict)
   createdById String
   createdBy User @relation("CreatedOrders", fields: [createdById], references: [id])
   customerId String?
