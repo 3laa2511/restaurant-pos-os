@@ -27,11 +27,14 @@ export class PrismaOrderRepository implements OrderRepository {
       });
       if (!branch) throw new Error('Branch not found in tenant scope');
 
+      const cycle = await tx.businessCycle.findFirst({ where: { tenantId: input.tenantId, branchId: input.branchId, status: 'OPEN' }, select: { id: true } });
+
       const order = await tx.order.create({
         data: {
           id: input.id,
           orderNumber: input.orderNumber,
           branchId: input.branchId,
+          cycleId: cycle?.id,
           createdById: input.createdById,
           source: input.source as never,
           type: input.type as never,
