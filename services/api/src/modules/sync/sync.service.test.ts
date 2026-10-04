@@ -26,6 +26,8 @@ const authContext: AuthContext = {
   permissions: ['order.create'],
 };
 
+const accountingMock = { postSale: async () => undefined };
+
 function createPrismaMock() {
   const records = new Map<string, any>();
   const tx = { $executeRaw: async () => 1, branch: { findFirst: async ({ where }: any) => where.id === 'BR01' && where.tenantId === 'tenant-1' && where.active === true ? { id: 'BR01' } : (where.id === 'BR01' && where.tenantId === 'tenant-1' ? { id: 'BR01' } : null), findMany: async ({ where }: any) => where.tenantId === 'tenant-1' && where.active === true ? [{ id: 'BR01' }] : [] }, syncOperation: { findUnique: async ({ where }: any) => records.get(where.idempotencyKey) ?? null, create: async ({ data }: any) => { if (records.has(data.idempotencyKey)) throw new Error('unique violation'); records.set(data.idempotencyKey, data); return data; }, findMany: async () => [...records.values()].filter((record) => record.status === 'RECEIVED') } };
@@ -52,7 +54,7 @@ function createPrismaMock() {
 describe('SyncService', () => {
   it('rejects legacy CREATE operations and persists a durable rejection', async () => {
     const prisma = createPrismaMock();
-    const service = new SyncService(prisma as never);
+    const service = new SyncService(prisma as never, accountingMock as never);
 
     const result = await service.submit(authContext, envelope);
 
@@ -63,7 +65,7 @@ describe('SyncService', () => {
 
   it('returns the stored result for an exact idempotent retry of a rejected operation', async () => {
     const prisma = createPrismaMock();
-    const service = new SyncService(prisma as never);
+    const service = new SyncService(prisma as never, accountingMock as never);
 
     const first = await service.submit(authContext, envelope);
     const second = await service.submit(authContext, envelope);
@@ -74,7 +76,7 @@ describe('SyncService', () => {
 
   it('returns conflict when an idempotency key is reused with different content', async () => {
     const prisma = createPrismaMock();
-    const service = new SyncService(prisma as never);
+    const service = new SyncService(prisma as never, accountingMock as never);
 
     const first = await service.submit(authContext, envelope);
     const conflict = await service.submit(authContext, { ...envelope, payload: { id: 'order-2', total: 200 } });
@@ -88,7 +90,7 @@ describe('SyncService', () => {
 
   it('rejects malformed idempotency keys before touching persistence', async () => {
     const prisma = createPrismaMock();
-    const service = new SyncService(prisma as never);
+    const service = new SyncService(prisma as never, accountingMock as never);
 
     await expect(service.submit(authContext, { ...envelope, idempotencyKey: 'short' })).rejects.toThrow(
       'A valid idempotency key is required',
@@ -97,7 +99,7 @@ describe('SyncService', () => {
 
   it('rejects an operation from another branch', async () => {
     const prisma = createPrismaMock();
-    const service = new SyncService(prisma as never);
+    const service = new SyncService(prisma as never, accountingMock as never);
 
     await expect(service.submit(authContext, { ...envelope, branchId: 'BR02' })).rejects.toThrow(
       'Forbidden: branch access denied',
@@ -106,7 +108,7 @@ describe('SyncService', () => {
 
   it('rejects an operation from another device', async () => {
     const prisma = createPrismaMock();
-    const service = new SyncService(prisma as never);
+    const service = new SyncService(prisma as never, accountingMock as never);
 
     await expect(service.submit(authContext, { ...envelope, deviceId: 'POS99' })).rejects.toThrow(
       'Forbidden: device access denied',
