@@ -14,8 +14,9 @@ import { HrModule } from './modules/hr/hr.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { AccountingModule } from './modules/accounting/accounting.module.js';
 import { SecurityModule } from './modules/security/security.module.js';
+import { OperationsModule } from './modules/operations/operations.module.js';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, HealthModule, OrderModule, PaymentModule, ShiftModule, CashDrawerModule, SyncModule, MenuModule, AuditModule, KitchenModule, HrModule, InventoryModule, AccountingModule, SecurityModule],
+  imports: [DatabaseModule, AuthModule, HealthModule, OrderModule, PaymentModule, ShiftModule, CashDrawerModule, SyncModule, MenuModule, AuditModule, KitchenModule, HrModule, InventoryModule, AccountingModule, SecurityModule, OperationsModule],
 })
 export class AppModule {}
