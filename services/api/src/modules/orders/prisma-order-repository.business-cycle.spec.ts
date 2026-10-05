@@ -37,7 +37,7 @@ describe('PrismaOrderRepository business-cycle enforcement', () => {
     const repo = new PrismaOrderRepository(f.prisma);
     await repo.create({
       id: 'order-2', orderNumber: '2', branchId: 'branch-1', tenantId: 'tenant-1',
-      createdById: 'user-1', source: 'POS', type: 'TAKEAWAY', status: 'DRAFT', total: '12.50',
+      createdById: 'user-1', source: 'POS', type: 'TAKEAWAY', status: OrderStatus.DRAFT, total: '12.50',
     }, context);
     expect(f.orderCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ cycleId: 'cycle-1' }),
