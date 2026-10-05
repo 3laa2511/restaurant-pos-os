@@ -82,6 +82,32 @@ async function main() {
     const rows = await prisma.permission.findMany({ where: { code: { in: permissionCodes } }, select: { id: true } });
     await prisma.rolePermission.createMany({ data: rows.map(({ id }) => ({ roleId: role.id, permissionId: id })) });
   }
+
+  const systemAccounts = [
+    ['1000', 'Cash', 'النقدية', 'ASSET'],
+    ['1010', 'Card Receivables', 'ذمم بطاقات الدفع', 'ASSET'],
+    ['1020', 'Wallet Receivables', 'ذمم المحافظ الإلكترونية', 'ASSET'],
+    ['1030', 'Bank', 'البنك', 'ASSET'],
+    ['1200', 'Inventory', 'المخزون', 'ASSET'],
+    ['1250', 'Inventory In Transit', 'مخزون بالطريق', 'ASSET'],
+    ['2100', 'Accounts Payable', 'الموردون', 'LIABILITY'],
+    ['2200', 'Payroll Payable', 'رواتب مستحقة', 'LIABILITY'],
+    ['4100', 'Sales Revenue', 'إيرادات المبيعات', 'REVENUE'],
+    ['4900', 'Inventory Adjustment Gain', 'أرباح تسويات المخزون', 'REVENUE'],
+    ['5900', 'Inventory Adjustment Loss', 'خسائر تسويات المخزون', 'EXPENSE'],
+    ['6100', 'Payroll Expense', 'مصروف الرواتب', 'EXPENSE'],
+  ] as const;
+
+  const tenants = await prisma.tenant.findMany({ select: { id: true } });
+  for (const tenant of tenants) {
+    for (const [code, name, nameAr, type] of systemAccounts) {
+      await prisma.accountingAccount.upsert({
+        where: { tenantId_code: { tenantId: tenant.id, code } },
+        update: { name, nameAr, type, active: true, allowPosting: true },
+        create: { tenantId: tenant.id, code, name, nameAr, type, active: true, allowPosting: true },
+      });
+    }
+  }
 }
 
 main().finally(() => prisma.$disconnect());
