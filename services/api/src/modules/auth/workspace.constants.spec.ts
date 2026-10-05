@@ -20,6 +20,12 @@ describe('workspace permission boundaries', () => {
     expect(workspaceAllowsPermission(WORKSPACES.POS, PERMISSIONS.HR_PAYROLL_MANAGE)).toBe(false);
   });
 
+  it('scopes business-cycle management to the Settings workspace', () => {
+    expect(workspaceAllowsPermission(WORKSPACES.SETTINGS, PERMISSIONS.BUSINESS_CYCLE_MANAGE)).toBe(true);
+    expect(workspaceAllowsPermission(WORKSPACES.POS, PERMISSIONS.BUSINESS_CYCLE_MANAGE)).toBe(false);
+    expect(workspaceAllowsPermission(WORKSPACES.MANAGEMENT, PERMISSIONS.BUSINESS_CYCLE_MANAGE)).toBe(false);
+  });
+
   it('keeps inventory permissions out of POS', () => {
     expect(workspaceAllowsPermission(WORKSPACES.INVENTORY, PERMISSIONS.INVENTORY_ADJUST)).toBe(true);
     expect(workspaceAllowsPermission(WORKSPACES.POS, PERMISSIONS.INVENTORY_ADJUST)).toBe(false);
