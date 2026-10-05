@@ -14,6 +14,7 @@ const labels: Record<string, string> = {
   ACCOUNTING: 'المحاسبة',
   INVENTORY: 'المخزون',
   MANAGEMENT: 'الإدارة',
+  SETTINGS: 'الإعدادات',
 };
 
 
