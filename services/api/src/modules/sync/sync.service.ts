@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { Prisma } from '../../generated/prisma/client.js';
 import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -63,7 +64,7 @@ export class SyncService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-          await setRlsContext(tx, context);
+        await setRlsContext(tx, context);
         const shift = await tx.shift.findFirst({ where: { id: payload.payment.shiftId, branch: { tenantId } }, select: { id: true, branchId: true, deviceId: true, status: true } });
         if (!shift) throw new Error('Shift not found');
         if (shift.branchId !== envelope.branchId) throw new Error('Shift branch does not match the sync branch');
@@ -101,7 +102,7 @@ export class SyncService {
         const applied: SyncResult = { status: 'APPLIED', operationId };
         await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: envelope.deviceId, branchId: envelope.branchId, operation: envelope.operation, entityType: envelope.entityType, entityId: envelope.entityId, idempotencyKey: envelope.idempotencyKey, clientSequence: envelope.clientSequence, occurredAt: new Date(envelope.occurredAt), payload: jsonValue(envelope.payload), requestHash, status: 'APPLIED', result: jsonValue(applied), updatedAt: new Date() } });
         return applied;
-      });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       const raced = await withRlsContext(this.prisma, context, async (tx) => {
         const found = await tx.syncOperation.findUnique({ where: { idempotencyKey: envelope.idempotencyKey } });
