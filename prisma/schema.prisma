@@ -320,6 +320,7 @@ model JournalEntry {
   @@unique([tenantId, sourceType, sourceId])
   @@index([tenantId, branchId, entryDate])
   @@index([tenantId, status, entryDate])
+  @@index([tenantId, fiscalPeriodId, entryDate])
 }
 
 model JournalLine {
