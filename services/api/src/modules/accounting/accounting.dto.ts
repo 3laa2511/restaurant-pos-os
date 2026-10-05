@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsNumber, IsOptional, IsString, Length, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsIn, IsNumber, IsOptional, IsString, Length, Min, ValidateNested } from 'class-validator';
 
 class JournalLineDto {
   @IsString() @Length(1, 64) code!: string;
@@ -19,4 +19,14 @@ export class ManualJournalDto {
   @IsString() @Length(1, 500) description!: string;
   @IsArray() @ValidateNested({ each: true }) @Type(() => JournalLineDto)
   lines!: JournalLineDto[];
+}
+
+export class CreateFiscalPeriodDto {
+  @IsString() @Length(1, 120) name!: string;
+  @IsDateString() periodStart!: string;
+  @IsDateString() periodEnd!: string;
+}
+
+export class ReverseJournalDto {
+  @IsOptional() @IsString() @Length(0, 500) reason?: string;
 }
