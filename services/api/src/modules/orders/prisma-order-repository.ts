@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { CreateOrderRecord, OrderRepository } from './order-repository.port.js';
 import type { OrderStatus } from './order-status.js';
 import type { AuthContext } from '../auth/authorization.types.js';
-import { withRlsContext } from '../../database/rls-context.js';
+import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
 
 @Injectable()
 export class PrismaOrderRepository implements OrderRepository {
@@ -20,21 +21,29 @@ export class PrismaOrderRepository implements OrderRepository {
   }
 
   async create(input: Omit<CreateOrderRecord, 'version'>, context: AuthContext): Promise<CreateOrderRecord> {
-    return withRlsContext(this.prisma, context, async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
+
       const branch = await tx.branch.findFirst({
         where: { id: input.branchId, tenantId: input.tenantId, active: true },
         select: { id: true, tenantId: true },
       });
       if (!branch) throw new Error('Branch not found in tenant scope');
 
-      const cycle = await tx.businessCycle.findFirst({ where: { tenantId: input.tenantId, branchId: input.branchId, status: 'OPEN' }, select: { id: true } });
+      const cycle = await tx.businessCycle.findFirst({
+        where: { tenantId: input.tenantId, branchId: input.branchId, status: 'OPEN' },
+        select: { id: true },
+      });
+      if (!cycle) {
+        throw new Error('An open business cycle is required before creating an order');
+      }
 
       const order = await tx.order.create({
         data: {
           id: input.id,
           orderNumber: input.orderNumber,
           branchId: input.branchId,
-          cycleId: cycle?.id ?? null,
+          cycleId: cycle.id,
           createdById: input.createdById,
           source: input.source as never,
           type: input.type as never,
@@ -44,7 +53,7 @@ export class PrismaOrderRepository implements OrderRepository {
         include: { branch: { select: { tenantId: true } } },
       });
       return this.map(order);
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async transition(
