@@ -383,7 +383,7 @@ export class AccountingService {
 
       const original = await tx.journalEntry.findFirst({
         where: { id: journalEntryId, tenantId },
-        include: { lines: { include: { account: true } }, reversalOf: true },
+        include: { lines: { include: { account: true } }, reversalOf: true, reversalEntry: true },
       });
       if (!original) throw new Error('Journal entry not found');
       if (original.reversalOfId) throw new Error('A reversal entry cannot be reversed');
