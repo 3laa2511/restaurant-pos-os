@@ -79,54 +79,6 @@ function ReadWorkspace({ workspace }: { workspace: 'HR' | 'ACCOUNTING' | 'INVENT
   </WorkspaceShell>;
 }
 
-function BusinessCyclePanel() {
-  const session = getDesktopSession();
-  const branchId = session?.user.branchId;
-  const [cycle, setCycle] = useState<{ id: string; name: string; openedAt: string; closeSummary?: { orderCount?: number; grossSales?: number } | null } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [working, setWorking] = useState(false);
-  const [error, setError] = useState('');
-  const [name, setName] = useState(() => 'تشغيل جديد - ' + new Date().toLocaleDateString('ar-EG'));
-
-  async function load() {
-    if (!branchId) { setLoading(false); setError('لا يوجد فرع محدد في جلسة العمل.'); return; }
-    setLoading(true); setError('');
-    try { setCycle(await apiGet<typeof cycle>('business-cycles/current?branchId=' + encodeURIComponent(branchId))); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'تعذر تحميل الدورة الحالية'); }
-    finally { setLoading(false); }
-  }
-
-  async function startNew() {
-    if (!branchId || !name.trim()) return;
-    if (!window.confirm('سيتم إغلاق الدورة الحالية وحفظ ملخصها ثم فتح دورة جديدة. لن يتم حذف أي فواتير أو تاريخ. هل تريد المتابعة؟')) return;
-    setWorking(true); setError('');
-    try {
-      const result = await apiPost<{ current: typeof cycle }>('business-cycles/start-new', { branchId, name: name.trim() });
-      setCycle(result.current);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'تعذر بدء دورة جديدة'); }
-    finally { setWorking(false); }
-  }
-
-  useEffect(() => { void load(); }, [branchId]);
-
-  return <section style={{ marginBottom: 16, padding: 18, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-      <div>
-        <div style={{ color: '#7b8896', fontSize: 11, marginBottom: 6 }}>BUSINESS CYCLE</div>
-        <h2 style={{ margin: 0, fontSize: 18 }}>دورة التشغيل الحالية</h2>
-        <div style={{ color: '#9ca8b5', marginTop: 7 }}>{loading ? 'جاري التحميل…' : cycle ? cycle.name : 'لا توجد دورة مفتوحة'}</div>
-      </div>
-      <button type="button" onClick={() => void load()} disabled={loading || working} style={{ border: '1px solid #334150', borderRadius: 9, padding: '9px 14px', background: '#111820', color: '#e8edf5' }}>تحديث</button>
-    </div>
-    {cycle && <div style={{ marginTop: 14, color: '#9ca8b5', fontSize: 12 }}>بدأت: {new Date(cycle.openedAt).toLocaleString('ar-EG')}</div>}
-    <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="اسم الدورة الجديدة" style={{ flex: 1, minWidth: 220, border: '1px solid #334150', borderRadius: 9, padding: '10px 12px', background: '#111820', color: '#e8edf5' }} />
-      <button type="button" onClick={() => void startNew()} disabled={!cycle || working || !branchId} style={{ border: 0, borderRadius: 9, padding: '10px 16px', background: '#d9e7f5', color: '#10161d', fontWeight: 700 }}>{working ? 'جاري البدء…' : 'بدء تشغيل جديد'}</button>
-    </div>
-    {error && <div style={{ marginTop: 12, padding: 10, borderRadius: 9, border: '1px solid #63373a', color: '#f0a7a7', background: '#211214' }}>{error}</div>}
-  </section>;
-}
-
 function SettingsWorkspace() {
   const session = getDesktopSession();
   const branchId = session?.user.branchId;
