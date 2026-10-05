@@ -109,7 +109,7 @@ export class AccountingController {
   @Get('reports/balance-sheet')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   balanceSheet(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string, @Query('asOf') asOf?: string) {
-    return this.accounting.balanceSheet(context, { branchId, asOf });
+    return this.accounting.balanceSheet(context, { ...(branchId ? { branchId } : {}), ...(asOf ? { asOf } : {}) });
   }
 
   @Get('reports/cash-bank')
