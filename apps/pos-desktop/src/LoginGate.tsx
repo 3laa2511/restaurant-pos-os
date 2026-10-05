@@ -16,6 +16,7 @@ const WORKSPACES: readonly { code: WorkspaceCode; title: string; description: st
   { code: 'MANAGEMENT', title: 'الإدارة', description: 'إدارة الشركة والفروع والتقارير' },
   { code: 'KITCHEN', title: 'المطبخ', description: 'تذاكر وتجهيز الطلبات' },
   { code: 'DISPATCH', title: 'التوصيل', description: 'توزيع ومتابعة طلبات التوصيل' },
+  { code: 'SETTINGS', title: 'الإعدادات', description: 'إدارة البيانات ودورة التشغيل' },
 ];
 
 export function LoginGate({ children }: { children: ReactNode }) {
