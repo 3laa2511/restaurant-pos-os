@@ -591,7 +591,7 @@ export class AccountingService {
       const lines = await tx.journalLine.findMany({
         where: {
           entry: { tenantId, status: 'POSTED', entryDate: { gte: from, lte: to }, ...(input.branchId ? { branchId: input.branchId } : {}) },
-          ...(input.accountCode ? { account: { code: input.accountCode, tenantId } } : {}),
+          ...(input.accountCode ? { account: { is: { code: input.accountCode, tenantId } } } : {}),
         },
         include: {
           account: { select: { id: true, code: true, name: true, nameAr: true, type: true } },
@@ -675,10 +675,10 @@ export class AccountingService {
     const ledger = await this.generalLedger(context, { branchId: input.branchId, from: input.from, to: input.to, accountCode: '1000' });
     const bank = await this.generalLedger(context, { branchId: input.branchId, from: input.from, to: input.to, accountCode: '1030' });
     const summarize = (lines: Awaited<ReturnType<AccountingService['generalLedger']>>) => ({
-      openingBalance: lines.length ? money(lines[0].balance - lines[0].debit + lines[0].credit) : 0,
+      openingBalance: lines.length ? money(lines[0]!.balance - lines[0]!.debit + lines[0]!.credit) : 0,
       totalDebit: money(lines.reduce((sum, line) => sum + line.debit, 0)),
       totalCredit: money(lines.reduce((sum, line) => sum + line.credit, 0)),
-      closingBalance: lines.length ? lines[lines.length - 1].balance : 0,
+      closingBalance: lines.length ? lines[lines.length - 1]!.balance : 0,
       lines,
     });
     return { cash: summarize(ledger), bank: summarize(bank) };
