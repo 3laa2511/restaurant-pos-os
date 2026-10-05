@@ -180,7 +180,7 @@ export class AccountingService {
 
     const existing = await tx.journalEntry.findUnique({
       where: { tenantId_sourceType_sourceId: { tenantId, sourceType: input.sourceType, sourceId: input.sourceId } },
-      include: { lines: true },
+      include: { lines: { include: { account: true } } },
     });
     if (existing) {
       const existingDebit = money(existing.lines.reduce((sum, line) => sum + Number(line.debit), 0));
@@ -672,8 +672,18 @@ export class AccountingService {
   }
 
   async cashBankMovement(context: AuthContext, input: { branchId?: string; from?: string; to?: string }) {
-    const ledger = await this.generalLedger(context, { branchId: input.branchId, from: input.from, to: input.to, accountCode: '1000' });
-    const bank = await this.generalLedger(context, { branchId: input.branchId, from: input.from, to: input.to, accountCode: '1030' });
+    const ledger = await this.generalLedger(context, {
+      ...(input.branchId ? { branchId: input.branchId } : {}),
+      ...(input.from ? { from: input.from } : {}),
+      ...(input.to ? { to: input.to } : {}),
+      accountCode: '1000',
+    });
+    const bank = await this.generalLedger(context, {
+      ...(input.branchId ? { branchId: input.branchId } : {}),
+      ...(input.from ? { from: input.from } : {}),
+      ...(input.to ? { to: input.to } : {}),
+      accountCode: '1030',
+    });
     const summarize = (lines: Awaited<ReturnType<AccountingService['generalLedger']>>) => ({
       openingBalance: lines.length ? money(lines[0]!.balance - lines[0]!.debit + lines[0]!.credit) : 0,
       totalDebit: money(lines.reduce((sum, line) => sum + line.debit, 0)),
