@@ -40,6 +40,41 @@ export class BusinessCycleService {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
+  async startNew(context: AuthContext, input: { branchId: string; name: string }) {
+    const tenantId = assertTenantScope(context);
+    assertPermission(context, PERMISSIONS.BUSINESS_CYCLE_MANAGE);
+    if (!input.name?.trim()) throw new Error('Cycle name is required');
+    assertBranchAccess(context, input.branchId);
+    return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
+      const branch = await tx.branch.findFirst({ where: { id: input.branchId, tenantId, active: true }, select: { id: true } });
+      if (!branch) throw new Error('Branch not found or inactive');
+      const current = await tx.businessCycle.findFirst({ where: { tenantId, branchId: input.branchId, status: 'OPEN' } });
+      if (!current) throw new Error('No open business cycle exists for this branch');
+      const openShifts = await tx.shift.count({ where: { branchId: input.branchId, status: 'OPEN', branch: { tenantId } } });
+      if (openShifts > 0) throw new Error('Cannot start a new business cycle while cashier shifts are open');
+      const orders = await tx.order.aggregate({ where: { cycleId: current.id, branch: { tenantId } }, _count: { _all: true }, _sum: { total: true } });
+      const summary = { orderCount: orders._count._all, grossSales: Number(orders._sum.total ?? 0) };
+      const closed = await tx.businessCycle.updateMany({
+        where: { id: current.id, status: 'OPEN', tenantId, branchId: input.branchId },
+        data: { status: 'CLOSED', closedById: context.userId, closedAt: new Date(), closeSummary: summary },
+      });
+      if (closed.count !== 1) throw new Error('Business cycle was changed by another operation');
+      await this.audit.recordWithClient(tx, context, {
+        action: 'BUSINESS_CYCLE_CLOSED', entityType: 'BUSINESS_CYCLE', entityId: current.id,
+        branchId: input.branchId, metadata: summary,
+      });
+      const next = await tx.businessCycle.create({
+        data: { id: randomUUID(), tenantId, branchId: input.branchId, name: input.name.trim(), openedById: context.userId, status: 'OPEN' },
+      });
+      await this.audit.recordWithClient(tx, context, {
+        action: 'BUSINESS_CYCLE_OPENED', entityType: 'BUSINESS_CYCLE', entityId: next.id,
+        branchId: input.branchId, metadata: { name: next.name, previousCycleId: current.id },
+      });
+      return { previous: { ...current, status: 'CLOSED', closedById: context.userId, closeSummary: summary }, current: next };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
   async close(context: AuthContext, input: CloseBusinessCycleInput) {
     const tenantId = assertTenantScope(context);
     assertPermission(context, PERMISSIONS.BUSINESS_CYCLE_MANAGE);
