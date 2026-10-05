@@ -100,7 +100,7 @@ describe('Accounting fiscal period controls', () => {
       },
     };
     const prisma = {
-      $transaction: jest.fn(async (fn: (tx: typeof tx) => Promise<unknown>) => fn(tx)),
+      $transaction: jest.fn(async (fn: (tx: any) => Promise<unknown>) => fn(tx)),
     };
 
     const result = await new AccountingService(prisma as never).createFiscalPeriod(context, {
@@ -122,7 +122,7 @@ describe('Accounting fiscal period controls', () => {
       },
     };
     const prisma = {
-      $transaction: jest.fn(async (fn: (tx: typeof tx) => Promise<unknown>) => fn(tx)),
+      $transaction: jest.fn(async (fn: (tx: any) => Promise<unknown>) => fn(tx)),
     };
 
     await expect(new AccountingService(prisma as never).createFiscalPeriod(context, {
@@ -156,7 +156,7 @@ describe('Accounting fiscal period controls', () => {
       },
     };
     const prisma = {
-      $transaction: jest.fn(async (fn: (tx: typeof tx) => Promise<unknown>) => fn(tx)),
+      $transaction: jest.fn(async (fn: (tx: any) => Promise<unknown>) => fn(tx)),
     };
 
     await expect(new AccountingService(prisma as never).closeFiscalPeriod(context, 'period-close'))
@@ -179,7 +179,7 @@ describe('Accounting fiscal period controls', () => {
       },
     };
     const prisma = {
-      $transaction: jest.fn(async (fn: (tx: typeof tx) => Promise<unknown>) => fn(tx)),
+      $transaction: jest.fn(async (fn: (tx: any) => Promise<unknown>) => fn(tx)),
     };
 
     await expect(new AccountingService(prisma as never).closeFiscalPeriod(context, 'period-closed'))
