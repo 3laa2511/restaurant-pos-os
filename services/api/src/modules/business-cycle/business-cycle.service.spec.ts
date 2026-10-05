@@ -62,6 +62,13 @@ describe('BusinessCycleService', () => {
     expect(h.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ isolationLevel: 'Serializable' }));
   });
 
+  it('sets transaction-local RLS context before business-cycle reads and writes', async () => {
+    const h = createHarness();
+    h.tx.businessCycle.findFirst.mockResolvedValueOnce(null);
+    await h.service.open(context, { branchId: 'branch-1', name: 'RLS' });
+    expect(h.tx.$executeRaw).toHaveBeenCalled();
+  });
+
   it('rejects opening a second cycle for the same branch', async () => {
     const h = createHarness();
     await expect(h.service.open(context, { branchId: 'branch-1', name: 'Duplicate' }))
@@ -103,6 +110,21 @@ describe('BusinessCycleService', () => {
       .rejects.toThrow('Cannot start a new business cycle while cashier shifts are open');
     expect(h.tx.businessCycle.updateMany).not.toHaveBeenCalled();
     expect(h.tx.businessCycle.create).not.toHaveBeenCalled();
+  });
+
+  it('allows only one winner when two rollover transactions race on the same OPEN cycle', async () => {
+    const h = createHarness();
+    let calls = 0;
+    h.tx.businessCycle.updateMany.mockImplementation(async () => {
+      calls += 1;
+      return calls === 1 ? { count: 1 } : { count: 0 };
+    });
+    const results = await Promise.allSettled([
+      h.service.startNew(context, { branchId: 'branch-1', name: 'Race A' }),
+      h.service.startNew(context, { branchId: 'branch-1', name: 'Race B' }),
+    ]);
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
   });
 
   it('fails safely when another transaction changes the open cycle first', async () => {
