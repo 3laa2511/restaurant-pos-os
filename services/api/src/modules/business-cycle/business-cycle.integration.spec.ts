@@ -58,7 +58,7 @@ describeIfConfigured('BusinessCycle PostgreSQL RLS and concurrency', () => {
   });
 
   afterAll(async () => {
-    await admin.query('DELETE FROM "BusinessCycle" WHERE "id" IN ($1,$2)', [ids.cycleA, ids.cycleB]);
+    await admin.query('DELETE FROM "BusinessCycle" WHERE "tenantId" IN ($1,$2)', [ids.tenantA, ids.tenantB]);
     await admin.query('DELETE FROM "User" WHERE "id" IN ($1,$2)', [ids.userA, ids.userB]);
     await admin.query('DELETE FROM "Branch" WHERE "id" IN ($1,$2)', [ids.branchA, ids.branchB]);
     await admin.query('DELETE FROM "Tenant" WHERE "id" IN ($1,$2)', [ids.tenantA, ids.tenantB]);
