@@ -169,6 +169,7 @@ enum WorkspaceCode {
   ACCOUNTING
   INVENTORY
   MANAGEMENT
+  SETTINGS
 }
 
 enum WarehouseType {
