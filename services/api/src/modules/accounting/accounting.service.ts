@@ -182,7 +182,33 @@ export class AccountingService {
       where: { tenantId_sourceType_sourceId: { tenantId, sourceType: input.sourceType, sourceId: input.sourceId } },
       include: { lines: true },
     });
-    if (existing) return existing;
+    if (existing) {
+      const existingDebit = money(existing.lines.reduce((sum, line) => sum + Number(line.debit), 0));
+      const existingCredit = money(existing.lines.reduce((sum, line) => sum + Number(line.credit), 0));
+      const incomingLines = input.lines.map((line) => ({
+        code: line.code.trim(),
+        branchId: line.branchId ?? input.branchId ?? null,
+        debit: money(line.debit ?? 0),
+        credit: money(line.credit ?? 0),
+      })).sort((a, b) => (a.code + '|' + (a.branchId ?? '')).localeCompare(b.code + '|' + (b.branchId ?? '')));
+      if (existingDebit !== totalDebit || existingCredit !== totalCredit || existing.description !== input.description || existing.branchId !== (input.branchId ?? null) || existing.lines.length !== incomingLines.length) {
+        throw new Error('Accounting source collision: an entry already exists with different journal data');
+      }
+      const incomingAccounts = new Map<string, { debit: number; credit: number; branchId: string | null }>();
+      for (const line of input.lines) {
+        const account = await this.ensureAccount(tx, tenantId, line.code, line.type);
+        incomingAccounts.set(line.code, { debit: money(line.debit ?? 0), credit: money(line.credit ?? 0), branchId: line.branchId ?? input.branchId ?? null });
+        if (!existing.lines.some((existingLine) => existingLine.accountId === account.id)) {
+          throw new Error('Accounting source collision: an entry already exists with different journal accounts');
+        }
+      }
+      const sameLines = existing.lines.every((line) => {
+        const incoming = incomingAccounts.get(line.account.code);
+        return incoming !== undefined && incoming.debit === money(Number(line.debit)) && incoming.credit === money(Number(line.credit)) && incoming.branchId === (line.branchId ?? null);
+      });
+      if (!sameLines) throw new Error('Accounting source collision: an entry already exists with different journal lines');
+      return existing;
+    }
 
     const accounts = new Map<string, { id: string }>();
     for (const line of input.lines) {
@@ -373,11 +399,16 @@ export class AccountingService {
   ) {
     const total = positiveMoney(input.total, 'Payroll total');
     const lines: Line[] = [];
+    let allocatedTotal = 0;
     for (const allocation of input.allocations) {
       const amount = positiveMoney(allocation.amount, 'Payroll allocation');
       if (amount === 0) continue;
+      allocatedTotal = money(allocatedTotal + amount);
       if (allocation.branchId) assertBranchAccess(context, allocation.branchId);
       lines.push({ code: '6100', name: 'Payroll Expense', nameAr: 'مصروف الرواتب', type: 'EXPENSE', debit: amount, branchId: allocation.branchId });
+    }
+    if (Math.abs(allocatedTotal - total) > 0.005) {
+      throw new Error('Payroll allocations must equal payroll total');
     }
     lines.push({ code: '2200', name: 'Payroll Payable', nameAr: 'رواتب مستحقة', type: 'LIABILITY', credit: total });
     return this.post(tx, context, {
