@@ -500,7 +500,7 @@ export class AccountingService {
         lines: original.lines.map((line) => ({
           code: line.account.code,
           name: line.account.name,
-          nameAr: line.account.nameAr ?? undefined,
+          ...(line.account.nameAr ? { nameAr: line.account.nameAr } : {}),
           type: line.account.type,
           debit: Number(line.credit),
           credit: Number(line.debit),
