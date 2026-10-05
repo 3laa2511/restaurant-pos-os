@@ -29,7 +29,7 @@ const positiveMoney = (n: number, field: string) => {
 export class AccountingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async ensureAccount(tx: Db, tenantId: string, code: string, name: string, type: AccountType, nameAr?: string) {
+  async ensureAccount(tx: Db, tenantId: string, code: string, type: AccountType) {
     const account = await tx.accountingAccount.findUnique({
       where: { tenantId_code: { tenantId, code } },
     });
@@ -186,7 +186,7 @@ export class AccountingService {
 
     const accounts = new Map<string, { id: string }>();
     for (const line of input.lines) {
-      const account = await this.ensureAccount(tx, tenantId, line.code, line.name, line.type, line.nameAr);
+      const account = await this.ensureAccount(tx, tenantId, line.code, line.type);
       accounts.set(line.code, account);
     }
 
