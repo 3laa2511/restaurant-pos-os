@@ -29,7 +29,8 @@ export function LoginGate({ children }: { children: ReactNode }) {
   const [deviceCode, setDeviceCode] = useState(DEFAULT_DEVICE);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const branchDeviceRequired = workspace === 'POS' || workspace === 'KITCHEN' || workspace === 'DISPATCH';
+  const branchDeviceRequired = workspace === 'POS' || workspace === 'KITCHEN' || workspace === 'DISPATCH' || workspace === 'SETTINGS';
+  const deviceRequired = workspace === 'POS' || workspace === 'KITCHEN' || workspace === 'DISPATCH';
 
   if (session) return <>{children}</>;
 
@@ -44,7 +45,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
         password,
         workspace,
         branchId: branchDeviceRequired ? branchId.trim() || undefined : undefined,
-        deviceCode: branchDeviceRequired ? deviceCode.trim() || undefined : undefined,
+        deviceCode: deviceRequired ? deviceCode.trim() || undefined : undefined,
       });
       setSession(next);
     } catch (cause) {
