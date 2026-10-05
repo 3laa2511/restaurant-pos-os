@@ -42,7 +42,10 @@ export class OperationsService {
     const tenantId = assertTenantScope(context);
     if (branchId) assertBranchAccess(context, branchId);
     return withRlsContext(this.prisma, context, async (tx) => {
-      const where = { branch: { tenantId, ...(branchId ? { id: branchId } : {}) } };
+      const cycleWhere = { tenantId, status: 'OPEN', ...(branchId ? { branchId } : {}) };
+      const cycles = await tx.businessCycle.findMany({ where: cycleWhere, select: { id: true } });
+      const cycleIds = cycles.map((cycle) => cycle.id);
+      const where = { branch: { tenantId, ...(branchId ? { id: branchId } : {}) }, cycleId: { in: cycleIds } };
       const [orders, customers, branches] = await Promise.all([
         tx.order.groupBy({ by: ['status'], where, _count: { _all: true }, _sum: { total: true } }),
         tx.customer.count({ where: { tenantId } }),
