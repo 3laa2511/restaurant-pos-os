@@ -45,6 +45,7 @@ export class AccountingService {
       sourceId: string;
       description: string;
       branchId?: string | null;
+      reversalOfId?: string | null;
       lines: Line[];
     },
   ) {
@@ -107,6 +108,7 @@ export class AccountingService {
         entryDate,
         fiscalPeriodId: fiscalPeriod.id,
         postedById: context.userId,
+        reversalOfId: input.reversalOfId ?? null,
         lines: {
           create: input.lines.map((line) => ({
             id: randomUUID(),
@@ -400,6 +402,7 @@ export class AccountingService {
         sourceId: original.id,
         description,
         branchId: original.branchId,
+        reversalOfId: original.id,
         lines: original.lines.map((line) => ({
           code: line.account.code,
           name: line.account.name,
@@ -410,11 +413,6 @@ export class AccountingService {
           branchId: line.branchId,
           memo: `Reversal of ${original.entryNumber}`,
         })),
-      });
-
-      await tx.journalEntry.update({
-        where: { id: original.id },
-        data: { reversalOfId: reversal.id },
       });
 
       return tx.journalEntry.findUniqueOrThrow({
