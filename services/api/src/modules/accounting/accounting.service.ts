@@ -588,18 +588,30 @@ export class AccountingService {
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) throw new Error('Report date range is invalid');
 
     return withRlsContext(this.prisma, context, async (tx) => {
-      const lines = await tx.journalLine.findMany({
-        where: {
-          entry: { tenantId, status: 'POSTED', entryDate: { gte: from, lte: to }, ...(input.branchId ? { branchId: input.branchId } : {}) },
-          ...(input.accountCode ? { account: { is: { code: input.accountCode, tenantId } } } : {}),
-        },
-        include: {
-          account: { select: { id: true, code: true, name: true, nameAr: true, type: true } },
-          entry: { select: { id: true, entryNumber: true, entryDate: true, description: true, sourceType: true, sourceId: true, branchId: true, reversalOfId: true } },
-        },
-        orderBy: [{ entry: { entryDate: 'asc' } }, { entry: { entryNumber: 'asc' } }],
-      });
+      const scope = {
+        entry: { tenantId, status: 'POSTED' as const, ...(input.branchId ? { branchId: input.branchId } : {}) },
+        ...(input.accountCode ? { account: { is: { code: input.accountCode, tenantId } } } : {}),
+      };
+      const [openingLines, lines] = await Promise.all([
+        from.getTime() > new Date('1970-01-01T00:00:00.000Z').getTime()
+          ? tx.journalLine.findMany({
+              where: { ...scope, entry: { ...scope.entry, entryDate: { lt: from } } },
+              select: { accountId: true, debit: true, credit: true },
+            })
+          : Promise.resolve([]),
+        tx.journalLine.findMany({
+          where: { ...scope, entry: { ...scope.entry, entryDate: { gte: from, lte: to } } },
+          include: {
+            account: { select: { id: true, code: true, name: true, nameAr: true, type: true } },
+            entry: { select: { id: true, entryNumber: true, entryDate: true, description: true, sourceType: true, sourceId: true, branchId: true, reversalOfId: true } },
+          },
+          orderBy: [{ entry: { entryDate: 'asc' } }, { entry: { entryNumber: 'asc' } }],
+        }),
+      ]);
       const running = new Map<string, number>();
+      for (const line of openingLines) {
+        running.set(line.accountId, money((running.get(line.accountId) ?? 0) + Number(line.debit) - Number(line.credit)));
+      }
       return lines.map((line) => {
         const balance = money((running.get(line.accountId) ?? 0) + Number(line.debit) - Number(line.credit));
         running.set(line.accountId, balance);
