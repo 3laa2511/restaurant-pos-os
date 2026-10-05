@@ -44,6 +44,7 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
 const audit = { recordWithClient: jest.fn(async (..._args: any[]) => undefined) };
 
 describe('BusinessCycleService lifecycle', () => {
+  beforeEach(() => audit.recordWithClient.mockClear());
   it('opens a cycle atomically and writes an audit event', async () => {
     const { prisma, tx } = makePrisma();
     tx.businessCycle.findFirst.mockResolvedValueOnce(null);
