@@ -7,13 +7,46 @@ import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { AccountingService } from './accounting.service.js';
-import { CreateFiscalPeriodDto, ManualJournalDto, ReverseJournalDto } from './accounting.dto.js';
+import {
+  CreateAccountingAccountDto,
+  CreateFiscalPeriodDto,
+  ManualJournalDto,
+  ReverseJournalDto,
+  UpdateAccountingAccountDto,
+} from './accounting.dto.js';
 import { OptionalBranchQueryDto } from '../security/request.dto.js';
 
 @Controller('accounting')
 @UseGuards(AuthGuard, PermissionGuard)
 export class AccountingController {
   constructor(private readonly accounting: AccountingService) {}
+
+  @Get('accounts')
+  @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
+  accounts(@CurrentAuth() context: AuthContext, @Query('type') type?: 'ASSET'|'LIABILITY'|'EQUITY'|'REVENUE'|'EXPENSE') {
+    return this.accounting.accounts(context, type);
+  }
+
+  @Post('accounts')
+  @Throttle({ default: { limit: 20, ttl: 60_000, blockDuration: 120_000 } })
+  @RequirePermission(PERMISSIONS.ACCOUNTING_MANAGE)
+  createAccount(@CurrentAuth() context: AuthContext, @Body() input: CreateAccountingAccountDto) {
+    return this.accounting.createAccount(context, input);
+  }
+
+  @Post('accounts/:id')
+  @Throttle({ default: { limit: 20, ttl: 60_000, blockDuration: 120_000 } })
+  @RequirePermission(PERMISSIONS.ACCOUNTING_MANAGE)
+  updateAccount(@CurrentAuth() context: AuthContext, @Param('id') id: string, @Body() input: UpdateAccountingAccountDto) {
+    return this.accounting.updateAccount(context, id, input);
+  }
+
+  @Post('accounts/:id/deactivate')
+  @Throttle({ default: { limit: 10, ttl: 60_000, blockDuration: 120_000 } })
+  @RequirePermission(PERMISSIONS.ACCOUNTING_MANAGE)
+  deactivateAccount(@CurrentAuth() context: AuthContext, @Param('id') id: string) {
+    return this.accounting.deactivateAccount(context, id);
+  }
 
   @Get('fiscal-periods')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
@@ -61,4 +94,3 @@ export class AccountingController {
     return this.accounting.trialBalance(context, query.branchId);
   }
 }
-
