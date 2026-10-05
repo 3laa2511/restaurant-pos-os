@@ -160,6 +160,11 @@ enum JournalEntryStatus {
   VOIDED
 }
 
+enum FiscalPeriodStatus {
+  OPEN
+  CLOSED
+}
+
 enum WorkspaceCode {
   POS
   CALL_CENTER
@@ -209,6 +214,7 @@ model Tenant {
   recipeIngredients RecipeIngredient[]
   accountingAccounts AccountingAccount[]
   journalEntries JournalEntry[]
+  fiscalPeriods FiscalPeriod[]
   riskPolicies RiskPolicy[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -270,6 +276,24 @@ model AccountingAccount {
   @@index([tenantId, parentId])
 }
 
+model FiscalPeriod {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name String
+  periodStart DateTime
+  periodEnd DateTime
+  status FiscalPeriodStatus @default(OPEN)
+  closedAt DateTime?
+  closedById String?
+  closedBy User? @relation("FiscalPeriodClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+  journalEntries JournalEntry[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([tenantId, name])
+  @@index([tenantId, status, periodStart, periodEnd])
+}
+
 model JournalEntry {
   id String @id @default(cuid())
   tenantId String
@@ -283,8 +307,13 @@ model JournalEntry {
   sourceType String?
   sourceId String?
   status JournalEntryStatus @default(POSTED)
+  fiscalPeriodId String
+  fiscalPeriod FiscalPeriod @relation(fields: [fiscalPeriodId], references: [id], onDelete: Restrict)
   postedById String
   postedBy User @relation("PostedJournalEntries", fields: [postedById], references: [id], onDelete: Restrict)
+  reversalOfId String? @unique
+  reversalOf JournalEntry? @relation("JournalEntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversalEntry JournalEntry? @relation("JournalEntryReversal")
   createdAt DateTime @default(now())
   lines JournalLine[]
   @@unique([tenantId, entryNumber])
@@ -325,6 +354,7 @@ model User {
   roleLinks UserRole[]
   orders Order[] @relation("CreatedOrders")
   postedJournalEntries JournalEntry[] @relation("PostedJournalEntries")
+  closedFiscalPeriods FiscalPeriod[] @relation("FiscalPeriodClosedBy")
   openedBusinessCycles BusinessCycle[] @relation("BusinessCycleOpenedBy")
   closedBusinessCycles BusinessCycle[] @relation("BusinessCycleClosedBy")
   shifts Shift[]
