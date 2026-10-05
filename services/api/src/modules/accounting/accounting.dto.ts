@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsIn, IsNumber, IsOptional, IsString, Length, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, Length, Min, ValidateNested } from 'class-validator';
 
 class JournalLineDto {
   @IsString() @Length(1, 64) code!: string;
@@ -37,12 +37,12 @@ export class CreateAccountingAccountDto {
   @IsOptional() @IsString() @Length(1, 200) nameAr?: string;
   @IsIn(['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE']) type!: 'ASSET'|'LIABILITY'|'EQUITY'|'REVENUE'|'EXPENSE';
   @IsOptional() @IsString() @Length(1, 128) parentId?: string;
-  @IsOptional() allowPosting?: boolean;
+  @IsOptional() @IsBoolean() allowPosting?: boolean;
 }
 
 export class UpdateAccountingAccountDto {
   @IsOptional() @IsString() @Length(1, 200) name?: string;
   @IsOptional() @IsString() @Length(1, 200) nameAr?: string;
   @IsOptional() @IsString() @Length(1, 128) parentId?: string | null;
-  @IsOptional() allowPosting?: boolean;
+  @IsOptional() @IsBoolean() allowPosting?: boolean;
 }
