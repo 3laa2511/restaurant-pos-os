@@ -71,6 +71,8 @@ export class SyncService {
         if (shift.status !== 'OPEN') throw new Error('Shift is not open');
         const existingOrder = await tx.order.findFirst({ where: { id: payload.id, branch: { tenantId } }, select: { id: true } });
         if (existingOrder) throw new Error('Order already exists on the server');
+        const cycle = await tx.businessCycle.findFirst({ where: { tenantId, branchId: envelope.branchId, status: 'OPEN' }, select: { id: true } });
+        if (!cycle) throw new Error('An open business cycle is required for checkout sync');
 
         const productIds = [...new Set(payload.items.map((item) => item.productId))];
         const products = await tx.product.findMany({ where: { id: { in: productIds }, tenantId, active: true }, select: { id: true } });
@@ -81,7 +83,7 @@ export class SyncService {
         if (expectedTotal !== payload.total) throw new Error('Checkout total does not match its pricing breakdown');
         if (payload.payment.amount !== payload.total) throw new Error('Payment amount does not match checkout total');
 
-        await tx.order.create({ data: { id: payload.id, orderNumber: payload.orderNumber, source: 'POS', type: payload.type, status: 'CLOSED', version: 2, branchId: envelope.branchId, createdById: context.userId, total: payload.total.toFixed(2), createdAt: new Date(payload.createdAt) } });
+        await tx.order.create({ data: { id: payload.id, orderNumber: payload.orderNumber, source: 'POS', type: payload.type, status: 'CLOSED', version: 2, branchId: envelope.branchId, cycleId: cycle.id, createdById: context.userId, total: payload.total.toFixed(2), createdAt: new Date(payload.createdAt) } });
         await tx.orderItem.createMany({ data: payload.items.map((item, index) => ({ id: `${payload.id}:item:${index}`, orderId: payload.id, productId: item.productId, quantity: item.quantity, unitPrice: item.unitPrice.toFixed(2), lineTotal: (item.unitPrice * item.quantity).toFixed(2), notes: item.note ?? null })) });
         await tx.payment.create({ data: { id: payload.payment.paymentId, orderId: payload.id, shiftId: payload.payment.shiftId, amount: payload.payment.amount.toFixed(2), method: payload.payment.method, reference: payload.payment.reference?.trim() || null, receivedAmount: payload.payment.method === 'CASH' ? payload.payment.amount.toFixed(2) : null, changeAmount: '0.00', status: 'PAID', idempotencyKey: `${envelope.idempotencyKey}:payment` } });
 
