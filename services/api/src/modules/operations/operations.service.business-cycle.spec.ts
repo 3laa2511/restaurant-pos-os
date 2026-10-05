@@ -66,7 +66,7 @@ describe('OperationsService business-cycle history isolation', () => {
     const overview = await service.managementOverview(context, branchId);
 
     expect(history).toHaveLength(2);
-    expect(history.map((order) => order.id)).toEqual(['order-old', 'order-current']);
+    expect(history.map((order: { id: string }) => order.id)).toEqual(['order-old', 'order-current']);
 
     expect(prisma.businessCycle.findMany).toHaveBeenCalledWith({
       where: { tenantId, status: 'OPEN', branchId },
