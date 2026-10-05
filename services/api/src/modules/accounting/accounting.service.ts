@@ -30,11 +30,105 @@ export class AccountingService {
   constructor(private readonly prisma: PrismaService) {}
 
   async ensureAccount(tx: Db, tenantId: string, code: string, name: string, type: AccountType, nameAr?: string) {
-    return tx.accountingAccount.upsert({
+    const account = await tx.accountingAccount.findUnique({
       where: { tenantId_code: { tenantId, code } },
-      update: { active: true, name, ...(nameAr === undefined ? {} : { nameAr }), type },
-      create: { id: randomUUID(), tenantId, code, name, nameAr: nameAr ?? null, type },
     });
+    if (!account) {
+      throw new Error(`Accounting account ${code} is not configured`);
+    }
+    if (!account.active) throw new Error(`Accounting account ${code} is inactive`);
+    if (!account.allowPosting) throw new Error(`Accounting account ${code} does not allow posting`);
+    if (account.type !== type) throw new Error(`Accounting account ${code} has an incompatible account type`);
+    return account;
+  }
+
+  async createAccount(
+    context: AuthContext,
+    input: { code: string; name: string; nameAr?: string; type: AccountType; parentId?: string; allowPosting?: boolean },
+  ) {
+    assertPermission(context, PERMISSIONS.ACCOUNTING_MANAGE);
+    const tenantId = assertTenantScope(context);
+    const code = input.code.trim();
+    const name = input.name.trim();
+    if (!code || !name) throw new Error('Account code and name are required');
+
+    return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
+      if (input.parentId) {
+        const parent = await tx.accountingAccount.findFirst({ where: { id: input.parentId, tenantId } });
+        if (!parent) throw new Error('Parent account not found');
+        if (parent.type !== input.type) throw new Error('Parent and child account types must match');
+      }
+      return tx.accountingAccount.create({
+        data: {
+          id: randomUUID(), tenantId, code, name,
+          nameAr: input.nameAr?.trim() || null,
+          type: input.type,
+          parentId: input.parentId ?? null,
+          allowPosting: input.allowPosting ?? true,
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async updateAccount(
+    context: AuthContext,
+    accountId: string,
+    input: { name?: string; nameAr?: string; parentId?: string | null; allowPosting?: boolean },
+  ) {
+    assertPermission(context, PERMISSIONS.ACCOUNTING_MANAGE);
+    const tenantId = assertTenantScope(context);
+    return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
+      const account = await tx.accountingAccount.findFirst({ where: { id: accountId, tenantId } });
+      if (!account) throw new Error('Account not found');
+      if (input.parentId === account.id) throw new Error('An account cannot be its own parent');
+      if (input.parentId) {
+        const parent = await tx.accountingAccount.findFirst({ where: { id: input.parentId, tenantId } });
+        if (!parent) throw new Error('Parent account not found');
+        if (parent.type !== account.type) throw new Error('Parent and child account types must match');
+        if (!parent.allowPosting && input.allowPosting === false) {
+          // allowed; this is a normal parent account configuration
+        }
+      }
+      const hasChildren = await tx.accountingAccount.count({ where: { tenantId, parentId: account.id } });
+      if (hasChildren > 0 && input.allowPosting === true) {
+        throw new Error('Parent accounts with children cannot allow direct posting');
+      }
+      return tx.accountingAccount.update({
+        where: { id: account.id },
+        data: {
+          ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+          ...(input.nameAr !== undefined ? { nameAr: input.nameAr.trim() || null } : {}),
+          ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
+          ...(input.allowPosting !== undefined ? { allowPosting: input.allowPosting } : {}),
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async deactivateAccount(context: AuthContext, accountId: string) {
+    assertPermission(context, PERMISSIONS.ACCOUNTING_MANAGE);
+    const tenantId = assertTenantScope(context);
+    return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
+      const account = await tx.accountingAccount.findFirst({ where: { id: accountId, tenantId } });
+      if (!account) throw new Error('Account not found');
+      const postedLines = await tx.journalLine.count({ where: { accountId: account.id, entry: { tenantId } } });
+      if (postedLines > 0) {
+        return tx.accountingAccount.update({ where: { id: account.id }, data: { active: false, allowPosting: false } });
+      }
+      return tx.accountingAccount.update({ where: { id: account.id }, data: { active: false, allowPosting: false } });
+    });
+  }
+
+  async accounts(context: AuthContext, type?: AccountType) {
+    const tenantId = assertTenantScope(context);
+    return withRlsContext(this.prisma, context, (tx) => tx.accountingAccount.findMany({
+      where: { tenantId, ...(type ? { type } : {}) },
+      include: { parent: { select: { id: true, code: true, name: true, nameAr: true } }, _count: { select: { children: true, journalLines: true } } },
+      orderBy: { code: 'asc' },
+    }));
   }
 
   async post(
