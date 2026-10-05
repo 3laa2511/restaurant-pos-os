@@ -20,6 +20,11 @@ export class BusinessCycleController {
   @Post('open')
   @RequirePermission(PERMISSIONS.BUSINESS_CYCLE_MANAGE)
   open(@CurrentAuth() context: AuthContext, @Body() body: { branchId: string; name: string }) { return this.cycles.open(context, body); }
+  @Post('start-new')
+  @RequirePermission(PERMISSIONS.BUSINESS_CYCLE_MANAGE)
+  startNew(@CurrentAuth() context: AuthContext, @Body() body: { branchId: string; name: string }) {
+    return this.cycles.startNew(context, body);
+  }
   @Post('close')
   @RequirePermission(PERMISSIONS.BUSINESS_CYCLE_MANAGE)
   close(@CurrentAuth() context: AuthContext, @Body() body: { branchId: string }) { return this.cycles.close(context, body); }
