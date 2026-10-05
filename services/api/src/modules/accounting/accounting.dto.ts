@@ -30,3 +30,19 @@ export class CreateFiscalPeriodDto {
 export class ReverseJournalDto {
   @IsOptional() @IsString() @Length(0, 500) reason?: string;
 }
+
+export class CreateAccountingAccountDto {
+  @IsString() @Length(1, 64) code!: string;
+  @IsString() @Length(1, 200) name!: string;
+  @IsOptional() @IsString() @Length(1, 200) nameAr?: string;
+  @IsIn(['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE']) type!: 'ASSET'|'LIABILITY'|'EQUITY'|'REVENUE'|'EXPENSE';
+  @IsOptional() @IsString() @Length(1, 128) parentId?: string;
+  @IsOptional() allowPosting?: boolean;
+}
+
+export class UpdateAccountingAccountDto {
+  @IsOptional() @IsString() @Length(1, 200) name?: string;
+  @IsOptional() @IsString() @Length(1, 200) nameAr?: string;
+  @IsOptional() @IsString() @Length(1, 128) parentId?: string | null;
+  @IsOptional() allowPosting?: boolean;
+}
