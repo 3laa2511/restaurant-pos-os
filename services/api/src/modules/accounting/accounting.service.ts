@@ -612,6 +612,7 @@ export class AccountingService {
       for (const line of openingLines) {
         running.set(line.accountId, money((running.get(line.accountId) ?? 0) + Number(line.debit) - Number(line.credit)));
       }
+      const openingBalances = new Map(running);
       return lines.map((line) => {
         const balance = money((running.get(line.accountId) ?? 0) + Number(line.debit) - Number(line.credit));
         running.set(line.accountId, balance);
