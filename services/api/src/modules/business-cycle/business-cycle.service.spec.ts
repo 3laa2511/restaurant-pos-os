@@ -23,7 +23,7 @@ function createHarness(overrides: Record<string, any> = {}) {
     order: { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 3 }, _sum: { total: 125 } }) },
   };
   Object.assign(tx, overrides.tx ?? {});
-  const prisma = { $transaction: jest.fn(async (callback: any, _options?: any) => callback(tx)) };
+  const prisma: any = { $transaction: jest.fn(async (callback: any, _options?: any) => callback(tx)) };
   const audit = { recordWithClient: jest.fn().mockResolvedValue(undefined) };
   return { service: new BusinessCycleService(prisma as never, audit as never), tx, prisma, audit, cycle, nextCycle };
 }
