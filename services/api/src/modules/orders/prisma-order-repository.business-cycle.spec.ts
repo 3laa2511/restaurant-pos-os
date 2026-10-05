@@ -1,5 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { PrismaOrderRepository } from './prisma-order-repository.js';
+import { OrderStatus } from './order-status.js';
 
 const context = {
   userId: 'user-1', tenantId: 'tenant-1', branchId: 'branch-1', deviceId: 'device-1',
@@ -26,7 +27,7 @@ describe('PrismaOrderRepository business-cycle enforcement', () => {
     const repo = new PrismaOrderRepository(f.prisma);
     await expect(repo.create({
       id: 'order-1', orderNumber: '1', branchId: 'branch-1', tenantId: 'tenant-1',
-      createdById: 'user-1', source: 'POS', type: 'TAKEAWAY', status: 'DRAFT', total: '10.00',
+      createdById: 'user-1', source: 'POS', type: 'TAKEAWAY', status: OrderStatus.DRAFT, total: '10.00',
     }, context)).rejects.toThrow('open business cycle');
     expect(f.orderCreate).not.toHaveBeenCalled();
   });
