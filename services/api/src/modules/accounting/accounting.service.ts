@@ -619,7 +619,8 @@ export class AccountingService {
           entryId: line.entry.id, entryNumber: line.entry.entryNumber, entryDate: line.entry.entryDate,
           description: line.entry.description, sourceType: line.entry.sourceType, sourceId: line.entry.sourceId,
           branchId: line.branchId ?? line.entry.branchId, reversalOfId: line.entry.reversalOfId,
-          account: line.account, debit: money(Number(line.debit)), credit: money(Number(line.credit)), balance, memo: line.memo,
+          account: line.account, debit: money(Number(line.debit)), credit: money(Number(line.credit)),
+          balance, openingBalance: money(openingBalances.get(line.accountId) ?? 0), memo: line.memo,
         };
       });
     });
@@ -679,7 +680,35 @@ export class AccountingService {
       const assets = money(accounts.filter((a) => a.type === 'ASSET').reduce((sum, a) => sum + a.balance, 0));
       const liabilities = money(accounts.filter((a) => a.type === 'LIABILITY').reduce((sum, a) => sum + a.balance, 0));
       const equity = money(accounts.filter((a) => a.type === 'EQUITY').reduce((sum, a) => sum + a.balance, 0));
-      return { asOf, branchId: input.branchId ?? null, assets, liabilities, equity, liabilitiesAndEquity: money(liabilities + equity), difference: money(assets - liabilities - equity), accounts };
+
+      // Revenue/expense accounts are temporary in presentation, but until a
+      // formal year-end closing process is implemented, their cumulative net
+      // income must be represented in equity to keep the balance sheet complete.
+      const earningsLines = await tx.journalLine.findMany({
+        where: {
+          entry: { tenantId, status: 'POSTED', entryDate: { lte: asOf }, ...(input.branchId ? { branchId: input.branchId } : {}) },
+        },
+        include: { account: { select: { type: true } } },
+      });
+      let cumulativeRevenue = 0;
+      let cumulativeExpenses = 0;
+      for (const line of earningsLines) {
+        if (line.account.type === 'REVENUE') cumulativeRevenue += Number(line.credit) - Number(line.debit);
+        if (line.account.type === 'EXPENSE') cumulativeExpenses += Number(line.debit) - Number(line.credit);
+      }
+      const netIncome = money(cumulativeRevenue - cumulativeExpenses);
+      const liabilitiesAndEquity = money(liabilities + equity + netIncome);
+      return {
+        asOf,
+        branchId: input.branchId ?? null,
+        assets,
+        liabilities,
+        equity,
+        netIncome,
+        liabilitiesAndEquity,
+        difference: money(assets - liabilitiesAndEquity),
+        accounts,
+      };
     });
   }
 
@@ -697,10 +726,10 @@ export class AccountingService {
       accountCode: '1030',
     });
     const summarize = (lines: Awaited<ReturnType<AccountingService['generalLedger']>>) => ({
-      openingBalance: lines.length ? money(lines[0]!.balance - lines[0]!.debit + lines[0]!.credit) : 0,
+      openingBalance: lines[0]?.openingBalance ?? 0,
       totalDebit: money(lines.reduce((sum, line) => sum + line.debit, 0)),
       totalCredit: money(lines.reduce((sum, line) => sum + line.credit, 0)),
-      closingBalance: lines.length ? lines[lines.length - 1]!.balance : 0,
+      closingBalance: lines.length ? lines[lines.length - 1]!.balance : (lines[0]?.openingBalance ?? 0),
       lines,
     });
     return { cash: summarize(ledger), bank: summarize(bank) };
