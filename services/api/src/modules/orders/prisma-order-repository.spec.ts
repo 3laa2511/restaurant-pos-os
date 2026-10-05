@@ -16,15 +16,15 @@ const context: AuthContext = {
 
 function harness(cycle: any) {
   const tx = {
-    $executeRaw: jest.fn().mockResolvedValue(1),
+    $executeRaw: jest.fn<any>().mockResolvedValue(1),
     branch: {
-      findFirst: jest.fn().mockResolvedValue({ id: 'branch-1', tenantId: 'tenant-1' }),
+      findFirst: jest.fn<any>().mockResolvedValue({ id: 'branch-1', tenantId: 'tenant-1' }),
     },
     businessCycle: {
-      findFirst: jest.fn().mockResolvedValue(cycle),
+      findFirst: jest.fn<any>().mockResolvedValue(cycle),
     },
     order: {
-      create: jest.fn().mockResolvedValue({
+      create: jest.fn<any>().mockResolvedValue({
         id: 'order-1',
         orderNumber: 'BR-1',
         branchId: 'branch-1',
