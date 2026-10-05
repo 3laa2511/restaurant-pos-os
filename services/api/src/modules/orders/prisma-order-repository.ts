@@ -34,7 +34,7 @@ export class PrismaOrderRepository implements OrderRepository {
           id: input.id,
           orderNumber: input.orderNumber,
           branchId: input.branchId,
-          cycleId: cycle?.id,
+          cycleId: cycle?.id ?? null,
           createdById: input.createdById,
           source: input.source as never,
           type: input.type as never,
