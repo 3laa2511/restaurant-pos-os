@@ -28,7 +28,7 @@ function createHarness(overrides: Record<string, any> = {}) {
     closeSummary: null,
   };
   const nextCycle = { ...cycle, id: 'cycle-2', name: 'Cycle 2' };
-  const tx = {
+  const tx: any = {
     $executeRaw: jest.fn().mockResolvedValue(1),
     branch: { findFirst: jest.fn().mockResolvedValue({ id: 'branch-1' }) },
     businessCycle: {
@@ -41,7 +41,7 @@ function createHarness(overrides: Record<string, any> = {}) {
   };
   Object.assign(tx, overrides.tx ?? {});
   const prisma = {
-    $transaction: jest.fn(async (callback: any) => callback(tx)),
+    $transaction: jest.fn(async (callback: any, _options?: any) => callback(tx)),
   };
   const audit = { recordWithClient: jest.fn().mockResolvedValue(undefined) };
   return { service: new BusinessCycleService(prisma as never, audit as never), tx, prisma, audit, cycle, nextCycle };
