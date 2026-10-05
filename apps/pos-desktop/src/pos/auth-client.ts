@@ -1,5 +1,5 @@
 export type KitchenStation = 'KITCHEN' | 'BEVERAGE' | 'PACKING';
-export type WorkspaceCode = 'POS' | 'CALL_CENTER' | 'KITCHEN' | 'DISPATCH' | 'HR' | 'ACCOUNTING' | 'INVENTORY' | 'MANAGEMENT';
+export type WorkspaceCode = 'POS' | 'CALL_CENTER' | 'KITCHEN' | 'DISPATCH' | 'HR' | 'ACCOUNTING' | 'INVENTORY' | 'MANAGEMENT' | 'SETTINGS';
 
 export interface DesktopSession {
   accessToken: string;
