@@ -14,7 +14,7 @@ import {
   ReverseJournalDto,
   UpdateAccountingAccountDto,
 } from './accounting.dto.js';
-import { OptionalBranchQueryDto } from '../security/request.dto.js';
+import { DateRangeBranchQueryDto, OptionalBranchQueryDto } from '../security/request.dto.js';
 
 @Controller('accounting')
 @UseGuards(AuthGuard, PermissionGuard)
@@ -92,5 +92,29 @@ export class AccountingController {
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   trialBalance(@CurrentAuth() context: AuthContext, @Query() query: OptionalBranchQueryDto) {
     return this.accounting.trialBalance(context, query.branchId);
+  }
+
+  @Get('reports/general-ledger')
+  @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
+  generalLedger(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto & { accountCode?: string }) {
+    return this.accounting.generalLedger(context, query);
+  }
+
+  @Get('reports/profit-and-loss')
+  @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
+  profitAndLoss(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) {
+    return this.accounting.profitAndLoss(context, query);
+  }
+
+  @Get('reports/balance-sheet')
+  @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
+  balanceSheet(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string, @Query('asOf') asOf?: string) {
+    return this.accounting.balanceSheet(context, { branchId, asOf });
+  }
+
+  @Get('reports/cash-bank')
+  @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
+  cashBankMovement(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) {
+    return this.accounting.cashBankMovement(context, query);
   }
 }
