@@ -577,6 +577,113 @@ export class AccountingService {
     return Array.from(grouped.values()).sort((a, b) => a.code.localeCompare(b.code));
   }
 
+  async generalLedger(
+    context: AuthContext,
+    input: { branchId?: string; from?: string; to?: string; accountCode?: string },
+  ) {
+    const tenantId = assertTenantScope(context);
+    if (input.branchId) assertBranchAccess(context, input.branchId);
+    const from = input.from ? new Date(input.from) : new Date('1970-01-01T00:00:00.000Z');
+    const to = input.to ? new Date(input.to) : new Date();
+    if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) throw new Error('Report date range is invalid');
+
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const lines = await tx.journalLine.findMany({
+        where: {
+          entry: { tenantId, status: 'POSTED', entryDate: { gte: from, lte: to }, ...(input.branchId ? { branchId: input.branchId } : {}) },
+          ...(input.accountCode ? { account: { code: input.accountCode, tenantId } } : {}),
+        },
+        include: {
+          account: { select: { id: true, code: true, name: true, nameAr: true, type: true } },
+          entry: { select: { id: true, entryNumber: true, entryDate: true, description: true, sourceType: true, sourceId: true, branchId: true, reversalOfId: true } },
+        },
+        orderBy: [{ entry: { entryDate: 'asc' } }, { entry: { entryNumber: 'asc' } }],
+      });
+      const running = new Map<string, number>();
+      return lines.map((line) => {
+        const balance = money((running.get(line.accountId) ?? 0) + Number(line.debit) - Number(line.credit));
+        running.set(line.accountId, balance);
+        return {
+          entryId: line.entry.id, entryNumber: line.entry.entryNumber, entryDate: line.entry.entryDate,
+          description: line.entry.description, sourceType: line.entry.sourceType, sourceId: line.entry.sourceId,
+          branchId: line.branchId ?? line.entry.branchId, reversalOfId: line.entry.reversalOfId,
+          account: line.account, debit: money(Number(line.debit)), credit: money(Number(line.credit)), balance, memo: line.memo,
+        };
+      });
+    });
+  }
+
+  async profitAndLoss(context: AuthContext, input: { branchId?: string; from?: string; to?: string }) {
+    const tenantId = assertTenantScope(context);
+    if (input.branchId) assertBranchAccess(context, input.branchId);
+    const from = input.from ? new Date(input.from) : new Date('1970-01-01T00:00:00.000Z');
+    const to = input.to ? new Date(input.to) : new Date();
+    if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) throw new Error('Report date range is invalid');
+
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const lines = await tx.journalLine.findMany({
+        where: { entry: { tenantId, status: 'POSTED', entryDate: { gte: from, lte: to }, ...(input.branchId ? { branchId: input.branchId } : {}) } },
+        include: { account: { select: { id: true, code: true, name: true, nameAr: true, type: true } } },
+      });
+      const grouped = new Map<string, { account: typeof lines[number]['account']; debit: number; credit: number }>();
+      for (const line of lines) {
+        if (line.account.type !== 'REVENUE' && line.account.type !== 'EXPENSE') continue;
+        const current = grouped.get(line.accountId) ?? { account: line.account, debit: 0, credit: 0 };
+        current.debit = money(current.debit + Number(line.debit)); current.credit = money(current.credit + Number(line.credit));
+        grouped.set(line.accountId, current);
+      }
+      const accounts = Array.from(grouped.values()).map((row) => ({
+        ...row.account, debit: money(row.debit), credit: money(row.credit),
+        amount: row.account.type === 'REVENUE' ? money(row.credit - row.debit) : money(row.debit - row.credit),
+      })).sort((a, b) => a.code.localeCompare(b.code));
+      const revenue = money(accounts.filter((a) => a.type === 'REVENUE').reduce((sum, a) => sum + a.amount, 0));
+      const expenses = money(accounts.filter((a) => a.type === 'EXPENSE').reduce((sum, a) => sum + a.amount, 0));
+      return { from, to, branchId: input.branchId ?? null, revenue, expenses, netIncome: money(revenue - expenses), accounts };
+    });
+  }
+
+  async balanceSheet(context: AuthContext, input: { branchId?: string; asOf?: string }) {
+    const tenantId = assertTenantScope(context);
+    if (input.branchId) assertBranchAccess(context, input.branchId);
+    const asOf = input.asOf ? new Date(input.asOf) : new Date();
+    if (!Number.isFinite(asOf.getTime())) throw new Error('Balance sheet date is invalid');
+
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const lines = await tx.journalLine.findMany({
+        where: { entry: { tenantId, status: 'POSTED', entryDate: { lte: asOf }, ...(input.branchId ? { branchId: input.branchId } : {}) } },
+        include: { account: { select: { id: true, code: true, name: true, nameAr: true, type: true } } },
+      });
+      const grouped = new Map<string, { account: typeof lines[number]['account']; debit: number; credit: number }>();
+      for (const line of lines) {
+        if (!['ASSET', 'LIABILITY', 'EQUITY'].includes(line.account.type)) continue;
+        const current = grouped.get(line.accountId) ?? { account: line.account, debit: 0, credit: 0 };
+        current.debit = money(current.debit + Number(line.debit)); current.credit = money(current.credit + Number(line.credit));
+        grouped.set(line.accountId, current);
+      }
+      const accounts = Array.from(grouped.values()).map((row) => ({
+        ...row.account, debit: money(row.debit), credit: money(row.credit),
+        balance: row.account.type === 'ASSET' ? money(row.debit - row.credit) : money(row.credit - row.debit),
+      })).sort((a, b) => a.code.localeCompare(b.code));
+      const assets = money(accounts.filter((a) => a.type === 'ASSET').reduce((sum, a) => sum + a.balance, 0));
+      const liabilities = money(accounts.filter((a) => a.type === 'LIABILITY').reduce((sum, a) => sum + a.balance, 0));
+      const equity = money(accounts.filter((a) => a.type === 'EQUITY').reduce((sum, a) => sum + a.balance, 0));
+      return { asOf, branchId: input.branchId ?? null, assets, liabilities, equity, liabilitiesAndEquity: money(liabilities + equity), difference: money(assets - liabilities - equity), accounts };
+    });
+  }
+
+  async cashBankMovement(context: AuthContext, input: { branchId?: string; from?: string; to?: string }) {
+    const ledger = await this.generalLedger(context, { branchId: input.branchId, from: input.from, to: input.to, accountCode: '1000' });
+    const bank = await this.generalLedger(context, { branchId: input.branchId, from: input.from, to: input.to, accountCode: '1030' });
+    const summarize = (lines: Awaited<ReturnType<AccountingService['generalLedger']>>) => ({
+      openingBalance: lines.length ? money(lines[0].balance - lines[0].debit + lines[0].credit) : 0,
+      totalDebit: money(lines.reduce((sum, line) => sum + line.debit, 0)),
+      totalCredit: money(lines.reduce((sum, line) => sum + line.credit, 0)),
+      closingBalance: lines.length ? lines[lines.length - 1].balance : 0,
+      lines,
+    });
+    return { cash: summarize(ledger), bank: summarize(bank) };
+  }
+
   private paymentAccount(method: string): Omit<Line, 'debit' | 'credit' | 'branchId'> {
     switch (method) {
       case 'CASH':
