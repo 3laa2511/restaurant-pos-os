@@ -69,6 +69,20 @@ export class AccountingService {
       throw new Error('Journal entry is not balanced');
     }
 
+    const entryDate = new Date();
+    const fiscalPeriod = await tx.fiscalPeriod.findFirst({
+      where: {
+        tenantId,
+        status: 'OPEN',
+        periodStart: { lte: entryDate },
+        periodEnd: { gte: entryDate },
+      },
+      orderBy: { periodStart: 'desc' },
+    });
+    if (!fiscalPeriod) {
+      throw new Error('No open fiscal period covers the journal entry date');
+    }
+
     const existing = await tx.journalEntry.findUnique({
       where: { tenantId_sourceType_sourceId: { tenantId, sourceType: input.sourceType, sourceId: input.sourceId } },
       include: { lines: true },
@@ -90,7 +104,8 @@ export class AccountingService {
         sourceType: input.sourceType,
         sourceId: input.sourceId,
         branchId: input.branchId ?? null,
-        entryDate: new Date(),
+        entryDate,
+        fiscalPeriodId: fiscalPeriod.id,
         postedById: context.userId,
         lines: {
           create: input.lines.map((line) => ({
@@ -290,12 +305,131 @@ export class AccountingService {
     });
   }
 
+  async createFiscalPeriod(
+    context: AuthContext,
+    input: { name: string; periodStart: string; periodEnd: string },
+  ) {
+    assertPermission(context, PERMISSIONS.ACCOUNTING_MANAGE);
+    const tenantId = assertTenantScope(context);
+    const start = new Date(input.periodStart);
+    const end = new Date(input.periodEnd);
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start >= end) {
+      throw new Error('Fiscal period dates are invalid');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
+      const overlap = await tx.fiscalPeriod.findFirst({
+        where: {
+          tenantId,
+          periodStart: { lt: end },
+          periodEnd: { gt: start },
+        },
+        select: { id: true, name: true },
+      });
+      if (overlap) throw new Error(`Fiscal period overlaps existing period: ${overlap.name}`);
+
+      return tx.fiscalPeriod.create({
+        data: {
+          id: randomUUID(),
+          tenantId,
+          name: input.name.trim(),
+          periodStart: start,
+          periodEnd: end,
+          status: 'OPEN',
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async fiscalPeriods(context: AuthContext) {
+    const tenantId = assertTenantScope(context);
+    return withRlsContext(this.prisma, context, (tx) => tx.fiscalPeriod.findMany({
+      where: { tenantId },
+      include: { closedBy: { select: { id: true, username: true, displayName: true } } },
+      orderBy: { periodStart: 'desc' },
+    }));
+  }
+
+  async closeFiscalPeriod(context: AuthContext, periodId: string) {
+    assertPermission(context, PERMISSIONS.ACCOUNTING_MANAGE);
+    const tenantId = assertTenantScope(context);
+
+    return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
+      const period = await tx.fiscalPeriod.findFirst({
+        where: { id: periodId, tenantId },
+      });
+      if (!period) throw new Error('Fiscal period not found');
+      if (period.status !== 'OPEN') throw new Error('Fiscal period is already closed');
+
+      return tx.fiscalPeriod.update({
+        where: { id: period.id },
+        data: {
+          status: 'CLOSED',
+          closedAt: new Date(),
+          closedById: context.userId,
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async reverseJournal(context: AuthContext, journalEntryId: string, reason: string) {
+    assertPermission(context, PERMISSIONS.ACCOUNTING_MANAGE);
+    const tenantId = assertTenantScope(context);
+
+    return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
+
+      const original = await tx.journalEntry.findFirst({
+        where: { id: journalEntryId, tenantId },
+        include: { lines: { include: { account: true } }, reversalOf: true },
+      });
+      if (!original) throw new Error('Journal entry not found');
+      if (original.reversalOfId) throw new Error('A reversal entry cannot be reversed');
+      if (original.status !== 'POSTED') throw new Error('Only posted journal entries can be reversed');
+      if (original.reversalEntry) throw new Error('Journal entry has already been reversed');
+      if (original.branchId) assertBranchAccess(context, original.branchId);
+
+      const description = reason.trim()
+        ? `Reversal of ${original.entryNumber}: ${reason.trim()}`
+        : `Reversal of ${original.entryNumber}`;
+
+      const reversal = await this.post(tx, context, {
+        sourceType: 'JOURNAL_REVERSAL',
+        sourceId: original.id,
+        description,
+        branchId: original.branchId,
+        lines: original.lines.map((line) => ({
+          code: line.account.code,
+          name: line.account.name,
+          nameAr: line.account.nameAr ?? undefined,
+          type: line.account.type,
+          debit: Number(line.credit),
+          credit: Number(line.debit),
+          branchId: line.branchId,
+          memo: `Reversal of ${original.entryNumber}`,
+        })),
+      });
+
+      await tx.journalEntry.update({
+        where: { id: original.id },
+        data: { reversalOfId: reversal.id },
+      });
+
+      return tx.journalEntry.findUniqueOrThrow({
+        where: { id: reversal.id },
+        include: { lines: { include: { account: true } }, fiscalPeriod: true },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
   async journal(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
     if (branchId) assertBranchAccess(context, branchId);
     return withRlsContext(this.prisma, context, (tx) => tx.journalEntry.findMany({
       where: { tenantId, ...(branchId ? { branchId } : {}) },
-      include: { lines: { include: { account: true } } },
+      include: { lines: { include: { account: true } }, fiscalPeriod: true, reversalOf: true, reversalEntry: true },
       orderBy: { entryDate: 'desc' },
     }));
   }
