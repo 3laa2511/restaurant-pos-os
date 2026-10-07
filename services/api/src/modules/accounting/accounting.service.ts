@@ -327,6 +327,26 @@ export class AccountingService {
     });
   }
 
+  async postInventoryConsumption(
+    tx: Db,
+    context: AuthContext,
+    input: { orderId: string; branchId: string; amount: number },
+  ) {
+    const amount = positiveMoney(input.amount, 'COGS amount');
+    assertBranchAccess(context, input.branchId);
+    if (amount <= 0) return null;
+    return this.post(tx, context, {
+      sourceType: 'ORDER_COGS',
+      sourceId: input.orderId,
+      description: `COGS for order ${input.orderId}`,
+      branchId: input.branchId,
+      lines: [
+        { code: '5100', name: 'Cost of Goods Sold', nameAr: 'تكلفة البضاعة المباعة', type: 'EXPENSE', debit: amount, branchId: input.branchId },
+        { code: '1200', name: 'Inventory', nameAr: 'المخزون', type: 'ASSET', credit: amount, branchId: input.branchId },
+      ],
+    });
+  }
+
   async postInventoryAdjustment(
     tx: Db,
     context: AuthContext,
