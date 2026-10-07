@@ -65,6 +65,11 @@ export class InventoryService {
       where: { id: input.orderId, branchId: input.branchId, branch: { tenantId } },
       include: { items: { include: { product: { include: { recipeIngredients: true } } } } },
     });
+    const existingCogs = await tx.journalEntry.findFirst({
+      where: { tenantId, sourceType: 'ORDER_COGS', sourceId: input.orderId },
+      select: { id: true },
+    });
+    if (existingCogs) return { orderId: input.orderId, amount: 0, alreadyConsumed: true };
     if (!order) throw new Error('Order not found for inventory consumption');
 
     let totalCost = 0;
