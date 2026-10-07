@@ -94,6 +94,7 @@ async function main() {
     ['2200', 'Payroll Payable', 'رواتب مستحقة', 'LIABILITY'],
     ['4100', 'Sales Revenue', 'إيرادات المبيعات', 'REVENUE'],
     ['4900', 'Inventory Adjustment Gain', 'أرباح تسويات المخزون', 'REVENUE'],
+    ['5100', 'Cost of Goods Sold', 'تكلفة البضاعة المباعة', 'EXPENSE'],
     ['5900', 'Inventory Adjustment Loss', 'خسائر تسويات المخزون', 'EXPENSE'],
     ['6100', 'Payroll Expense', 'مصروف الرواتب', 'EXPENSE'],
   ] as const;
