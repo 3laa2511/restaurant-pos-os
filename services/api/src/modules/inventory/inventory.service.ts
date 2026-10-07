@@ -57,6 +57,66 @@ export class InventoryService {
     },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
   }
 
+  async consumeOrder(tx: Prisma.TransactionClient, context: AuthContext, input: { orderId: string; branchId: string }) {
+    const tenantId = assertTenantScope(context);
+    assertBranchAccess(context, input.branchId);
+
+    const order = await tx.order.findFirst({
+      where: { id: input.orderId, branchId: input.branchId, branch: { tenantId } },
+      include: { items: { include: { product: { include: { recipeIngredients: true } } } } },
+    });
+    if (!order) throw new Error('Order not found for inventory consumption');
+
+    let totalCost = 0;
+    for (const item of order.items) {
+      for (const recipe of item.product.recipeIngredients) {
+        const requiredQty = Number(recipe.quantityBaseUnit) * item.quantity * (1 + Number(recipe.wastePercent) / 100);
+        if (!Number.isFinite(requiredQty) || requiredQty <= 0) continue;
+
+        const stock = await tx.inventoryStockBalance.findUnique({
+          where: { branchId_ingredientId: { branchId: input.branchId, ingredientId: recipe.ingredientId } },
+        });
+        const currentQty = stock ? Number(stock.quantityBaseUnit) : 0;
+        const unitCost = stock ? Number(stock.averageCostPerBaseUnit) : 0;
+        if (currentQty < requiredQty) {
+          throw new Error(`Insufficient stock for ingredient ${recipe.ingredientId}`);
+        }
+
+        const lineCost = requiredQty * unitCost;
+        totalCost += lineCost;
+        const nextQty = currentQty - requiredQty;
+        await tx.inventoryStockBalance.update({
+          where: { branchId_ingredientId: { branchId: input.branchId, ingredientId: recipe.ingredientId } },
+          data: { quantityBaseUnit: nextQty },
+        });
+        await tx.inventoryMovement.create({
+          data: {
+            id: randomUUID(),
+            tenantId,
+            branchId: input.branchId,
+            ingredientId: recipe.ingredientId,
+            type: 'CONSUMPTION',
+            quantityBaseUnit: requiredQty,
+            unitCost,
+            referenceType: 'ORDER',
+            referenceId: input.orderId,
+            idempotencyKey: `order-consumption:${input.orderId}:${recipe.ingredientId}:${item.id}`,
+            actorUserId: context.userId,
+          },
+        });
+      }
+    }
+
+    if (totalCost > 0) {
+      await this.accounting.postInventoryConsumption(tx, context, {
+        orderId: input.orderId,
+        branchId: input.branchId,
+        amount: totalCost,
+      });
+    }
+    return { orderId: input.orderId, amount: Math.round(totalCost * 100) / 100 };
+  }
+
   async adjust(context:AuthContext,input:{branchId:string;ingredientId:string;quantityBaseUnit:number;direction:'IN'|'OUT';reason:string;idempotencyKey:string}){
     const tenantId=assertTenantScope(context); assertBranchAccess(context,input.branchId); const qty=n(input.quantityBaseUnit,'Quantity'); if(qty<=0)throw new Error('Quantity must be greater than zero');
     return this.prisma.$transaction(async tx => {
