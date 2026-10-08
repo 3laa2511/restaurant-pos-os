@@ -36,7 +36,7 @@ function postTx(period: unknown) {
       })),
     },
     journalEntry: { findUnique: jest.fn(async () => null), create: jest.fn(async ({ data }: { data: unknown }) => data) },
-  } as never;
+  } as any;
 }
 
 describe('Accounting fiscal period controls', () => {
@@ -70,10 +70,10 @@ describe('Accounting fiscal period controls', () => {
 
   it('requires the period lookup to be tenant-scoped and OPEN', async () => {
     const findFirst = jest.fn(async () => ({ id: 'period-open', status: 'OPEN' }));
-    const tx = postTx(null) as { fiscalPeriod: { findFirst: typeof findFirst } };
+    const tx = postTx(null) as any;
     tx.fiscalPeriod.findFirst = findFirst;
 
-    await service.post(tx as never, context, {
+    await service.post(tx as any, context, {
       sourceType: 'FISCAL_TEST',
       sourceId: 'scope-check',
       description: 'Scope check',
