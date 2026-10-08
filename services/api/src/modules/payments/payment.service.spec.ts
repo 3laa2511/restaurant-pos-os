@@ -43,7 +43,7 @@ function buildPrisma() {
 describe('PaymentService.settleSplitPayment', () => {
   it('persists mixed payment settlement atomically and applies the authenticated tenant to order, shift, and transition', async () => {
     const { prisma, tx } = buildPrisma();
-    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any, { consumeOrder: jest.fn().mockResolvedValue({ orderId: 'order-1', amount: 0 }) } as any);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any,  { consumeOrder: jest.fn<(...args: any[]) => Promise<unknown>>().mockResolvedValue({ orderId: 'order-1', amount: 0 }) } as any);
     const result = await service.settleSplitPayment(context, {
       orderId: 'order-1', shiftId: 'shift-1',
       allocations: [{ method: 'CASH', amount: 100, receivedCash: 120 }, { method: 'CARD', amount: 150, reference: 'card-123' }],
@@ -66,7 +66,7 @@ describe('PaymentService.settleSplitPayment', () => {
   it('cannot settle an order belonging to another tenant', async () => {
     const { prisma, tx } = buildPrisma();
     tx.order.findFirst.mockResolvedValue(null);
-    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any, { consumeOrder: jest.fn<(...args: any[]) => Promise<unknown>>().mockResolvedValue({ orderId: 'order-1', amount: 0 }) } as any);
     await expect(service.settleSplitPayment(context, { orderId: 'foreign-order', shiftId: 'shift-1', allocations: [{ method: 'CASH', amount: 250 }], idempotencyKey: 'checkout-cross-tenant', deviceId: 'device-1', clientSequence: 46 })).rejects.toThrow('Order not found');
     expect(tx.payment.create).not.toHaveBeenCalled();
     expect(tx.order.updateMany).not.toHaveBeenCalled();
@@ -74,7 +74,7 @@ describe('PaymentService.settleSplitPayment', () => {
 
   it('denies settlement when the authenticated session has no tenant scope', async () => {
     const { prisma } = buildPrisma();
-    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any, { consumeOrder: jest.fn<(...args: any[]) => Promise<unknown>>().mockResolvedValue({ orderId: 'order-1', amount: 0 }) } as any);
     await expect(service.settleSplitPayment({ ...context, tenantId: null }, { orderId: 'order-1', shiftId: 'shift-1', allocations: [{ method: 'CASH', amount: 250 }], idempotencyKey: 'checkout-no-tenant', deviceId: 'device-1', clientSequence: 47 })).rejects.toThrow('tenant scope is required');
     expect(prisma.syncOperation.findUnique).not.toHaveBeenCalled();
   });
@@ -82,7 +82,7 @@ describe('PaymentService.settleSplitPayment', () => {
   it('does not charge an already-paid order again', async () => {
     const { prisma, tx } = buildPrisma();
     tx.payment.findMany.mockResolvedValue([{ id: 'payment-existing' }]);
-    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any, { consumeOrder: jest.fn<(...args: any[]) => Promise<unknown>>().mockResolvedValue({ orderId: 'order-1', amount: 0 }) } as any);
     await expect(service.settleSplitPayment(context, { orderId: 'order-1', shiftId: 'shift-1', allocations: [{ method: 'CASH', amount: 250 }], idempotencyKey: 'checkout-2', deviceId: 'device-1', clientSequence: 43 })).rejects.toThrow('already has payments');
     expect(tx.payment.create).not.toHaveBeenCalled();
     expect(tx.order.updateMany).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('PaymentService.settleSplitPayment', () => {
     const input = { orderId: 'order-1', shiftId: 'shift-1', allocations: [{ method: 'CASH' as const, amount: 250 }], idempotencyKey: 'checkout-3', deviceId: 'device-1', clientSequence: 44 };
     const hash = createHash('sha256').update(JSON.stringify({ ...input, allocations: input.allocations })).digest('hex');
     tx.syncOperation.findUnique.mockResolvedValue({ operationId: 'operation-1', requestHash: hash, result: stored });
-    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any, { consumeOrder: jest.fn<(...args: any[]) => Promise<unknown>>().mockResolvedValue({ orderId: 'order-1', amount: 0 }) } as any);
     await expect(service.settleSplitPayment(context, input)).resolves.toEqual(stored);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(tx.payment.create).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe('PaymentService.settleSplitPayment', () => {
     const uniqueError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: '7.10.0' });
     tx.syncOperation.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ operationId: 'operation-winner', requestHash: hash, result: stored });
     tx.syncOperation.create.mockRejectedValueOnce(uniqueError);
-    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any, { consumeOrder: jest.fn<(...args: any[]) => Promise<unknown>>().mockResolvedValue({ orderId: 'order-1', amount: 0 }) } as any);
     await expect(service.settleSplitPayment(context, input)).resolves.toEqual(stored);
     expect(tx.syncOperation.findUnique).toHaveBeenCalledTimes(2);
     expect(prisma.$transaction).toHaveBeenCalledTimes(3);
