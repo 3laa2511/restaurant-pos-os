@@ -46,7 +46,7 @@ describe('AccountingService.ensureAccount', () => {
   });
 
   it('always scopes lookup by tenant and account code', async () => {
-    const findUnique = jest.fn<(args: unknown) => Promise<typeof account>>(async (_args) => account);
+    const findUnique = jest.fn().mockResolvedValue(account);
     const scopedTx = {
       accountingAccount: { findUnique },
     } as never;
