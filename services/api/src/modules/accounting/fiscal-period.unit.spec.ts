@@ -151,8 +151,8 @@ describe('Accounting fiscal period controls', () => {
     const tx = {
       $executeRaw: jest.fn(async () => 1),
       fiscalPeriod: {
-        findFirst: jest.fn(async () => period),
-        update: jest.fn(async () => updated),
+        findFirst: jest.fn(async (..._args: any[]) => period),
+        update: jest.fn(async (..._args: any[]) => updated),
       },
     };
     const prisma = {
