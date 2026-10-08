@@ -69,7 +69,7 @@ describe('Accounting fiscal period controls', () => {
   });
 
   it('requires the period lookup to be tenant-scoped and OPEN', async () => {
-    const findFirst = jest.fn(async () => ({ id: 'period-open', status: 'OPEN' }));
+    const findFirst = jest.fn(async (...args: unknown[]) => { void args; return { id: 'period-open', status: 'OPEN' }; });
     const tx = postTx(null) as any;
     tx.fiscalPeriod.findFirst = findFirst;
 
@@ -151,8 +151,8 @@ describe('Accounting fiscal period controls', () => {
     const tx = {
       $executeRaw: jest.fn(async () => 1),
       fiscalPeriod: {
-        findFirst: jest.fn().mockResolvedValue(period),
-        update: jest.fn().mockResolvedValue(updated),
+        findFirst: jest.fn(async (...args: unknown[]) => { void args; return period; }),
+        update: jest.fn(async (...args: unknown[]) => { void args; return updated; }),
       },
     };
     const prisma = {
