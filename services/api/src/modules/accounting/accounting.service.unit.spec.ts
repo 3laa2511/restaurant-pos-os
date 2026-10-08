@@ -17,7 +17,7 @@ describe('AccountingService.ensureAccount', () => {
   const tx = (result: unknown) =>
     ({
       accountingAccount: {
-        findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue(result),
+        findUnique: jest.fn<(args: unknown) => Promise<unknown>>().mockResolvedValue(result),
       },
     }) as never;
 
@@ -46,7 +46,7 @@ describe('AccountingService.ensureAccount', () => {
   });
 
   it('always scopes lookup by tenant and account code', async () => {
-    const findUnique = jest.fn<() => Promise<unknown>>().mockResolvedValue(account);
+    const findUnique = jest.fn<(args: unknown) => Promise<unknown>>().mockResolvedValue(account);
     const scopedTx = {
       accountingAccount: { findUnique },
     } as never;
