@@ -17,7 +17,7 @@ describe('AccountingService.ensureAccount', () => {
   const tx = (result: unknown) =>
     ({
       accountingAccount: {
-        findUnique: async () => result,
+        findUnique: jest.fn(async (..._args: any[]) => result),
       },
     }) as never;
 
