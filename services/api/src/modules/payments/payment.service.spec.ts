@@ -43,7 +43,7 @@ function buildPrisma() {
 describe('PaymentService.settleSplitPayment', () => {
   it('persists mixed payment settlement atomically and applies the authenticated tenant to order, shift, and transition', async () => {
     const { prisma, tx } = buildPrisma();
-    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any);
+    const service = new PaymentService(prisma as unknown as PrismaService, { postSale: jest.fn() } as any, { consumeOrder: jest.fn().mockResolvedValue({ orderId: 'order-1', amount: 0 }) } as any);
     const result = await service.settleSplitPayment(context, {
       orderId: 'order-1', shiftId: 'shift-1',
       allocations: [{ method: 'CASH', amount: 100, receivedCash: 120 }, { method: 'CARD', amount: 150, reference: 'card-123' }],
