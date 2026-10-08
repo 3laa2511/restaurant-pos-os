@@ -17,7 +17,7 @@ describe('AccountingService.ensureAccount', () => {
   const tx = (result: unknown) =>
     ({
       accountingAccount: {
-        findUnique: jest.fn(async (..._args: any[]) => result),
+        findUnique: jest.fn().mockResolvedValue(result),
       },
     }) as never;
 
