@@ -770,7 +770,7 @@ export class AccountingService {
 
     return withRlsContext(this.prisma, context, async (tx) => {
       const orderScope = {
-        branchId: input.branchId,
+        ...(input.branchId ? { branchId: input.branchId } : {}),
         createdAt: { gte: from, lte: to },
         branch: { tenantId },
       };
@@ -786,7 +786,7 @@ export class AccountingService {
           where: orderScope,
           select: {
             id: true, orderNumber: true, total: true, branchId: true, createdAt: true,
-            payments: { where: { status: { in: ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED', 'VOIDED'] } }, select: { id: true, amount: true } },
+            payments: { select: { id: true, status: true } },
           },
         }),
         tx.journalEntry.findMany({
@@ -826,7 +826,7 @@ export class AccountingService {
         if (entry.sourceId) salesByOrder.set(entry.sourceId, money((salesByOrder.get(entry.sourceId) ?? 0) + revenue));
       }
       const saleFindings = orders
-        .filter((order) => order.payments.length > 0)
+        .filter((order) => order.payments.some((payment) => payment.status === 'PAID' || payment.status === 'PARTIALLY_REFUNDED' || payment.status === 'REFUNDED' || payment.status === 'VOIDED'))
         .map((order) => {
           // This check compares the original sale journal with the original order
           // total. Refunds/voids are separate journal sources and must be reconciled
@@ -895,7 +895,7 @@ export class AccountingService {
       return {
         period: { from: from.toISOString(), to: to.toISOString(), branchId: input.branchId ?? null },
         summary: {
-          checkedPaidOrders: orders.filter((order) => order.payments.length > 0).length,
+          checkedPaidOrders: orders.filter((order) => order.payments.some((payment) => payment.status === 'PAID' || payment.status === 'PARTIALLY_REFUNDED' || payment.status === 'REFUNDED' || payment.status === 'VOIDED')).length,
           checkedCogsEntries: cogsByOrder.size,
           checkedConsumptionMovements: movements.length,
           checkedInventoryBranches: stockValueByBranch.size,
