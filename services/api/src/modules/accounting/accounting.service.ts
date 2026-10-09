@@ -769,9 +769,13 @@ export class AccountingService {
     }
 
     return withRlsContext(this.prisma, context, async (tx) => {
+      const settledPaymentScope = {
+        status: { in: ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED', 'VOIDED'] as const },
+        createdAt: { gte: from, lte: to },
+      };
       const orderScope = {
         ...(input.branchId ? { branchId: input.branchId } : {}),
-        createdAt: { gte: from, lte: to },
+        payments: { some: settledPaymentScope },
         branch: { tenantId },
       };
       const entryScope = {
@@ -785,8 +789,8 @@ export class AccountingService {
         tx.order.findMany({
           where: orderScope,
           select: {
-            id: true, orderNumber: true, total: true, branchId: true, createdAt: true,
-            payments: { select: { id: true, status: true } },
+            id: true, orderNumber: true, total: true, branchId: true,
+            payments: { where: settledPaymentScope, select: { id: true, status: true } },
           },
         }),
         tx.journalEntry.findMany({
