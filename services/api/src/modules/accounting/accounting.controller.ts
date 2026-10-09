@@ -112,6 +112,12 @@ export class AccountingController {
     return this.accounting.balanceSheet(context, { ...(branchId ? { branchId } : {}), ...(asOf ? { asOf } : {}) });
   }
 
+  @Get('reports/reconciliation')
+  @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
+  reconciliation(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) {
+    return this.accounting.reconciliation(context, query);
+  }
+
   @Get('reports/cash-bank')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   cashBankMovement(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) {
