@@ -33,6 +33,8 @@
 
 ## Accounting and reconciliation
 
+- [ ] Reconciliation report implementation is on the branch: `GET /api/accounting/reports/reconciliation` (read-only, `ACCOUNTING_VIEW`, tenant/branch scoped); compare paid-order original totals to `ORDER_SALE` revenue journals, recipe consumption movement costs to `ORDER_COGS`, and current branch stock valuation to the inventory control account. CI and behavioral/integration tests still need to pass before marking this complete.
+
 - [ ] Reconcile sales/order totals against revenue journals.
 - [ ] Reconcile payment allocations and cash-drawer movements against payment journals.
 - [ ] Reconcile order recipe consumption movements against COGS journals.
