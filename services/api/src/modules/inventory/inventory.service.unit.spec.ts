@@ -40,9 +40,9 @@ describe('InventoryService.consumeOrder', () => {
     const findStock = jest.fn(async () => options?.stock === undefined
       ? { quantityBaseUnit: 100, averageCostPerBaseUnit: 3 }
       : options.stock);
-    const updateStock = jest.fn(async () => ({}));
-    const createMovement = jest.fn(async () => ({}));
-    const postCogs = jest.fn(async () => ({}));
+    const updateStock = jest.fn<(args: unknown) => Promise<unknown>>().mockResolvedValue({});
+    const createMovement = jest.fn<(args: unknown) => Promise<unknown>>().mockResolvedValue({});
+    const postCogs = jest.fn<(tx: unknown, context: unknown, input: unknown) => Promise<unknown>>().mockResolvedValue({});
 
     const tx = {
       order: { findFirst: findOrder },
