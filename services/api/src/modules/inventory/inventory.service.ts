@@ -65,12 +65,28 @@ export class InventoryService {
       where: { id: input.orderId, branchId: input.branchId, branch: { tenantId } },
       include: { items: { include: { product: { include: { recipeIngredients: true } } } } },
     });
+    if (!order) throw new Error('Order not found for inventory consumption');
+
+    // Inventory movements are the consumption idempotency source of truth. Do not
+    // rely only on the COGS journal: a valid zero-cost recipe still consumes stock
+    // but intentionally does not create a zero-value journal entry.
+    const existingMovement = await tx.inventoryMovement.findFirst({
+      where: {
+        tenantId,
+        branchId: input.branchId,
+        type: 'CONSUMPTION',
+        referenceType: 'ORDER',
+        referenceId: input.orderId,
+      },
+      select: { id: true },
+    });
     const existingCogs = await tx.journalEntry.findFirst({
       where: { tenantId, sourceType: 'ORDER_COGS', sourceId: input.orderId },
       select: { id: true },
     });
-    if (existingCogs) return { orderId: input.orderId, amount: 0, alreadyConsumed: true };
-    if (!order) throw new Error('Order not found for inventory consumption');
+    if (existingMovement || existingCogs) {
+      return { orderId: input.orderId, amount: 0, alreadyConsumed: true };
+    }
 
     let totalCost = 0;
     for (const item of order.items) {
