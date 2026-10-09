@@ -756,6 +756,158 @@ export class AccountingService {
     return { cash: summarize(ledger), bank: summarize(bank) };
   }
 
+  async reconciliation(
+    context: AuthContext,
+    input: { branchId?: string; from?: string; to?: string },
+  ) {
+    const tenantId = assertTenantScope(context);
+    if (input.branchId) assertBranchAccess(context, input.branchId);
+    const from = input.from ? new Date(input.from) : new Date('1970-01-01T00:00:00.000Z');
+    const to = input.to ? new Date(input.to) : new Date();
+    if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) {
+      throw new Error('Reconciliation date range is invalid');
+    }
+
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const orderScope = {
+        branchId: input.branchId,
+        createdAt: { gte: from, lte: to },
+        branch: { tenantId },
+      };
+      const entryScope = {
+        tenantId,
+        status: 'POSTED' as const,
+        entryDate: { gte: from, lte: to },
+        ...(input.branchId ? { branchId: input.branchId } : {}),
+      };
+
+      const [orders, saleEntries, cogsEntries, movements, stockBalances, inventoryLines] = await Promise.all([
+        tx.order.findMany({
+          where: orderScope,
+          select: {
+            id: true, orderNumber: true, total: true, branchId: true, createdAt: true,
+            payments: { where: { status: 'PAID' }, select: { id: true, amount: true, adjustments: { select: { type: true, amount: true } } } },
+          },
+        }),
+        tx.journalEntry.findMany({
+          where: { ...entryScope, sourceType: 'ORDER_SALE' },
+          include: { lines: { include: { account: { select: { code: true } } } } },
+        }),
+        tx.journalEntry.findMany({
+          where: { ...entryScope, sourceType: 'ORDER_COGS' },
+          include: { lines: { include: { account: { select: { code: true } } } } },
+        }),
+        tx.inventoryMovement.findMany({
+          where: {
+            tenantId, type: 'CONSUMPTION', referenceType: 'ORDER',
+            createdAt: { gte: from, lte: to },
+            ...(input.branchId ? { branchId: input.branchId } : {}),
+          },
+          select: { referenceId: true, quantityBaseUnit: true, unitCost: true, branchId: true },
+        }),
+        tx.inventoryStockBalance.findMany({
+          where: { tenantId, ...(input.branchId ? { branchId: input.branchId } : {}) },
+          select: { branchId: true, quantityBaseUnit: true, averageCostPerBaseUnit: true },
+        }),
+        tx.journalLine.findMany({
+          where: {
+            account: { is: { tenantId, code: '1200' } },
+            entry: { is: { ...entryScope } },
+          },
+          select: { branchId: true, debit: true, credit: true },
+        }),
+      ]);
+
+      const salesByOrder = new Map<string, number>();
+      for (const entry of saleEntries) {
+        const revenue = entry.lines
+          .filter((line) => line.account.code === '4100')
+          .reduce((sum, line) => sum + Number(line.credit) - Number(line.debit), 0);
+        if (entry.sourceId) salesByOrder.set(entry.sourceId, money((salesByOrder.get(entry.sourceId) ?? 0) + revenue));
+      }
+      const saleFindings = orders
+        .filter((order) => order.payments.length > 0)
+        .map((order) => {
+          const refunded = order.payments.reduce((sum, payment) => sum + payment.adjustments
+            .filter((adjustment) => adjustment.type === 'REFUND' || adjustment.type === 'VOID')
+            .reduce((value, adjustment) => value + Number(adjustment.amount), 0), 0);
+          const expected = money(Math.max(0, Number(order.total) - refunded));
+          const actual = salesByOrder.get(order.id);
+          const delta = actual === undefined ? expected : money(actual - expected);
+          return {
+            sourceId: order.id, orderNumber: order.orderNumber, branchId: order.branchId,
+            expectedRevenue: expected, postedRevenue: actual ?? null, difference: delta,
+            status: actual === undefined ? 'MISSING_JOURNAL' : Math.abs(delta) > 0.01 ? 'MISMATCH' : 'MATCH',
+          };
+        })
+        .filter((finding) => finding.status !== 'MATCH');
+
+      const cogsByOrder = new Map<string, number>();
+      for (const entry of cogsEntries) {
+        const debit = entry.lines.filter((line) => line.account.code === '5100')
+          .reduce((sum, line) => sum + Number(line.debit) - Number(line.credit), 0);
+        if (entry.sourceId) cogsByOrder.set(entry.sourceId, money((cogsByOrder.get(entry.sourceId) ?? 0) + debit));
+      }
+      const movementCogsByOrder = new Map<string, number>();
+      for (const movement of movements) {
+        if (!movement.referenceId) continue;
+        const cost = Number(movement.quantityBaseUnit) * Number(movement.unitCost);
+        movementCogsByOrder.set(movement.referenceId, (movementCogsByOrder.get(movement.referenceId) ?? 0) + cost);
+      }
+      const cogsFindings = [...new Set([...cogsByOrder.keys(), ...movementCogsByOrder.keys()])]
+        .map((sourceId) => {
+          const movementCost = money(movementCogsByOrder.get(sourceId) ?? 0);
+          const postedCost = cogsByOrder.has(sourceId) ? money(cogsByOrder.get(sourceId)!) : null;
+          const difference = postedCost === null ? null : money(postedCost - movementCost);
+          return {
+            sourceId, movementCost, postedCogs: postedCost, difference,
+            status: postedCost === null ? 'MISSING_JOURNAL' : Math.abs(difference!) > 0.01 ? 'MISMATCH' : 'MATCH',
+          };
+        })
+        .filter((finding) => finding.status !== 'MATCH');
+
+      const stockValueByBranch = new Map<string, number>();
+      for (const balance of stockBalances) {
+        if (!balance.branchId) continue;
+        const value = Number(balance.quantityBaseUnit) * Number(balance.averageCostPerBaseUnit);
+        stockValueByBranch.set(balance.branchId, (stockValueByBranch.get(balance.branchId) ?? 0) + value);
+      }
+      const ledgerValueByBranch = new Map<string, number>();
+      for (const line of inventoryLines) {
+        if (!line.branchId) continue;
+        ledgerValueByBranch.set(line.branchId, (ledgerValueByBranch.get(line.branchId) ?? 0) + Number(line.debit) - Number(line.credit));
+      }
+      const valuationFindings = [...new Set([...stockValueByBranch.keys(), ...ledgerValueByBranch.keys()])]
+        .map((branchId) => {
+          const stockValue = money(stockValueByBranch.get(branchId) ?? 0);
+          const ledgerValue = money(ledgerValueByBranch.get(branchId) ?? 0);
+          const difference = money(ledgerValue - stockValue);
+          return { branchId, stockValuation: stockValue, inventoryAccountBalance: ledgerValue, difference,
+            status: Math.abs(difference) > 0.01 ? 'MISMATCH' : 'MATCH' };
+        })
+        .filter((finding) => finding.status !== 'MATCH');
+
+      const findings = [
+        ...saleFindings.map((item) => ({ category: 'SALES_REVENUE', ...item })),
+        ...cogsFindings.map((item) => ({ category: 'COGS', ...item })),
+        ...valuationFindings.map((item) => ({ category: 'INVENTORY_VALUATION', ...item })),
+      ];
+      return {
+        period: { from: from.toISOString(), to: to.toISOString(), branchId: input.branchId ?? null },
+        summary: {
+          checkedPaidOrders: orders.filter((order) => order.payments.length > 0).length,
+          checkedCogsEntries: cogsByOrder.size,
+          checkedConsumptionMovements: movements.length,
+          checkedInventoryBranches: stockValueByBranch.size,
+          findingCount: findings.length,
+          status: findings.length ? 'ATTENTION_REQUIRED' : 'NO_MISMATCHES_FOUND',
+        },
+        findings,
+        note: 'Reconciliation is read-only. Inventory valuation compares current stock balances with inventory-account movements in the selected entry-date range; use a full-history date range for a meaningful ledger comparison.',
+      };
+    });
+  }
+
   private paymentAccount(method: string): Omit<Line, 'debit' | 'credit' | 'branchId'> {
     switch (method) {
       case 'CASH':
