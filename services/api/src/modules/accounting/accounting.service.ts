@@ -786,7 +786,7 @@ export class AccountingService {
           where: orderScope,
           select: {
             id: true, orderNumber: true, total: true, branchId: true, createdAt: true,
-            payments: { where: { status: 'PAID' }, select: { id: true, amount: true, adjustments: { select: { type: true, amount: true } } } },
+            payments: { where: { status: { in: ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED', 'VOIDED'] } }, select: { id: true, amount: true } },
           },
         }),
         tx.journalEntry.findMany({
@@ -812,7 +812,7 @@ export class AccountingService {
         tx.journalLine.findMany({
           where: {
             account: { is: { tenantId, code: '1200' } },
-            entry: { is: { ...entryScope } },
+            entry: { is: { tenantId, status: 'POSTED', entryDate: { lte: to }, ...(input.branchId ? { branchId: input.branchId } : {}) } },
           },
           select: { branchId: true, debit: true, credit: true },
         }),
@@ -828,10 +828,10 @@ export class AccountingService {
       const saleFindings = orders
         .filter((order) => order.payments.length > 0)
         .map((order) => {
-          const refunded = order.payments.reduce((sum, payment) => sum + payment.adjustments
-            .filter((adjustment) => adjustment.type === 'REFUND' || adjustment.type === 'VOID')
-            .reduce((value, adjustment) => value + Number(adjustment.amount), 0), 0);
-          const expected = money(Math.max(0, Number(order.total) - refunded));
+          // This check compares the original sale journal with the original order
+          // total. Refunds/voids are separate journal sources and must be reconciled
+          // independently rather than subtracted from the original sale entry.
+          const expected = money(Number(order.total));
           const actual = salesByOrder.get(order.id);
           const delta = actual === undefined ? expected : money(actual - expected);
           return {
@@ -903,7 +903,7 @@ export class AccountingService {
           status: findings.length ? 'ATTENTION_REQUIRED' : 'NO_MISMATCHES_FOUND',
         },
         findings,
-        note: 'Reconciliation is read-only. Inventory valuation compares current stock balances with inventory-account movements in the selected entry-date range; use a full-history date range for a meaningful ledger comparison.',
+        note: 'Reconciliation is read-only. Sales compares original order totals with original sale journals; refunds and voids remain separate sources. Inventory valuation compares current stock balances with the inventory-account balance accumulated through the report end date, so use a current end date for that comparison.',
       };
     });
   }
