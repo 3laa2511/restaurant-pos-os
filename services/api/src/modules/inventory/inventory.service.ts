@@ -263,12 +263,19 @@ export class InventoryService {
       let transferAmount = 0;
       for (const item of transfer.items) {
         const qty = Number(item.quantityBaseUnit);
-        const stock = await tx.warehouseStockBalance.findUnique({ where: { warehouseId_ingredientId: { warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId } } });
+        const sourceIsBranch = transfer.fromWarehouse.type === 'BRANCH' && transfer.fromWarehouse.branchId;
+        const stock = sourceIsBranch
+          ? await tx.inventoryStockBalance.findUnique({ where: { branchId_ingredientId: { branchId: transfer.fromWarehouse.branchId!, ingredientId: item.ingredientId } } })
+          : await tx.warehouseStockBalance.findUnique({ where: { warehouseId_ingredientId: { warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId } } });
         const current = stock ? Number(stock.quantityBaseUnit) : 0;
         if (current < qty) throw new Error('Insufficient stock for ingredient ' + item.ingredientId);
         const unitCost = stock ? Number(stock.averageCostPerBaseUnit) : 0;
         transferAmount += qty * unitCost;
-        await tx.warehouseStockBalance.update({ where: { warehouseId_ingredientId: { warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId } }, data: { quantityBaseUnit: current - qty } });
+        if (sourceIsBranch) {
+          await tx.inventoryStockBalance.update({ where: { branchId_ingredientId: { branchId: transfer.fromWarehouse.branchId!, ingredientId: item.ingredientId } }, data: { quantityBaseUnit: current - qty } });
+        } else {
+          await tx.warehouseStockBalance.update({ where: { warehouseId_ingredientId: { warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId } }, data: { quantityBaseUnit: current - qty } });
+        }
         await tx.inventoryTransferItem.update({ where: { id: item.id }, data: { unitCost } });
         await tx.inventoryMovement.create({ data: { id: randomUUID(), tenantId, branchId: transfer.fromWarehouse.branchId, warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId, type: 'TRANSFER_OUT', quantityBaseUnit: qty, unitCost, referenceType: 'INVENTORY_TRANSFER', referenceId: transfer.id, idempotencyKey: 'transfer-out:' + transfer.id + ':' + item.id, actorUserId: context.userId } });
       }
@@ -290,12 +297,23 @@ export class InventoryService {
         const qty = Number(item.quantityBaseUnit);
         const unitCost = Number(item.unitCost);
         transferAmount += qty * unitCost;
-        const stock = await tx.warehouseStockBalance.findUnique({ where: { warehouseId_ingredientId: { warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId } } });
+        const destinationIsBranch = transfer.toWarehouse.type === 'BRANCH' && transfer.toWarehouse.branchId;
+        const stock = destinationIsBranch
+          ? await tx.inventoryStockBalance.findUnique({ where: { branchId_ingredientId: { branchId: transfer.toWarehouse.branchId!, ingredientId: item.ingredientId } } })
+          : await tx.warehouseStockBalance.findUnique({ where: { warehouseId_ingredientId: { warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId } } });
         const oldQty = stock ? Number(stock.quantityBaseUnit) : 0;
         const oldAvg = stock ? Number(stock.averageCostPerBaseUnit) : 0;
         const newQty = oldQty + qty;
         const newAvg = newQty === 0 ? 0 : ((oldQty * oldAvg) + (qty * unitCost)) / newQty;
-        await tx.warehouseStockBalance.upsert({ where: { warehouseId_ingredientId: { warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId } }, update: { quantityBaseUnit: newQty, averageCostPerBaseUnit: newAvg }, create: { id: randomUUID(), tenantId, warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId, quantityBaseUnit: qty, averageCostPerBaseUnit: unitCost } });
+        if (destinationIsBranch) {
+          await tx.inventoryStockBalance.upsert({
+            where: { branchId_ingredientId: { branchId: transfer.toWarehouse.branchId!, ingredientId: item.ingredientId } },
+            update: { quantityBaseUnit: newQty, averageCostPerBaseUnit: newAvg },
+            create: { id: randomUUID(), tenantId, branchId: transfer.toWarehouse.branchId!, ingredientId: item.ingredientId, quantityBaseUnit: qty, averageCostPerBaseUnit: unitCost },
+          });
+        } else {
+          await tx.warehouseStockBalance.upsert({ where: { warehouseId_ingredientId: { warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId } }, update: { quantityBaseUnit: newQty, averageCostPerBaseUnit: newAvg }, create: { id: randomUUID(), tenantId, warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId, quantityBaseUnit: qty, averageCostPerBaseUnit: unitCost } });
+        }
         await tx.inventoryMovement.create({ data: { id: randomUUID(), tenantId, branchId: transfer.toWarehouse.branchId, warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId, type: 'TRANSFER_IN', quantityBaseUnit: qty, unitCost, referenceType: 'INVENTORY_TRANSFER', referenceId: transfer.id, idempotencyKey: 'transfer-in:' + transfer.id + ':' + item.id, actorUserId: context.userId } });
       }
       await this.accounting.postInventoryReceipt(tx, context, { transferId: transfer.id, toWarehouseId: transfer.toWarehouseId, toBranchId: transfer.toWarehouse.branchId, amount: transferAmount });
