@@ -139,3 +139,28 @@ describe('InventoryService.consumeOrder', () => {
     expect(mocks.postCogs).not.toHaveBeenCalled();
   });
 });
+
+describe('InventoryService.receive validation', () => {
+  const context = {
+    tenantId: 'tenant-1',
+    branchId: 'branch-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    deviceId: 'device-1',
+    workspace: 'INVENTORY' as const,
+    roles: [],
+    permissions: [],
+  };
+
+  it('rejects duplicate ingredient receipt lines before opening a transaction', async () => {
+    const service = new InventoryService({} as never, {} as never);
+    await expect(service.receive(context, {
+      branchId: 'branch-1',
+      items: [
+        { ingredientId: 'ingredient-1', quantityPurchaseUnit: 2, unitCost: 10 },
+        { ingredientId: 'ingredient-1', quantityPurchaseUnit: 3, unitCost: 12 },
+      ],
+    })).rejects.toThrow('Receipt cannot contain the same ingredient more than once');
+  });
+});
+
