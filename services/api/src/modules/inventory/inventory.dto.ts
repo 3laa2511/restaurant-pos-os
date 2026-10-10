@@ -26,6 +26,7 @@ export class ReceiveInventoryDto {
   @IsString() @Length(1, 128) branchId!: string;
   @IsOptional() @IsString() @Length(1, 128) supplierId?: string;
   @IsOptional() @IsString() @Length(1, 200) reference?: string;
+  @IsString() @Length(16, 128) idempotencyKey!: string;
   @IsArray() @ValidateNested({ each: true }) @Type(() => ReceiptItemDto)
   items!: ReceiptItemDto[];
 }
