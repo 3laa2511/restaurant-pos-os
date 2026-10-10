@@ -198,4 +198,48 @@ describe('InventoryService branch warehouse transfer stock routing', () => {
     expect(mocks.branchUpsert).toHaveBeenCalledTimes(1);
   });
 
+
+  it('moves zero-cost branch stock without creating a zero-value dispatch journal', async () => {
+    const transfer = {
+      id: 'transfer-zero-dispatch',
+      tenantId: 'tenant-1',
+      fromWarehouseId: 'branch-warehouse-1',
+      toWarehouseId: 'central-warehouse-1',
+      status: 'APPROVED',
+      fromWarehouse: { id: 'branch-warehouse-1', type: 'BRANCH', branchId: 'branch-1' },
+      toWarehouse: { id: 'central-warehouse-1', type: 'CENTRAL', branchId: null },
+      items: [{ id: 'transfer-item-zero-dispatch', ingredientId: 'ingredient-1', quantityBaseUnit: 2, unitCost: 0 }],
+    };
+    const mocks = setup(transfer, { quantityBaseUnit: 5, averageCostPerBaseUnit: 0 });
+
+    await mocks.service.dispatchTransfer(context, 'transfer-zero-dispatch');
+
+    expect(mocks.branchUpdate).toHaveBeenCalledWith({
+      where: { branchId_ingredientId: { branchId: 'branch-1', ingredientId: 'ingredient-1' } },
+      data: { quantityBaseUnit: 3 },
+    });
+    expect(mocks.movementCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.accounting.postInventoryDispatch).not.toHaveBeenCalled();
+  });
+
+  it('receives zero-cost stock without creating a zero-value receipt journal', async () => {
+    const transfer = {
+      id: 'transfer-zero-receipt',
+      tenantId: 'tenant-1',
+      fromWarehouseId: 'central-warehouse-1',
+      toWarehouseId: 'branch-warehouse-1',
+      status: 'IN_TRANSIT',
+      fromWarehouse: { id: 'central-warehouse-1', type: 'CENTRAL', branchId: null },
+      toWarehouse: { id: 'branch-warehouse-1', type: 'BRANCH', branchId: 'branch-1' },
+      items: [{ id: 'transfer-item-zero-receipt', ingredientId: 'ingredient-1', quantityBaseUnit: 2, unitCost: 0 }],
+    };
+    const mocks = setup(transfer, { quantityBaseUnit: 3, averageCostPerBaseUnit: 0 });
+
+    await mocks.service.receiveTransfer(context, 'transfer-zero-receipt');
+
+    expect(mocks.branchUpsert).toHaveBeenCalled();
+    expect(mocks.movementCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.accounting.postInventoryReceipt).not.toHaveBeenCalled();
+  });
+
 });
