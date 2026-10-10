@@ -279,7 +279,9 @@ export class InventoryService {
         await tx.inventoryTransferItem.update({ where: { id: item.id }, data: { unitCost } });
         await tx.inventoryMovement.create({ data: { id: randomUUID(), tenantId, branchId: transfer.fromWarehouse.branchId, warehouseId: transfer.fromWarehouseId, ingredientId: item.ingredientId, type: 'TRANSFER_OUT', quantityBaseUnit: qty, unitCost, referenceType: 'INVENTORY_TRANSFER', referenceId: transfer.id, idempotencyKey: 'transfer-out:' + transfer.id + ':' + item.id, actorUserId: context.userId } });
       }
-      await this.accounting.postInventoryDispatch(tx, context, { transferId: transfer.id, fromWarehouseId: transfer.fromWarehouseId, fromBranchId: transfer.fromWarehouse.branchId, amount: transferAmount });
+      if (transferAmount > 0) {
+        await this.accounting.postInventoryDispatch(tx, context, { transferId: transfer.id, fromWarehouseId: transfer.fromWarehouseId, fromBranchId: transfer.fromWarehouse.branchId, amount: transferAmount });
+      }
       return tx.inventoryTransfer.update({ where: { id: transfer.id }, data: { status: 'IN_TRANSIT', sentAt: new Date() }, include: { items: true } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
@@ -316,7 +318,9 @@ export class InventoryService {
         }
         await tx.inventoryMovement.create({ data: { id: randomUUID(), tenantId, branchId: transfer.toWarehouse.branchId, warehouseId: transfer.toWarehouseId, ingredientId: item.ingredientId, type: 'TRANSFER_IN', quantityBaseUnit: qty, unitCost, referenceType: 'INVENTORY_TRANSFER', referenceId: transfer.id, idempotencyKey: 'transfer-in:' + transfer.id + ':' + item.id, actorUserId: context.userId } });
       }
-      await this.accounting.postInventoryReceipt(tx, context, { transferId: transfer.id, toWarehouseId: transfer.toWarehouseId, toBranchId: transfer.toWarehouse.branchId, amount: transferAmount });
+      if (transferAmount > 0) {
+        await this.accounting.postInventoryReceipt(tx, context, { transferId: transfer.id, toWarehouseId: transfer.toWarehouseId, toBranchId: transfer.toWarehouse.branchId, amount: transferAmount });
+      }
       return tx.inventoryTransfer.update({ where: { id: transfer.id }, data: { status: 'RECEIVED', receivedAt: new Date() }, include: { items: true } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
