@@ -27,14 +27,44 @@ export class InventoryService {
     return withRlsContext(this.prisma, context, (tx) => tx.inventoryStockBalance.findMany({where:{tenantId,...(branchId?{branchId}: {})},include:{ingredient:true,branch:{select:{id:true,code:true,name:true}}},orderBy:{ingredient:{name:'asc'}}}));
   }
 
-  async receive(context:AuthContext,input:{branchId:string;supplierId?:string;reference?:string;items:Array<{ingredientId:string;quantityPurchaseUnit:number;unitCost:number}>;}) {
+  async receive(context:AuthContext,input:{branchId:string;supplierId?:string;reference?:string;idempotencyKey:string;items:Array<{ingredientId:string;quantityPurchaseUnit:number;unitCost:number}>;}) {
     const tenantId=assertTenantScope(context); assertBranchAccess(context,input.branchId); if(!input.items?.length)throw new Error('Receipt must contain at least one item');
+    const idempotencyKey = input.idempotencyKey?.trim();
+    if (!idempotencyKey || idempotencyKey.length < 16 || idempotencyKey.length > 128) throw new Error('Receipt idempotency key must contain 16 to 128 characters');
     if (new Set(input.items.map((item) => item.ingredientId)).size !== input.items.length) {
       throw new Error('Receipt cannot contain the same ingredient more than once; combine quantities and costs into one line');
     }
     return this.prisma.$transaction(async tx => {
       await setRlsContext(tx, context);
       const branch=await tx.branch.findFirst({where:{id:input.branchId,tenantId,active:true},select:{id:true}}); if(!branch)throw new Error('Branch not found');
+      const existingReceipt = await tx.inventoryReceipt.findUnique({
+        where: { tenantId_idempotencyKey: { tenantId, idempotencyKey } },
+        include: { items: true },
+      });
+      if (existingReceipt) {
+        const incomingItems = input.items.map((item) => ({
+          ingredientId: item.ingredientId,
+          quantityPurchaseUnit: n(item.quantityPurchaseUnit, 'Quantity'),
+          unitCost: n(item.unitCost, 'Unit cost'),
+        })).sort((a, b) => a.ingredientId.localeCompare(b.ingredientId));
+        const storedItems = existingReceipt.items.map((item) => ({
+          ingredientId: item.ingredientId,
+          quantityPurchaseUnit: Number(item.quantityPurchaseUnit),
+          unitCost: Number(item.unitCost),
+        })).sort((a, b) => a.ingredientId.localeCompare(b.ingredientId));
+        const samePayload =
+          existingReceipt.branchId === input.branchId &&
+          existingReceipt.supplierId === (input.supplierId || null) &&
+          existingReceipt.reference === (input.reference?.trim() || null) &&
+          incomingItems.length === storedItems.length &&
+          incomingItems.every((item, index) =>
+            item.ingredientId === storedItems[index]?.ingredientId &&
+            item.quantityPurchaseUnit === storedItems[index]?.quantityPurchaseUnit &&
+            item.unitCost === storedItems[index]?.unitCost
+          );
+        if (!samePayload) throw new Error('Inventory receipt idempotency key was already used with a different payload');
+        return existingReceipt;
+      }
       const items: Array<{ ingredientId:string; purchaseUnitFactor:number; qty:number; baseQty:number; unitCost:number; baseUnitCost:number; line:number }> = []; let total=0;
       for(const item of input.items){
         const ingredient=await tx.ingredient.findFirst({where:{id:item.ingredientId,tenantId,active:true}});
@@ -47,7 +77,7 @@ export class InventoryService {
         const supplier = await tx.supplier.findFirst({ where: { id: input.supplierId, tenantId, active: true }, select: { id: true } });
         if (!supplier) throw new Error('Supplier not found');
       }
-      const receipt=await tx.inventoryReceipt.create({data:{id:randomUUID(),tenantId,branchId:input.branchId,supplierId:input.supplierId||null,reference:input.reference?.trim()||null,totalCost:total,items:{create:items.map(x=>({id:randomUUID(),ingredientId:x.ingredientId,quantityPurchaseUnit:x.qty,quantityBaseUnit:x.baseQty,unitCost:x.unitCost,totalCost:x.line}))}}});
+      const receipt=await tx.inventoryReceipt.create({data:{id:randomUUID(),tenantId,branchId:input.branchId,supplierId:input.supplierId||null,reference:input.reference?.trim()||null,idempotencyKey,totalCost:total,items:{create:items.map(x=>({id:randomUUID(),ingredientId:x.ingredientId,quantityPurchaseUnit:x.qty,quantityBaseUnit:x.baseQty,unitCost:x.unitCost,totalCost:x.line}))}}});
       for(const x of items){
         const existing=await tx.inventoryStockBalance.findUnique({where:{branchId_ingredientId:{branchId:input.branchId,ingredientId:x.ingredientId}}});
         const oldQty=existing?Number(existing.quantityBaseUnit):0; const oldAvg=existing?Number(existing.averageCostPerBaseUnit):0;
