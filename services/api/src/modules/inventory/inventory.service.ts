@@ -29,6 +29,9 @@ export class InventoryService {
 
   async receive(context:AuthContext,input:{branchId:string;supplierId?:string;reference?:string;items:Array<{ingredientId:string;quantityPurchaseUnit:number;unitCost:number}>;}) {
     const tenantId=assertTenantScope(context); assertBranchAccess(context,input.branchId); if(!input.items?.length)throw new Error('Receipt must contain at least one item');
+    if (new Set(input.items.map((item) => item.ingredientId)).size !== input.items.length) {
+      throw new Error('Receipt cannot contain the same ingredient more than once; combine quantities and costs into one line');
+    }
     return this.prisma.$transaction(async tx => {
       await setRlsContext(tx, context);
       const branch=await tx.branch.findFirst({where:{id:input.branchId,tenantId,active:true},select:{id:true}}); if(!branch)throw new Error('Branch not found');
@@ -187,6 +190,9 @@ export class InventoryService {
     const tenantId = assertTenantScope(context);
     if (input.fromWarehouseId === input.toWarehouseId) throw new Error('Source and destination warehouses must be different');
     if (!input.items?.length) throw new Error('Transfer must contain at least one item');
+    if (new Set(input.items.map((item) => item.ingredientId)).size !== input.items.length) {
+      throw new Error('Transfer cannot contain the same ingredient more than once');
+    }
     return withRlsContext(this.prisma, context, async (tx) => {
       const warehouses = await tx.warehouse.findMany({ where: { tenantId, id: { in: [input.fromWarehouseId, input.toWarehouseId] }, active: true } });
       if (warehouses.length !== 2) throw new Error('Warehouse not found');
@@ -269,6 +275,9 @@ export class InventoryService {
 
   async setRecipe(context:AuthContext,productId:string,input:{items:Array<{ingredientId:string;quantityBaseUnit:number;wastePercent?:number}>}){
     const tenantId=assertTenantScope(context);
+    if (new Set((input.items ?? []).map((item) => item.ingredientId)).size !== (input.items ?? []).length) {
+      throw new Error('Recipe cannot contain the same ingredient more than once');
+    }
     return withRlsContext(this.prisma, context, async (tx) => {
       const product=await tx.product.findFirst({where:{id:productId,tenantId},select:{id:true}});
       if(!product)throw new Error('Product not found');
