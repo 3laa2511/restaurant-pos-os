@@ -770,10 +770,10 @@ export class AccountingService {
 
     return withRlsContext(this.prisma, context, async (tx) => {
       const settledPaymentScope = {
-        status: { in: ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED', 'VOIDED'] as const },
+        status: { in: ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED', 'VOIDED'] },
         createdAt: { gte: from, lte: to },
-      };
-      const orderScope = {
+      } satisfies Prisma.PaymentWhereInput;
+      const orderScope: Prisma.OrderWhereInput = {
         ...(input.branchId ? { branchId: input.branchId } : {}),
         payments: { some: settledPaymentScope },
         branch: { tenantId },
