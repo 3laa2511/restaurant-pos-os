@@ -175,4 +175,27 @@ describe('InventoryService branch warehouse transfer stock routing', () => {
     expect(mocks.updateTransfer).not.toHaveBeenCalled();
   });
 
+
+  it('rejects a repeated receipt after the transfer has moved to RECEIVED', async () => {
+    const transfer = {
+      id: 'transfer-receive-duplicate',
+      tenantId: 'tenant-1',
+      fromWarehouseId: 'central-warehouse-1',
+      toWarehouseId: 'branch-warehouse-1',
+      status: 'IN_TRANSIT',
+      fromWarehouse: { id: 'central-warehouse-1', type: 'CENTRAL', branchId: null },
+      toWarehouse: { id: 'branch-warehouse-1', type: 'BRANCH', branchId: 'branch-1' },
+      items: [{ id: 'transfer-item-receive-duplicate', ingredientId: 'ingredient-1', quantityBaseUnit: 5, unitCost: 10 }],
+    };
+    const mocks = setup(transfer, { quantityBaseUnit: 10, averageCostPerBaseUnit: 4 });
+
+    await mocks.service.receiveTransfer(context, 'transfer-receive-duplicate');
+    await expect(mocks.service.receiveTransfer(context, 'transfer-receive-duplicate'))
+      .rejects.toThrow('Only in-transit transfers can be received');
+
+    expect(mocks.movementCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.accounting.postInventoryReceipt).toHaveBeenCalledTimes(1);
+    expect(mocks.branchUpsert).toHaveBeenCalledTimes(1);
+  });
+
 });
