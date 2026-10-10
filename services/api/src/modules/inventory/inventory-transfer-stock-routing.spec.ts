@@ -15,7 +15,7 @@ const context = {
 function setup(transfer: unknown, stock: unknown = null) {
   const findTransfer = jest.fn(async () => transfer);
   const updateTransfer = jest.fn(async (args: unknown) => args);
-  const branchFindUnique = jest.fn(async (_args: unknown) => stock);
+  const branchFindUnique = jest.fn(async (args: unknown) => { void args; return stock; });
   const branchUpdate = jest.fn(async (args: unknown) => args);
   const branchUpsert = jest.fn(async (args: unknown) => args);
   const warehouseFindUnique = jest.fn(async () => null);
@@ -43,8 +43,8 @@ function setup(transfer: unknown, stock: unknown = null) {
     $transaction: jest.fn(async (work: (transaction: unknown) => Promise<unknown>) => work(tx)),
   };
   const accounting = {
-    postInventoryDispatch: jest.fn(async (_tx: unknown, _context: unknown, _input: unknown) => undefined),
-    postInventoryReceipt: jest.fn(async (_tx: unknown, _context: unknown, _input: unknown) => undefined),
+    postInventoryDispatch: jest.fn(async (...args: unknown[]) => { void args; }),
+    postInventoryReceipt: jest.fn(async (...args: unknown[]) => { void args; }),
   };
   const service = new InventoryService(prisma as never, accounting as never);
   return {
