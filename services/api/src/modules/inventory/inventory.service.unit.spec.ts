@@ -156,6 +156,7 @@ describe('InventoryService.receive validation', () => {
     const service = new InventoryService({} as never, {} as never);
     await expect(service.receive(context, {
       branchId: 'branch-1',
+      idempotencyKey: 'receipt-idempotency-test-001',
       items: [
         { ingredientId: 'ingredient-1', quantityPurchaseUnit: 2, unitCost: 10 },
         { ingredientId: 'ingredient-1', quantityPurchaseUnit: 3, unitCost: 12 },
