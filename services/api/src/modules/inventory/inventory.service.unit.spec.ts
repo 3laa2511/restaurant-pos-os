@@ -165,3 +165,66 @@ describe('InventoryService.receive validation', () => {
   });
 });
 
+
+describe('InventoryService.receive idempotency', () => {
+  const context = {
+    tenantId: 'tenant-1',
+    branchId: 'branch-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    deviceId: 'device-1',
+    workspace: 'INVENTORY' as const,
+    roles: [],
+    permissions: [],
+  };
+
+  function setup(existingReceipt: unknown) {
+    const findExisting = jest.fn(async () => existingReceipt);
+    const findIngredient = jest.fn(async () => null);
+    const tx = {
+      $executeRaw: jest.fn(async () => 1),
+      branch: { findFirst: jest.fn(async () => ({ id: 'branch-1' })) },
+      inventoryReceipt: { findUnique: findExisting },
+      ingredient: { findFirst: findIngredient },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (work: (transaction: unknown) => Promise<unknown>) => work(tx)),
+    };
+    const service = new InventoryService(prisma as never, {} as never);
+    return { service, findExisting, findIngredient, prisma };
+  }
+
+  const receipt = {
+    id: 'receipt-1',
+    tenantId: 'tenant-1',
+    branchId: 'branch-1',
+    supplierId: null,
+    reference: 'invoice-123',
+    idempotencyKey: 'receipt-idempotency-test-001',
+    items: [{ ingredientId: 'ingredient-1', quantityPurchaseUnit: 2, unitCost: 10 }],
+  };
+
+  it('returns the existing receipt for a retry with the same payload', async () => {
+    const mocks = setup(receipt);
+    await expect(mocks.service.receive(context, {
+      branchId: 'branch-1',
+      reference: 'invoice-123',
+      idempotencyKey: 'receipt-idempotency-test-001',
+      items: [{ ingredientId: 'ingredient-1', quantityPurchaseUnit: 2, unitCost: 10 }],
+    })).resolves.toBe(receipt);
+    expect(mocks.findIngredient).not.toHaveBeenCalled();
+    expect(mocks.prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects reuse of a receipt key with a different payload', async () => {
+    const mocks = setup(receipt);
+    await expect(mocks.service.receive(context, {
+      branchId: 'branch-1',
+      reference: 'invoice-123',
+      idempotencyKey: 'receipt-idempotency-test-001',
+      items: [{ ingredientId: 'ingredient-1', quantityPurchaseUnit: 3, unitCost: 10 }],
+    })).rejects.toThrow('Inventory receipt idempotency key was already used with a different payload');
+    expect(mocks.findIngredient).not.toHaveBeenCalled();
+  });
+});
+
