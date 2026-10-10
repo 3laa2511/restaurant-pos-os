@@ -14,7 +14,13 @@ const context = {
 
 function setup(transfer: unknown, stock: unknown = null) {
   const findTransfer = jest.fn(async () => transfer);
-  const updateTransfer = jest.fn(async (args: unknown) => args);
+  const updateTransfer = jest.fn(async (args: unknown) => {
+    const data = (args as { data?: { status?: string } }).data;
+    if (data?.status && transfer && typeof transfer === 'object' && 'status' in transfer) {
+      (transfer as { status: string }).status = data.status;
+    }
+    return args;
+  });
   const branchFindUnique = jest.fn(async (args: unknown) => { void args; return stock; });
   const branchUpdate = jest.fn(async (args: unknown) => args);
   const branchUpsert = jest.fn(async (args: unknown) => args);
@@ -124,4 +130,49 @@ describe('InventoryService branch warehouse transfer stock routing', () => {
       { transferId: 'transfer-2', toWarehouseId: 'branch-warehouse-1', toBranchId: 'branch-1', amount: 50 },
     );
   });
+
+  it('rejects a repeated dispatch after the transfer has moved to IN_TRANSIT', async () => {
+    const transfer = {
+      id: 'transfer-duplicate',
+      tenantId: 'tenant-1',
+      fromWarehouseId: 'branch-warehouse-1',
+      toWarehouseId: 'central-warehouse-1',
+      status: 'APPROVED',
+      fromWarehouse: { id: 'branch-warehouse-1', type: 'BRANCH', branchId: 'branch-1' },
+      toWarehouse: { id: 'central-warehouse-1', type: 'CENTRAL', branchId: null },
+      items: [{ id: 'transfer-item-duplicate', ingredientId: 'ingredient-1', quantityBaseUnit: 4, unitCost: 0 }],
+    };
+    const mocks = setup(transfer, { quantityBaseUnit: 10, averageCostPerBaseUnit: 2 });
+
+    await mocks.service.dispatchTransfer(context, 'transfer-duplicate');
+    await expect(mocks.service.dispatchTransfer(context, 'transfer-duplicate'))
+      .rejects.toThrow('Only approved transfers can be dispatched');
+
+    expect(mocks.movementCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.accounting.postInventoryDispatch).toHaveBeenCalledTimes(1);
+    expect(mocks.branchUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects dispatch when branch stock is insufficient without writing movements or accounting', async () => {
+    const transfer = {
+      id: 'transfer-insufficient',
+      tenantId: 'tenant-1',
+      fromWarehouseId: 'branch-warehouse-1',
+      toWarehouseId: 'central-warehouse-1',
+      status: 'APPROVED',
+      fromWarehouse: { id: 'branch-warehouse-1', type: 'BRANCH', branchId: 'branch-1' },
+      toWarehouse: { id: 'central-warehouse-1', type: 'CENTRAL', branchId: null },
+      items: [{ id: 'transfer-item-insufficient', ingredientId: 'ingredient-1', quantityBaseUnit: 4, unitCost: 0 }],
+    };
+    const mocks = setup(transfer, { quantityBaseUnit: 3, averageCostPerBaseUnit: 2 });
+
+    await expect(mocks.service.dispatchTransfer(context, 'transfer-insufficient'))
+      .rejects.toThrow('Insufficient stock for ingredient ingredient-1');
+
+    expect(mocks.branchUpdate).not.toHaveBeenCalled();
+    expect(mocks.movementCreate).not.toHaveBeenCalled();
+    expect(mocks.accounting.postInventoryDispatch).not.toHaveBeenCalled();
+    expect(mocks.updateTransfer).not.toHaveBeenCalled();
+  });
+
 });
