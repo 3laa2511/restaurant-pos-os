@@ -568,10 +568,12 @@ model InventoryReceipt {
   supplierId String?
   supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   reference String?
+  idempotencyKey String
   receivedAt DateTime @default(now())
   totalCost Decimal @db.Decimal(12, 2)
   items InventoryReceiptItem[]
   createdAt DateTime @default(now())
+  @@unique([tenantId, idempotencyKey])
   @@index([tenantId, branchId, receivedAt])
 }
 
