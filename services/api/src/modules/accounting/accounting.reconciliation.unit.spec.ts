@@ -30,7 +30,7 @@ describe('AccountingService.reconciliation', () => {
       },
       inventoryMovement: { findMany: jest.fn(async () => data.movements ?? []) },
       inventoryStockBalance: { findMany: jest.fn(async () => data.stockBalances ?? []) },
-      journalLine: { findMany: jest.fn(async () => data.inventoryLines ?? []) },
+      journalLine: { findMany: jest.fn(async (...args: unknown[]) => { void args; return data.inventoryLines ?? []; }) },
     };
     const prisma = {
       $transaction: async <T>(work: (transaction: typeof tx) => Promise<T>) => work(tx),
@@ -113,6 +113,11 @@ describe('AccountingService.reconciliation', () => {
     expect(tx.inventoryMovement.findMany).toHaveBeenCalledTimes(1);
     expect(tx.inventoryStockBalance.findMany).toHaveBeenCalledTimes(1);
     expect(tx.journalLine.findMany).toHaveBeenCalledTimes(1);
+    const inventoryQuery = tx.journalLine.findMany.mock.calls[0]?.[0] as {
+      where: { entry: { is: { entryDate: { lte: Date } } } };
+    };
+    expect(inventoryQuery.where.entry.is.entryDate.lte.toISOString()).toBe(report.inventoryValuationAsOf);
+    expect(Date.parse(report.inventoryValuationAsOf)).toBeGreaterThan(Date.parse('2026-10-09T00:00:00.000Z'));
   });
 
   it('rejects invalid date ranges before querying the database', async () => {
