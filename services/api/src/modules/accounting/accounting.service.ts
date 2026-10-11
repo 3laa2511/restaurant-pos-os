@@ -868,7 +868,11 @@ export class AccountingService {
           const difference = postedCost === null ? null : money(postedCost - movementCost);
           return {
             sourceId, movementCost, postedCogs: postedCost, difference,
-            status: postedCost === null ? 'MISSING_JOURNAL' : Math.abs(difference!) > 0.01 ? 'MISMATCH' : 'MATCH',
+            // A zero-cost recipe consumes stock but intentionally posts no
+            // zero-value COGS journal entry; that is not a reconciliation defect.
+            status: postedCost === null
+              ? (movementCost <= 0.01 ? 'MATCH' : 'MISSING_JOURNAL')
+              : Math.abs(difference!) > 0.01 ? 'MISMATCH' : 'MATCH',
           };
         })
         .filter((finding) => finding.status !== 'MATCH');
