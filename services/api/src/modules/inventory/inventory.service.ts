@@ -241,7 +241,7 @@ export class InventoryService {
 
   async approveTransfer(context: AuthContext, transferId: string) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.$transaction(async tx => {
+    return this.withSerializableTransfer(async tx => {
       await setRlsContext(tx, context);
       const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true } });
       if (!transfer) throw new Error('Transfer not found');
