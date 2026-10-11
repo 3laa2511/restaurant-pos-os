@@ -12,7 +12,7 @@ const context = {
   permissions: [],
 };
 
-function setup(transfer: unknown, stock: unknown = null) {
+function setup(transfer: unknown, stock: unknown = null, serializationFailures = 0) {
   const findTransfer = jest.fn(async () => transfer);
   const updateTransfer = jest.fn(async (args: unknown) => {
     const data = (args as { data?: { status?: string } }).data;
@@ -45,8 +45,15 @@ function setup(transfer: unknown, stock: unknown = null) {
     },
     inventoryMovement: { create: movementCreate },
   };
+  let failuresRemaining = serializationFailures;
   const prisma = {
-    $transaction: jest.fn(async (work: (transaction: unknown) => Promise<unknown>) => work(tx)),
+    $transaction: jest.fn(async (work: (transaction: unknown) => Promise<unknown>) => {
+      if (failuresRemaining > 0) {
+        failuresRemaining -= 1;
+        throw Object.assign(new Error('Serialization conflict'), { code: 'P2034' });
+      }
+      return work(tx);
+    }),
   };
   const accounting = {
     postInventoryDispatch: jest.fn(async (...args: unknown[]) => { void args; }),
@@ -61,6 +68,42 @@ function setup(transfer: unknown, stock: unknown = null) {
 }
 
 describe('InventoryService branch warehouse transfer stock routing', () => {
+  it('retries a transient serializable transaction conflict once', async () => {
+    const transfer = {
+      id: 'transfer-retry',
+      tenantId: 'tenant-1',
+      fromWarehouseId: 'branch-warehouse-1',
+      toWarehouseId: 'central-warehouse-1',
+      status: 'APPROVED',
+      fromWarehouse: { id: 'branch-warehouse-1', type: 'BRANCH', branchId: 'branch-1' },
+      toWarehouse: { id: 'central-warehouse-1', type: 'CENTRAL', branchId: null },
+      items: [{ id: 'transfer-item-retry', ingredientId: 'ingredient-1', quantityBaseUnit: 2, unitCost: 0 }],
+    };
+    const mocks = setup(transfer, { quantityBaseUnit: 5, averageCostPerBaseUnit: 3 }, 1);
+
+    await expect(mocks.service.dispatchTransfer(context, 'transfer-retry')).resolves.toBeDefined();
+
+    expect(mocks.branchUpdate).toHaveBeenCalledTimes(1);
+    expect(mocks.movementCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry non-serialization errors', async () => {
+    const transfer = {
+      id: 'transfer-no-retry',
+      tenantId: 'tenant-1',
+      fromWarehouseId: 'branch-warehouse-1',
+      toWarehouseId: 'central-warehouse-1',
+      status: 'APPROVED',
+      fromWarehouse: { id: 'branch-warehouse-1', type: 'BRANCH', branchId: 'branch-1' },
+      toWarehouse: { id: 'central-warehouse-1', type: 'CENTRAL', branchId: null },
+      items: [{ id: 'transfer-item-no-retry', ingredientId: 'ingredient-1', quantityBaseUnit: 2, unitCost: 0 }],
+    };
+    const mocks = setup(transfer, { quantityBaseUnit: 1, averageCostPerBaseUnit: 3 });
+
+    await expect(mocks.service.dispatchTransfer(context, 'transfer-no-retry'))
+      .rejects.toThrow('Insufficient stock for ingredient ingredient-1');
+  });
+
   it('deducts dispatch quantity from the branch stock balance used by POS', async () => {
     const transfer = {
       id: 'transfer-1',
