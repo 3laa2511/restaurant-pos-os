@@ -784,6 +784,9 @@ export class AccountingService {
         entryDate: { gte: from, lte: to },
         ...(input.branchId ? { branchId: input.branchId } : {}),
       };
+      // Stock balances are live snapshots, so compare them with the ledger at the
+      // same snapshot time, not with a historical report end date.
+      const inventoryValuationAsOf = new Date();
 
       const [orders, saleEntries, cogsEntries, movements, stockBalances, inventoryLines] = await Promise.all([
         tx.order.findMany({
@@ -816,7 +819,7 @@ export class AccountingService {
         tx.journalLine.findMany({
           where: {
             account: { is: { tenantId, code: '1200' } },
-            entry: { is: { tenantId, status: 'POSTED', entryDate: { lte: to }, ...(input.branchId ? { branchId: input.branchId } : {}) } },
+            entry: { is: { tenantId, status: 'POSTED', entryDate: { lte: inventoryValuationAsOf }, ...(input.branchId ? { branchId: input.branchId } : {}) } },
           },
           select: { branchId: true, debit: true, credit: true },
         }),
@@ -898,6 +901,7 @@ export class AccountingService {
       ];
       return {
         period: { from: from.toISOString(), to: to.toISOString(), branchId: input.branchId ?? null },
+        inventoryValuationAsOf: inventoryValuationAsOf.toISOString(),
         summary: {
           checkedPaidOrders: orders.filter((order) => order.payments.some((payment) => payment.status === 'PAID' || payment.status === 'PARTIALLY_REFUNDED' || payment.status === 'REFUNDED' || payment.status === 'VOIDED')).length,
           checkedCogsEntries: cogsByOrder.size,
@@ -907,7 +911,7 @@ export class AccountingService {
           status: findings.length ? 'ATTENTION_REQUIRED' : 'NO_MISMATCHES_FOUND',
         },
         findings,
-        note: 'Reconciliation is read-only. Sales compares original order totals with original sale journals; refunds and voids remain separate sources. Inventory valuation compares current stock balances with the inventory-account balance accumulated through the report end date, so use a current end date for that comparison.',
+        note: 'Reconciliation is read-only. Sales compares original order totals with original sale journals; refunds and voids remain separate sources. Sales and COGS findings use the selected report period. Inventory valuation is a current-position check: live stock balances are compared with the inventory-account balance through inventoryValuationAsOf, independently of the selected report period.',
       };
     });
   }
