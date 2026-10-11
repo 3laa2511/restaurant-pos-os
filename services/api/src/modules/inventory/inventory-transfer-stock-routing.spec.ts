@@ -91,7 +91,6 @@ describe('InventoryService branch warehouse transfer stock routing', () => {
   });
 
   it('retries a transient serializable transaction conflict once', async () => {
-  it('retries a transient serializable transaction conflict once', async () => {
     const transfer = {
       id: 'transfer-retry',
       tenantId: 'tenant-1',
