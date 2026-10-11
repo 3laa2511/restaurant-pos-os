@@ -150,7 +150,16 @@ describe('AccountingService.reconciliation', () => {
       inventoryLines: [{ branchId: null, debit: '0.00', credit: '0.00' }],
     });
 
-    const report = await service.reconciliation({ ...context, branchId: 'branch-1' } as never, {
+    const report = await service.reconciliation({
+      userId: 'user-1',
+      tenantId: 'tenant-1',
+      branchId: 'branch-1',
+      deviceId: null,
+      sessionId: 'session-1',
+      workspace: 'ACCOUNTING',
+      roles: [],
+      permissions: [],
+    } as never, {
       branchId: 'branch-1',
       to: '2026-10-09T00:00:00.000Z',
     });
