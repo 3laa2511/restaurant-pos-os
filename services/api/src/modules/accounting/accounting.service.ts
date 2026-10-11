@@ -894,7 +894,7 @@ export class AccountingService {
         if (!line.branchId) continue;
         ledgerValueByBranch.set(line.branchId, (ledgerValueByBranch.get(line.branchId) ?? 0) + Number(line.debit) - Number(line.credit));
       }
-      const valuationFindings = [...new Set([...stockValueByBranch.keys(), ...ledgerValueByBranch.keys()])]
+      const valuationFindings: Array<{ scope: string; branchId: string | null; stockValuation: number; inventoryAccountBalance: number; difference: number; status: string }> = [...new Set([...stockValueByBranch.keys(), ...ledgerValueByBranch.keys()])]
         .map((branchId) => {
           const stockValue = money(stockValueByBranch.get(branchId) ?? 0);
           const ledgerValue = money(ledgerValueByBranch.get(branchId) ?? 0);
