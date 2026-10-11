@@ -252,9 +252,28 @@ export class InventoryService {
     });
   }
 
+  private async withSerializableTransfer<T>(operation: (tx: Db) => Promise<T>): Promise<T> {
+    // PostgreSQL may abort one of two concurrent serializable operations with P2034.
+    // Retry once so the losing request re-reads the transfer state and returns a
+    // clear state/stock conflict instead of leaking a transient serialization error.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(operation, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        const isSerializationConflict = typeof error === 'object'
+          && error !== null
+          && 'code' in error
+          && error.code === 'P2034';
+        if (!isSerializationConflict || attempt >= 1) throw error;
+      }
+    }
+  }
+
   async dispatchTransfer(context: AuthContext, transferId: string) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.$transaction(async tx => {
+    return this.withSerializableTransfer(async tx => {
       await setRlsContext(tx, context);
       const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
       if (!transfer) throw new Error('Transfer not found');
@@ -283,12 +302,12 @@ export class InventoryService {
         await this.accounting.postInventoryDispatch(tx, context, { transferId: transfer.id, fromWarehouseId: transfer.fromWarehouseId, fromBranchId: transfer.fromWarehouse.branchId, amount: transferAmount });
       }
       return tx.inventoryTransfer.update({ where: { id: transfer.id }, data: { status: 'IN_TRANSIT', sentAt: new Date() }, include: { items: true } });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 
   async receiveTransfer(context: AuthContext, transferId: string) {
     const tenantId = assertTenantScope(context);
-    return this.prisma.$transaction(async tx => {
+    return this.withSerializableTransfer(async tx => {
       await setRlsContext(tx, context);
       let transferAmount = 0;
       const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
@@ -322,7 +341,7 @@ export class InventoryService {
         await this.accounting.postInventoryReceipt(tx, context, { transferId: transfer.id, toWarehouseId: transfer.toWarehouseId, toBranchId: transfer.toWarehouse.branchId, amount: transferAmount });
       }
       return tx.inventoryTransfer.update({ where: { id: transfer.id }, data: { status: 'RECEIVED', receivedAt: new Date() }, include: { items: true } });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 
   async setRecipe(context:AuthContext,productId:string,input:{items:Array<{ingredientId:string;quantityBaseUnit:number;wastePercent?:number}>}){
