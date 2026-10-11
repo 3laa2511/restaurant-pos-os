@@ -120,6 +120,27 @@ describe('AccountingService.reconciliation', () => {
     expect(Date.parse(report.inventoryValuationAsOf)).toBeGreaterThan(Date.parse('2026-10-09T00:00:00.000Z'));
   });
 
+  it('does not report a missing COGS journal for zero-cost stock consumption', async () => {
+    const { service } = serviceWithData({
+      movements: [{
+        referenceId: 'order-zero-cost',
+        quantityBaseUnit: '2',
+        unitCost: '0.00',
+        branchId: 'branch-1',
+      }],
+    });
+
+    const report = await service.reconciliation(context, {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-11T23:59:59.999Z',
+    });
+
+    expect(report.findings).not.toContainEqual(expect.objectContaining({
+      category: 'COGS',
+      sourceId: 'order-zero-cost',
+    }));
+  });
+
   it('rejects invalid date ranges before querying the database', async () => {
     const { service, tx } = serviceWithData({});
 
