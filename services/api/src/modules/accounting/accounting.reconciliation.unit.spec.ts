@@ -145,7 +145,7 @@ describe('AccountingService.reconciliation', () => {
   });
 
   it('does not include central warehouse valuation in a branch-only reconciliation', async () => {
-    const { service } = serviceWithData({
+    const { service, tx } = serviceWithData({
       warehouseStockBalances: [{ quantityBaseUnit: '5', averageCostPerBaseUnit: '4.00' }],
       inventoryLines: [{ branchId: null, debit: '0.00', credit: '0.00' }],
     });
@@ -165,6 +165,7 @@ describe('AccountingService.reconciliation', () => {
     });
 
     expect(report.findings).not.toContainEqual(expect.objectContaining({ scope: 'CENTRAL_WAREHOUSES' }));
+    expect(tx.warehouseStockBalance.findMany).not.toHaveBeenCalled();
   });
 
   it('does not report a missing COGS journal for zero-cost stock consumption', async () => {
