@@ -788,7 +788,7 @@ export class AccountingService {
       // same snapshot time, not with a historical report end date.
       const inventoryValuationAsOf = new Date();
 
-      const [orders, saleEntries, cogsEntries, movements, stockBalances, inventoryLines] = await Promise.all([
+      const [orders, saleEntries, cogsEntries, movements, stockBalances, warehouseStockBalances, inventoryLines] = await Promise.all([
         tx.order.findMany({
           where: orderScope,
           select: {
@@ -815,6 +815,12 @@ export class AccountingService {
         tx.inventoryStockBalance.findMany({
           where: { tenantId, ...(input.branchId ? { branchId: input.branchId } : {}) },
           select: { branchId: true, quantityBaseUnit: true, averageCostPerBaseUnit: true },
+        }),
+        // Central warehouse stock is stored separately from branch stock balances.
+        // Only include it in company-wide reconciliation, never in a branch-only report.
+        tx.warehouseStockBalance.findMany({
+          where: { tenantId, warehouse: { is: { branchId: null } } },
+          select: { quantityBaseUnit: true, averageCostPerBaseUnit: true },
         }),
         tx.journalLine.findMany({
           where: {
@@ -893,10 +899,26 @@ export class AccountingService {
           const stockValue = money(stockValueByBranch.get(branchId) ?? 0);
           const ledgerValue = money(ledgerValueByBranch.get(branchId) ?? 0);
           const difference = money(ledgerValue - stockValue);
-          return { branchId, stockValuation: stockValue, inventoryAccountBalance: ledgerValue, difference,
+          return { scope: 'BRANCH', branchId, stockValuation: stockValue, inventoryAccountBalance: ledgerValue, difference,
             status: Math.abs(difference) > 0.01 ? 'MISMATCH' : 'MATCH' };
         })
         .filter((finding) => finding.status !== 'MATCH');
+
+      const centralStockValue = money(warehouseStockBalances.reduce(
+        (sum, balance) => sum + Number(balance.quantityBaseUnit) * Number(balance.averageCostPerBaseUnit), 0,
+      ));
+      const centralLedgerValue = money(inventoryLines
+        .filter((line) => line.branchId === null)
+        .reduce((sum, line) => sum + Number(line.debit) - Number(line.credit), 0));
+      const centralDifference = money(centralLedgerValue - centralStockValue);
+      if (!input.branchId && (centralStockValue > 0.01 || Math.abs(centralLedgerValue) > 0.01)) {
+        if (Math.abs(centralDifference) > 0.01) {
+          valuationFindings.push({
+            scope: 'CENTRAL_WAREHOUSES', branchId: null, stockValuation: centralStockValue,
+            inventoryAccountBalance: centralLedgerValue, difference: centralDifference, status: 'MISMATCH',
+          });
+        }
+      }
 
       const findings = [
         ...saleFindings.map((item) => ({ category: 'SALES_REVENUE', ...item })),
