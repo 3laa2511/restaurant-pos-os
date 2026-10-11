@@ -19,6 +19,7 @@ describe('AccountingService.reconciliation', () => {
     cogsEntries?: unknown[];
     movements?: unknown[];
     stockBalances?: unknown[];
+    warehouseStockBalances?: unknown[];
     inventoryLines?: unknown[];
   }) {
     const tx = {
@@ -30,6 +31,7 @@ describe('AccountingService.reconciliation', () => {
       },
       inventoryMovement: { findMany: jest.fn(async () => data.movements ?? []) },
       inventoryStockBalance: { findMany: jest.fn(async () => data.stockBalances ?? []) },
+      warehouseStockBalance: { findMany: jest.fn(async () => data.warehouseStockBalances ?? []) },
       journalLine: { findMany: jest.fn(async (...args: unknown[]) => { void args; return data.inventoryLines ?? []; }) },
     };
     const prisma = {
@@ -118,6 +120,42 @@ describe('AccountingService.reconciliation', () => {
     };
     expect(inventoryQuery.where.entry.is.entryDate.lte.toISOString()).toBe(report.inventoryValuationAsOf);
     expect(Date.parse(report.inventoryValuationAsOf)).toBeGreaterThan(Date.parse('2026-10-09T00:00:00.000Z'));
+  });
+
+  it('reconciles central warehouse stock against unassigned inventory ledger balance', async () => {
+    const { service } = serviceWithData({
+      warehouseStockBalances: [
+        { quantityBaseUnit: '5', averageCostPerBaseUnit: '4.00' },
+        { quantityBaseUnit: '2', averageCostPerBaseUnit: '10.00' },
+      ],
+      inventoryLines: [{ branchId: null, debit: '35.00', credit: '0.00' }],
+    });
+
+    const report = await service.reconciliation(context, { to: '2026-10-09T00:00:00.000Z' });
+
+    expect(report.findings).toContainEqual(expect.objectContaining({
+      category: 'INVENTORY_VALUATION',
+      scope: 'CENTRAL_WAREHOUSES',
+      branchId: null,
+      stockValuation: 40,
+      inventoryAccountBalance: 35,
+      difference: -5,
+      status: 'MISMATCH',
+    }));
+  });
+
+  it('does not include central warehouse valuation in a branch-only reconciliation', async () => {
+    const { service } = serviceWithData({
+      warehouseStockBalances: [{ quantityBaseUnit: '5', averageCostPerBaseUnit: '4.00' }],
+      inventoryLines: [{ branchId: null, debit: '0.00', credit: '0.00' }],
+    });
+
+    const report = await service.reconciliation({ ...context, branchId: 'branch-1' } as never, {
+      branchId: 'branch-1',
+      to: '2026-10-09T00:00:00.000Z',
+    });
+
+    expect(report.findings).not.toContainEqual(expect.objectContaining({ scope: 'CENTRAL_WAREHOUSES' }));
   });
 
   it('does not report a missing COGS journal for zero-cost stock consumption', async () => {
