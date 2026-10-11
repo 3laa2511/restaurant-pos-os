@@ -68,6 +68,29 @@ function setup(transfer: unknown, stock: unknown = null, serializationFailures =
 }
 
 describe('InventoryService branch warehouse transfer stock routing', () => {
+  it('serializes transfer approval and rejects duplicate approval after the state changes', async () => {
+    const transfer = {
+      id: 'transfer-approve-once',
+      tenantId: 'tenant-1',
+      fromWarehouseId: 'branch-warehouse-1',
+      toWarehouseId: 'central-warehouse-1',
+      status: 'REQUESTED',
+      fromWarehouse: { id: 'branch-warehouse-1', type: 'BRANCH', branchId: 'branch-1' },
+      toWarehouse: { id: 'central-warehouse-1', type: 'CENTRAL', branchId: null },
+      items: [],
+    };
+    const mocks = setup(transfer);
+
+    await mocks.service.approveTransfer(context, 'transfer-approve-once');
+    expect(transfer.status).toBe('APPROVED');
+
+    await expect(mocks.service.approveTransfer(context, 'transfer-approve-once'))
+      .rejects.toThrow('Transfer cannot be approved in its current state');
+    expect(mocks.prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(mocks.updateTransfer).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a transient serializable transaction conflict once', async () => {
   it('retries a transient serializable transaction conflict once', async () => {
     const transfer = {
       id: 'transfer-retry',
