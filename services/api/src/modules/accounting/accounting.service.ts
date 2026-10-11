@@ -818,10 +818,12 @@ export class AccountingService {
         }),
         // Central warehouse stock is stored separately from branch stock balances.
         // Only include it in company-wide reconciliation, never in a branch-only report.
-        tx.warehouseStockBalance.findMany({
-          where: { tenantId, warehouse: { is: { branchId: null } } },
-          select: { quantityBaseUnit: true, averageCostPerBaseUnit: true },
-        }),
+        input.branchId
+          ? Promise.resolve([])
+          : tx.warehouseStockBalance.findMany({
+              where: { tenantId, warehouse: { is: { branchId: null } } },
+              select: { quantityBaseUnit: true, averageCostPerBaseUnit: true },
+            }),
         tx.journalLine.findMany({
           where: {
             account: { is: { tenantId, code: '1200' } },
