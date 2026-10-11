@@ -61,7 +61,7 @@ function setup(transfer: unknown, stock: unknown = null, serializationFailures =
   };
   const service = new InventoryService(prisma as never, accounting as never);
   return {
-    service, tx, branchFindUnique, branchUpdate, branchUpsert,
+    service, tx, prisma, branchFindUnique, branchUpdate, branchUpsert,
     warehouseFindUnique, warehouseUpdate, warehouseUpsert,
     movementCreate, updateTransfer, accounting,
   };
@@ -83,6 +83,7 @@ describe('InventoryService branch warehouse transfer stock routing', () => {
 
     await expect(mocks.service.dispatchTransfer(context, 'transfer-retry')).resolves.toBeDefined();
 
+    expect(mocks.prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(mocks.branchUpdate).toHaveBeenCalledTimes(1);
     expect(mocks.movementCreate).toHaveBeenCalledTimes(1);
   });
@@ -102,6 +103,7 @@ describe('InventoryService branch warehouse transfer stock routing', () => {
 
     await expect(mocks.service.dispatchTransfer(context, 'transfer-no-retry'))
       .rejects.toThrow('Insufficient stock for ingredient ingredient-1');
+    expect(mocks.prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it('deducts dispatch quantity from the branch stock balance used by POS', async () => {
