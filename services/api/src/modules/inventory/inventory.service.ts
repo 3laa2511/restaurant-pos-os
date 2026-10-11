@@ -252,7 +252,7 @@ export class InventoryService {
     });
   }
 
-  private async withSerializableTransfer<T>(operation: (tx: Db) => Promise<T>): Promise<T> {
+  private async withSerializableTransfer<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
     // PostgreSQL may abort one of two concurrent serializable operations with P2034.
     // Retry once so the losing request re-reads the transfer state and returns a
     // clear state/stock conflict instead of leaking a transient serialization error.
