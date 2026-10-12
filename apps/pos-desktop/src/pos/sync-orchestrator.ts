@@ -57,7 +57,14 @@ export class SyncOrchestrator {
       attempted += 1;
       try {
         await this.transport.push(item);
-        await this.repository.markSynced(item.id, this.workerId);
+        const acknowledged = await this.repository.markSynced(item.id, this.workerId);
+        if (acknowledged === false) {
+          // The lease was reclaimed while the request was in flight. The server may
+          // already have accepted the idempotent push, so leave retry/recovery to the
+          // current lease owner rather than overwriting its state.
+          failed += 1;
+          break;
+        }
         synced += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
