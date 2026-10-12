@@ -91,3 +91,32 @@ test('rejects a retry when order items change but the total stays the same', () 
     payment,
   ), /different order payload/);
 });
+
+test('rejects retry when checkout identity changes despite an identical amount', () => {
+  const detailedOrder = {
+    ...order,
+    branchId: 'branch-1',
+    deviceId: 'device-1',
+    cashierId: 'cashier-1',
+    type: 'TAKEAWAY',
+    status: 'DRAFT',
+    subtotal: 125,
+    discount: 0,
+    tax: 0,
+    serviceFee: 0,
+    deliveryFee: 0,
+    createdAt: '2026-10-13T00:00:00.000Z',
+    items: [{ productId: 'product-1', quantity: 1, unitPrice: 125, note: null, modifiers: [] }],
+  };
+  const persisted = { ...detailedOrder, payment };
+  for (const changed of [
+    { ...detailedOrder, branchId: 'branch-2' },
+    { ...detailedOrder, deviceId: 'device-2' },
+    { ...detailedOrder, cashierId: 'cashier-2' },
+  ]) {
+    assert.throws(
+      () => assertExistingCheckoutMatches(changed, detailedOrder.id, persisted, payment),
+      /different order payload/,
+    );
+  }
+});
