@@ -48,11 +48,13 @@ export class SyncOrchestrator {
     const maxRetries = this.options.maxRetries ?? 8;
     const items = await this.repository.getPending(batchSize, maxRetries, this.workerId, this.leaseMs);
 
+    let attempted = 0;
     let synced = 0;
     let failed = 0;
     let failedAttempts: number | null = null;
 
     for (const item of items) {
+      attempted += 1;
       try {
         await this.transport.push(item);
         await this.repository.markSynced(item.id, this.workerId);
@@ -66,6 +68,6 @@ export class SyncOrchestrator {
       }
     }
 
-    return { attempted: items.length, synced, failed, failedAttempts };
+    return { attempted, synced, failed, failedAttempts };
   }
 }
