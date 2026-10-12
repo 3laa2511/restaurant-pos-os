@@ -90,6 +90,27 @@ describe('SyncService', () => {
     expect(retry).toEqual(first);
   });
 
+  it('preserves array order when comparing idempotent JSON payloads', async () => {
+    const prisma = createPrismaMock();
+    const service = new SyncService(prisma as never, accountingMock as never);
+
+    const first = await service.submit(authContext, {
+      ...envelope,
+      payload: { id: 'order-1', items: [{ productId: 'A' }, { productId: 'B' }] },
+    });
+    const reordered = await service.submit(authContext, {
+      ...envelope,
+      payload: { id: 'order-1', items: [{ productId: 'B' }, { productId: 'A' }] },
+    });
+
+    expect(first.status).toBe('REJECTED');
+    expect(reordered).toEqual({
+      status: 'CONFLICT',
+      operationId: first.operationId,
+      reason: 'Idempotency key was reused with a different operation',
+    });
+  });
+
   it('returns conflict when an idempotency key is reused with different content', async () => {
     const prisma = createPrismaMock();
     const service = new SyncService(prisma as never, accountingMock as never);
