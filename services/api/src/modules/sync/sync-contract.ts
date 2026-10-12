@@ -87,3 +87,31 @@ export function validateSyncEnvelope(input: unknown): asserts input is SyncEnvel
     throw new Error('Sync payload is too large');
   }
 }
+
+/**
+ * Validate an HTTP sync acknowledgement before the desktop marks its durable
+ * outbox item as synced. A 2xx response without a recognized result is not an
+ * acknowledgement and must remain retryable.
+ */
+export function assertSyncAcknowledgement(httpStatus: number, result: unknown): asserts result is SyncResult {
+  if (httpStatus < 200 || httpStatus >= 300) {
+    throw new Error(`Sync HTTP ${httpStatus}`);
+  }
+  if (!result || typeof result !== 'object' || !('status' in result)) {
+    throw new Error('Sync response did not contain a valid acknowledgement');
+  }
+
+  const acknowledgement = result as Partial<SyncResult>;
+  if (acknowledgement.status === 'CONFLICT' || acknowledgement.status === 'REJECTED') {
+    const reason = 'reason' in acknowledgement && typeof acknowledgement.reason === 'string'
+      ? acknowledgement.reason
+      : 'operation rejected';
+    throw new Error(`Sync ${acknowledgement.status.toLowerCase()}: ${reason}`);
+  }
+  if (!['ACCEPTED', 'APPLIED', 'DUPLICATE'].includes(acknowledgement.status ?? '')) {
+    throw new Error('Sync response contained an unknown acknowledgement status');
+  }
+  if (typeof acknowledgement.operationId !== 'string' || !acknowledgement.operationId.trim()) {
+    throw new Error('Sync response did not contain a valid operation id');
+  }
+}
