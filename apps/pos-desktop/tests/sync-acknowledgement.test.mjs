@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import ts from 'typescript';
 
-const source = readFileSync(new URL('../../services/api/src/modules/sync/sync-contract.ts', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../../services/api/src/modules/sync/sync-contract.ts', import.meta.url), 'utf8');
 const javascript = ts.transpile(source, { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 });
 const encoded = Buffer.from(javascript).toString('base64');
 const { assertSyncAcknowledgement } = await import(`data:text/javascript;base64,${encoded}`);
