@@ -74,6 +74,22 @@ describe('SyncService', () => {
     expect(second).toEqual(first);
   });
 
+  it('treats equivalent JSON payloads with different object key order as the same retry', async () => {
+    const prisma = createPrismaMock();
+    const service = new SyncService(prisma as never, accountingMock as never);
+
+    const first = await service.submit(authContext, {
+      ...envelope,
+      payload: { id: 'order-1', total: 100, metadata: { source: 'POS', version: 1 } },
+    });
+    const retry = await service.submit(authContext, {
+      ...envelope,
+      payload: { metadata: { version: 1, source: 'POS' }, total: 100, id: 'order-1' },
+    });
+
+    expect(retry).toEqual(first);
+  });
+
   it('returns conflict when an idempotency key is reused with different content', async () => {
     const prisma = createPrismaMock();
     const service = new SyncService(prisma as never, accountingMock as never);
