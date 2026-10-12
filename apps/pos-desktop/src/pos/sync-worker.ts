@@ -7,7 +7,7 @@ import { getPosRuntimeIdentity } from './runtime-identity.js';
 
 export type { SyncQueueItem, SyncTransport } from './sync-contract.js';
 export interface SyncWorkerOptions { batchSize?: number; maxRetries?: number; baseDelayMs?: number; maxDelayMs?: number; workerId?: string; leaseMs?: number; }
-export interface SyncWorkerRuntimeOptions extends SyncWorkerOptions { repository: SyncRepository; transport: SyncTransport; intervalMs?: number; }
+export interface SyncWorkerRuntimeOptions extends SyncWorkerOptions { repository: SyncRepository; transport: SyncTransport; intervalMs?: number; onError?: (error: unknown) => void; }
 export interface SyncWorkerRuntime { stop(): void; }
 
 export class OfflineSyncWorker {
@@ -31,11 +31,14 @@ export class OfflineSyncWorker {
       return result.synced;
     } finally { this.running = false; }
   }
-  start(intervalMs = 2000): () => void {
+  start(intervalMs = 2000, onError?: (error: unknown) => void): () => void {
     let stopped = false;
     const tick = async (): Promise<void> => {
       if (stopped) return;
-      try { await this.runOnce(); } catch { /* durable queue retains work */ }
+      try { await this.runOnce(); } catch (error) {
+        // Keep retrying durable work, but expose failures to the host UI/logging.
+        try { onError?.(error); } catch { /* observer failures must not stop sync */ }
+      }
       if (!stopped) this.timer = setTimeout(() => void tick(), intervalMs);
     };
     void tick();
@@ -73,5 +76,5 @@ export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetc
 
 export function createSyncWorkerRuntime(options: SyncWorkerRuntimeOptions): SyncWorkerRuntime {
   const worker = new OfflineSyncWorker(options.repository, options.transport, options);
-  return { stop: worker.start(options.intervalMs ?? 2000) };
+  return { stop: worker.start(options.intervalMs ?? 2000, options.onError) };
 }
