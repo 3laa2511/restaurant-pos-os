@@ -60,3 +60,34 @@ test('rejects a completed-checkout retry when the stored outbox payload has no p
     /different payment details/,
   );
 });
+
+test('rejects a retry when order items change but the total stays the same', () => {
+  const detailedOrder = {
+    ...order,
+    branchId: 'branch-1',
+    deviceId: 'device-1',
+    cashierId: 'cashier-1',
+    type: 'DINE_IN',
+    status: 'DRAFT',
+    subtotal: 125,
+    discount: 0,
+    tax: 0,
+    serviceFee: 0,
+    deliveryFee: 0,
+    createdAt: '2026-10-13T00:00:00.000Z',
+    items: [{ productId: 'product-1', quantity: 1, unitPrice: 125, note: null, modifiers: [] }],
+  };
+  const storedDetailedOrder = { ...detailedOrder, payment };
+  assert.doesNotThrow(() => assertExistingCheckoutMatches(
+    detailedOrder,
+    detailedOrder.id,
+    storedDetailedOrder,
+    payment,
+  ));
+  assert.throws(() => assertExistingCheckoutMatches(
+    { ...detailedOrder, items: [{ ...detailedOrder.items[0], productId: 'product-2' }] },
+    detailedOrder.id,
+    storedDetailedOrder,
+    payment,
+  ), /different order payload/);
+});
