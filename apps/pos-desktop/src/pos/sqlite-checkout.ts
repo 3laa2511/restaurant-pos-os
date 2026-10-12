@@ -5,6 +5,7 @@ import type { PosRuntimeIdentity } from './runtime-identity.js';
 import type { PaymentInput } from '../../../../services/api/src/modules/payments/payment-policy.js';
 import { assertIdempotencyKey } from '../../../../services/api/src/modules/orders/idempotency.js';
 import { getPosRuntimeIdentity } from './runtime-identity.js';
+import { assertExistingCheckoutMatches } from './checkout-idempotency.js';
 
 type SqlStatement = { sql: string; params: unknown[] };
 type ExistingSyncRecord = { entity_id: string; payload: string };
@@ -143,24 +144,7 @@ async function assertNotAlreadyCommitted(
   );
   if (!rows.length) return false;
   const stored = JSON.parse(rows[0].payload) as SyncCheckoutPayload;
-  if (rows[0].entity_id !== input.order.id || stored.id !== input.order.id) {
-    throw new Error('Checkout idempotency key was reused with a different order');
-  }
-  if (stored.total !== input.order.total || stored.orderNumber !== input.order.orderNumber) {
-    throw new Error('Checkout idempotency key was reused with a different order payload');
-  }
-  if (expectedPayment) {
-    const existingPayment = stored.payment;
-    if (!existingPayment
-      || existingPayment.paymentId !== expectedPayment.paymentId
-      || existingPayment.orderId !== expectedPayment.orderId
-      || existingPayment.shiftId !== expectedPayment.shiftId
-      || existingPayment.method !== expectedPayment.method
-      || existingPayment.amount !== expectedPayment.amount
-      || (existingPayment.reference ?? null) !== (expectedPayment.reference ?? null)) {
-      throw new Error('Checkout idempotency key was reused with different payment details');
-    }
-  }
+  assertExistingCheckoutMatches(input.order, rows[0].entity_id, stored, expectedPayment);
   return true;
 }
 
