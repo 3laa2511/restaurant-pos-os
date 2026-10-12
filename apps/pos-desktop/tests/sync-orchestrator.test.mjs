@@ -61,3 +61,27 @@ test('overlapping runOnce calls on one orchestrator do not push the same batch t
   assert.equal(completed.synced, 1);
   assert.equal(pushCount, 1);
 });
+
+test('a failed sync is recorded for retry and stops later items in sequence', async () => {
+  const items = [
+    { id: 'sync-1', entity_type: 'ORDER', entity_id: 'order-1', operation: 'CHECKOUT', idempotency_key: 'key-1', client_sequence: 1, payload: '{}', status: 'SYNCING', attempts: 2, last_error: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+    { id: 'sync-2', entity_type: 'ORDER', entity_id: 'order-2', operation: 'CHECKOUT', idempotency_key: 'key-2', client_sequence: 2, payload: '{}', status: 'SYNCING', attempts: 0, last_error: null, created_at: '2026-01-01T00:00:01Z', updated_at: '2026-01-01T00:00:01Z' },
+  ];
+  const failures = [];
+  let pushCount = 0;
+  const repository = {
+    async getPending() { return items; },
+    async markSynced() {},
+    async markFailed(id, workerId, message) { failures.push({ id, workerId, message }); },
+  };
+  const transport = {
+    async push() { pushCount += 1; throw new Error('network unavailable'); },
+  };
+  const orchestrator = new SyncOrchestrator(repository, transport, { workerId: 'worker-retry' });
+
+  const result = await orchestrator.runOnce();
+
+  assert.deepEqual(result, { attempted: 2, synced: 0, failed: 1, failedAttempts: 3 });
+  assert.deepEqual(failures, [{ id: 'sync-1', workerId: 'worker-retry', message: 'network unavailable' }]);
+  assert.equal(pushCount, 1);
+});
