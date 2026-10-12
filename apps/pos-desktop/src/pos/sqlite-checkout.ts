@@ -160,13 +160,9 @@ async function persistWithIdempotencyRecovery(
     // Two checkout attempts can race past the preflight lookup. If the first
     // transaction committed, treat the second attempt as a retry only when the
     // persisted outbox payload matches the entire order/payment identity.
-    try {
-      if (await assertNotAlreadyCommitted(input, expectedPayment)) return;
-    } catch (recoveryError) {
-      // A reused key with different data is a real conflict; preserve that
-      // explicit validation error instead of hiding it behind SQLite's error.
-      throw recoveryError;
-    }
+    // A reused key with different data is a real conflict; let the explicit
+    // validation error surface instead of hiding it behind SQLite's error.
+    if (await assertNotAlreadyCommitted(input, expectedPayment)) return;
     throw transactionError;
   }
 }
