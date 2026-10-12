@@ -120,3 +120,34 @@ test('rejects retry when checkout identity changes despite an identical amount',
     );
   }
 });
+
+
+test('accepts equivalent item snapshots when object key order differs', () => {
+  const detailedOrder = {
+    ...order,
+    branchId: 'branch-1',
+    deviceId: 'device-1',
+    cashierId: 'cashier-1',
+    type: 'TAKEAWAY',
+    status: 'DRAFT',
+    subtotal: 125,
+    discount: 0,
+    tax: 0,
+    serviceFee: 0,
+    deliveryFee: 0,
+    createdAt: '2026-10-13T00:00:00.000Z',
+    items: [{ productId: 'product-1', quantity: 1, unitPrice: 125, note: null, modifiers: [] }],
+  };
+  const persisted = { ...detailedOrder, payment };
+  const retried = {
+    ...detailedOrder,
+    items: [{ modifiers: [], note: null, unitPrice: 125, quantity: 1, productId: 'product-1' }],
+  };
+
+  assert.doesNotThrow(() => assertExistingCheckoutMatches(
+    retried,
+    detailedOrder.id,
+    persisted,
+    payment,
+  ));
+});
