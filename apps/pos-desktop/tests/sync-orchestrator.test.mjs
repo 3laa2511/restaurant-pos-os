@@ -81,7 +81,7 @@ test('a failed sync is recorded for retry and stops later items in sequence', as
 
   const result = await orchestrator.runOnce();
 
-  assert.deepEqual(result, { attempted: 2, synced: 0, failed: 1, failedAttempts: 3 });
+  assert.deepEqual(result, { attempted: 1, synced: 0, failed: 1, failedAttempts: 3 });
   assert.deepEqual(failures, [{ id: 'sync-1', workerId: 'worker-retry', message: 'network unavailable' }]);
   assert.equal(pushCount, 1);
 });
