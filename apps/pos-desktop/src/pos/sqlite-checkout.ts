@@ -133,7 +133,10 @@ function validatePersistenceInput(input: CheckoutPersistenceInput): void {
   }
 }
 
-async function assertNotAlreadyCommitted(input: CheckoutPersistenceInput): Promise<boolean> {
+async function assertNotAlreadyCommitted(
+  input: CheckoutPersistenceInput,
+  expectedPayment?: PaymentInput & { paymentId: string },
+): Promise<boolean> {
   const rows = await input.db.query<ExistingSyncRecord>(
     `SELECT entity_id, payload FROM sync_queue WHERE idempotency_key = ? LIMIT 1`,
     [input.idempotencyKey],
@@ -145,6 +148,18 @@ async function assertNotAlreadyCommitted(input: CheckoutPersistenceInput): Promi
   }
   if (stored.total !== input.order.total || stored.orderNumber !== input.order.orderNumber) {
     throw new Error('Checkout idempotency key was reused with a different order payload');
+  }
+  if (expectedPayment) {
+    const existingPayment = stored.payment;
+    if (!existingPayment
+      || existingPayment.paymentId !== expectedPayment.paymentId
+      || existingPayment.orderId !== expectedPayment.orderId
+      || existingPayment.shiftId !== expectedPayment.shiftId
+      || existingPayment.method !== expectedPayment.method
+      || existingPayment.amount !== expectedPayment.amount
+      || (existingPayment.reference ?? null) !== (expectedPayment.reference ?? null)) {
+      throw new Error('Checkout idempotency key was reused with different payment details');
+    }
   }
   return true;
 }
@@ -164,6 +179,6 @@ export async function persistCompletedCheckout(input: CompletedCheckoutPersisten
     throw new Error('Checkout identity does not match the authenticated POS session');
   }
   if (input.payment.shiftId === '') throw new Error('Cashier shift is required for completed checkout');
-  if (await assertNotAlreadyCommitted(input)) return;
+  if (await assertNotAlreadyCommitted(input, { ...input.payment, paymentId: input.paymentId })) return;
   await input.db.transaction(buildCompletedCheckoutStatements(input, identity));
 }
