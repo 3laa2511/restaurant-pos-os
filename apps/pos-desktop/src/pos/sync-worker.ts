@@ -51,8 +51,11 @@ function requireNonEmptyString(value: unknown, field: string): string {
   return value.trim();
 }
 
-export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetch = fetch, accessTokenProvider: () => string | null = getAccessToken): SyncTransport {
+export interface HttpSyncTransportOptions { requestTimeoutMs?: number; }
+
+export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetch = fetch, accessTokenProvider: () => string | null = getAccessToken, options: HttpSyncTransportOptions = {}): SyncTransport {
   const base = apiBaseUrl.replace(/\/$/, '');
+  const requestTimeoutMs = Math.max(1000, options.requestTimeoutMs ?? 10_000);
   return {
     async push(item: SyncQueueItem): Promise<void> {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
@@ -63,10 +66,20 @@ export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetc
       if (!token) throw new Error('Sync requires an authenticated desktop session');
       const headers: Record<string, string> = { 'content-type': 'application/json', Authorization: `Bearer ${token}` };
       const endpoint = item.entity_type === 'KITCHEN_TICKET' ? `${base}/api/kitchen/tickets/sync` : `${base}/api/sync/operations`;
-      const response = await fetcher(endpoint, {
-        method: 'POST', headers,
-        body: JSON.stringify({ id: item.id, deviceId, branchId, operation: item.operation, entityType: item.entity_type, entityId: item.entity_id, idempotencyKey: item.idempotency_key, clientSequence: item.client_sequence, occurredAt: payload.createdAt ?? item.created_at, payload }),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+      let response: Response;
+      try {
+        response = await fetcher(endpoint, {
+          method: 'POST', headers, signal: controller.signal,
+          body: JSON.stringify({ id: item.id, deviceId, branchId, operation: item.operation, entityType: item.entity_type, entityId: item.entity_id, idempotencyKey: item.idempotency_key, clientSequence: item.client_sequence, occurredAt: payload.createdAt ?? item.created_at, payload }),
+        });
+      } catch (error) {
+        if (controller.signal.aborted) throw new Error(`Sync request timed out after ${requestTimeoutMs}ms`);
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
       if (!response.ok) throw new Error(`Sync HTTP ${response.status}`);
       const result = await response.json().catch(() => null) as { status?: string; reason?: string } | null;
       if (result?.status === 'CONFLICT' || result?.status === 'REJECTED') throw new Error(`Sync ${result.status.toLowerCase()}: ${result.reason ?? 'operation rejected'}`);
