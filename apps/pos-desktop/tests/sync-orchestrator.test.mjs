@@ -115,3 +115,34 @@ test('reports partial progress accurately and stops at the first failed item', a
   assert.deepEqual(synced, ['sync-1']);
   assert.deepEqual(failures, [{ id: 'sync-2', workerId: 'worker-partial', message: 'temporary server error' }]);
 });
+
+
+test('does not report success or overwrite state when a worker loses its lease during push', async () => {
+  const item = {
+    id: 'sync-lease-lost',
+    entity_type: 'ORDER',
+    entity_id: 'order-lease-lost',
+    operation: 'CHECKOUT',
+    idempotency_key: 'checkout-lease-lost',
+    client_sequence: 1,
+    payload: '{}',
+    status: 'SYNCING',
+    attempts: 1,
+    last_error: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  };
+  const failedWrites = [];
+  const repository = {
+    async getPending() { return [item]; },
+    async markSynced() { return false; },
+    async markFailed(...args) { failedWrites.push(args); },
+  };
+  const transport = { async push() {} };
+  const orchestrator = new SyncOrchestrator(repository, transport, { workerId: 'stale-worker' });
+
+  const result = await orchestrator.runOnce();
+
+  assert.deepEqual(result, { attempted: 1, synced: 0, failed: 1, failedAttempts: null });
+  assert.deepEqual(failedWrites, []);
+});
