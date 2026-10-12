@@ -148,10 +148,33 @@ async function assertNotAlreadyCommitted(
   return true;
 }
 
+
+async function persistWithIdempotencyRecovery(
+  input: CheckoutPersistenceInput,
+  statements: SqlStatement[],
+  expectedPayment?: PaymentInput & { paymentId: string },
+): Promise<void> {
+  try {
+    await input.db.transaction(statements);
+  } catch (transactionError) {
+    // Two checkout attempts can race past the preflight lookup. If the first
+    // transaction committed, treat the second attempt as a retry only when the
+    // persisted outbox payload matches the entire order/payment identity.
+    try {
+      if (await assertNotAlreadyCommitted(input, expectedPayment)) return;
+    } catch (recoveryError) {
+      // A reused key with different data is a real conflict; preserve that
+      // explicit validation error instead of hiding it behind SQLite's error.
+      throw recoveryError;
+    }
+    throw transactionError;
+  }
+}
+
 export async function persistCheckout(input: CheckoutPersistenceInput): Promise<void> {
   validatePersistenceInput(input);
   if (await assertNotAlreadyCommitted(input)) return;
-  await input.db.transaction(buildCheckoutStatements(input));
+  await persistWithIdempotencyRecovery(input, buildCheckoutStatements(input));
 }
 
 export async function persistCompletedCheckout(input: CompletedCheckoutPersistenceInput): Promise<void> {
@@ -163,6 +186,11 @@ export async function persistCompletedCheckout(input: CompletedCheckoutPersisten
     throw new Error('Checkout identity does not match the authenticated POS session');
   }
   if (input.payment.shiftId === '') throw new Error('Cashier shift is required for completed checkout');
-  if (await assertNotAlreadyCommitted(input, { ...input.payment, paymentId: input.paymentId })) return;
-  await input.db.transaction(buildCompletedCheckoutStatements(input, identity));
+  const expectedPayment = { ...input.payment, paymentId: input.paymentId };
+  if (await assertNotAlreadyCommitted(input, expectedPayment)) return;
+  await persistWithIdempotencyRecovery(
+    input,
+    buildCompletedCheckoutStatements(input, identity),
+    expectedPayment,
+  );
 }
