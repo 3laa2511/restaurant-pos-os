@@ -1,6 +1,6 @@
 import { SyncOrchestrator } from './sync-orchestrator.js';
 import type { SyncRepository } from './sync-repository.js';
-import type { SyncQueueItem, SyncTransport } from './sync-contract.js';
+import { assertSyncAcknowledgement, type SyncQueueItem, type SyncTransport } from './sync-contract.js';
 import { ExponentialRetryPolicy } from './retry-policy.js';
 import { getAccessToken } from './auth-client.js';
 import { getPosRuntimeIdentity } from './runtime-identity.js';
@@ -80,9 +80,8 @@ export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetc
       } finally {
         clearTimeout(timeout);
       }
-      if (!response.ok) throw new Error(`Sync HTTP ${response.status}`);
-      const result = await response.json().catch(() => null) as { status?: string; reason?: string } | null;
-      if (result?.status === 'CONFLICT' || result?.status === 'REJECTED') throw new Error(`Sync ${result.status.toLowerCase()}: ${result.reason ?? 'operation rejected'}`);
+      const result: unknown = await response.json().catch(() => null);
+      assertSyncAcknowledgement(response.status, result);
     },
   };
 }
