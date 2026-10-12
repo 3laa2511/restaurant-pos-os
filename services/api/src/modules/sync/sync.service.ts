@@ -16,6 +16,15 @@ interface CheckoutPayload {
   payment: { paymentId: string; orderId: string; shiftId: string; method: 'CASH' | 'CARD' | 'WALLET' | 'OTHER'; amount: number; reference?: string | null };
 }
 function jsonValue(value: unknown): ReturnType<typeof JSON.parse> { return JSON.parse(JSON.stringify(value)); }
+function canonicalJson(value: unknown): string {
+  if (value === undefined) return '"__undefined__"';
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
 function money(value: unknown, field: string, allowZero = true): number { if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || (!allowZero && value === 0)) throw new Error(`${field} must be a valid non-negative amount`); const rounded = Math.round((value + Number.EPSILON) * 100) / 100; if (Math.abs(value - rounded) > 1e-9) throw new Error(`${field} must have at most 2 decimal places`); return rounded; }
 function text(value: unknown, field: string): string { if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required`); return value.trim(); }
 function assertCheckoutPayload(payload: unknown, envelope: SyncEnvelope): CheckoutPayload {
@@ -44,7 +53,7 @@ export class SyncService {
     const tenantId = assertTenantScope(context);
     validateSyncEnvelope(envelope);
     this.assertDeviceScope(context, envelope.deviceId, envelope.branchId);
-    const requestHash = createHash('sha256').update(JSON.stringify(envelope)).digest('hex');
+    const requestHash = createHash('sha256').update(canonicalJson(envelope)).digest('hex');
     const preflight = await withRlsContext(this.prisma, context, async (tx) => {
       const branch = await tx.branch.findFirst({ where: { id: envelope.branchId, tenantId, active: true }, select: { id: true } });
       if (!branch) throw new Error('Forbidden: branch does not belong to the authenticated tenant');
