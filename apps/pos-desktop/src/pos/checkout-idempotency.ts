@@ -17,6 +17,15 @@ export interface StoredCheckoutPayload extends CheckoutOrderIdentity {
   payment?: CheckoutPaymentIdentity;
 }
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export function assertExistingCheckoutMatches(
   order: CheckoutOrderIdentity,
   existingEntityId: string,
@@ -39,7 +48,7 @@ export function assertExistingCheckoutMatches(
     'discount', 'tax', 'serviceFee', 'deliveryFee', 'createdAt', 'items',
   ];
   for (const field of identityFields) {
-    if (field in payload && JSON.stringify(payload[field]) !== JSON.stringify(persisted[field])) {
+    if (field in payload && stableJson(payload[field]) !== stableJson(persisted[field])) {
       throw new Error('Checkout idempotency key was reused with a different order payload');
     }
   }
