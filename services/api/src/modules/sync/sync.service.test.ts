@@ -183,5 +183,4 @@ describe('SyncService', () => {
       'Card checkout cannot be synced until a verified payment processor integration is configured',
     );
   });
-}
 });
