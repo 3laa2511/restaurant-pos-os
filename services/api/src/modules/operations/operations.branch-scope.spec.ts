@@ -48,14 +48,16 @@ describe('OperationsService session branch isolation', () => {
     }));
   });
 
-  it('does not let a branch-scoped session widen its management overview', async () => {
+  it('keeps the management overview scoped to the authenticated session branch', async () => {
     const findMany = jest.fn().mockResolvedValue([{ id: 'cycle-1' }]);
     const groupBy = jest.fn().mockResolvedValue([]);
+    const customerCount = jest.fn().mockResolvedValue(0);
+    const branchCount = jest.fn().mockResolvedValue(1);
     const service = new OperationsService({
       businessCycle: { findMany },
       order: { groupBy },
-      customer: { count: jest.fn().mockResolvedValue(0) },
-      branch: { count: jest.fn().mockResolvedValue(1) },
+      customer: { count: customerCount },
+      branch: { count: branchCount },
     } as never);
 
     await service.managementOverview(context);
@@ -70,6 +72,10 @@ describe('OperationsService session branch isolation', () => {
         cycleId: { in: ['cycle-1'] },
       },
     }));
+    expect(branchCount).toHaveBeenCalledWith({
+      where: { tenantId: 'tenant-1', id: 'branch-1' },
+    });
+    expect(customerCount).toHaveBeenCalledWith({ where: { tenantId: 'tenant-1' } });
   });
 
   it('rejects a request to query another branch', async () => {
