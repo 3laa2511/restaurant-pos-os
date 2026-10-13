@@ -167,6 +167,13 @@ export function RealPosApp() {
 
   async function handleCheckout() {
     if (!shift || !cart.items.length || checkoutState === 'SAVING') return;
+    if (paymentMethod === 'CARD') {
+      setCheckoutState('ERROR');
+      setMessage(language === 'ar'
+        ? 'تحصيل البطاقة غير مفعّل: لا يوجد ربط موثّق بجهاز الدفع. استخدم جهاز الدفع الخارجي وأكمل التحصيل من خلال مسار موثّق قبل تسجيل العملية.'
+        : 'Card collection is not enabled: no verified payment-terminal integration is configured. Do not mark a card payment as paid until a verified payment flow is available.');
+      return;
+    }
     setCheckoutState('SAVING');
     setMessage('');
     try {
@@ -177,7 +184,7 @@ export function RealPosApp() {
       const stations = [...new Set(order.items.map((item) => stationByProduct[item.productId] ?? 'KITCHEN'))];
       const printJobs = stations.map((station, index) => createPrintJob({ id: `${order.id}:kitchen:${index}`, order: { ...order, items: order.items.filter((item) => (stationByProduct[item.productId] ?? 'KITCHEN') === station) }, station }));
       printJobs.push(createPrintJob({ id: `${order.id}:customer`, order, station: 'CUSTOMER' }));
-      const payment: PaymentInput = { orderId: order.id, shiftId: shift.id, method: paymentMethod, amount: order.total, reference: paymentMethod === 'CARD' ? `POS:${order.id}` : null };
+      const payment: PaymentInput = { orderId: order.id, shiftId: shift.id, method: paymentMethod, amount: order.total, reference: null };
       await persistCompletedCheckout({ db, order, printJobs, payment, paymentId: `${order.id}:payment`, idempotencyKey: checkoutIdentity.idempotencyKey, clientSequence: checkoutIdentity.clientSequence });
       setCart(emptyCart());
       setCheckoutState('SUCCESS');

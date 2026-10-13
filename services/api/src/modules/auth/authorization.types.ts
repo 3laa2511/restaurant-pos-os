@@ -1,10 +1,17 @@
 import type { KitchenStation } from '../../generated/prisma/enums.js';
 import type { PermissionCode, RoleCode } from './rbac.constants.js';
+import type { WorkspaceCode } from './workspace.constants.js';
 
 export interface AuthContext {
   userId: string;
+  /** Tenant resolved from the authenticated session's branch. Null means the
+   * session has no tenant scope and tenant-scoped resources must be denied. */
+  tenantId: string | null;
   branchId: string | null;
   deviceId: string | null;
+  /** Session resolved by authentication; required for transaction-local RLS context. */
+  sessionId: string;
+  workspace: WorkspaceCode;
   roles: readonly RoleCode[];
   permissions: readonly PermissionCode[];
   /**
@@ -23,6 +30,13 @@ export function assertPermission(context: AuthContext, permission: PermissionCod
   if (!hasPermission(context, permission)) {
     throw new Error(`Forbidden: missing permission ${permission}`);
   }
+}
+
+export function assertTenantScope(context: AuthContext): string {
+  if (context.tenantId === null) {
+    throw new Error('Forbidden: tenant scope is required');
+  }
+  return context.tenantId;
 }
 
 export function assertBranchAccess(context: AuthContext, branchId: string): void {

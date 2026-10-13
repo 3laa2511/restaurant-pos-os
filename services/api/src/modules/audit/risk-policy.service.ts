@@ -30,11 +30,13 @@ export class RiskPolicyService {
 
   async resolve(
     client: PrismaService | Prisma.TransactionClient,
+    tenantId: string,
     action: string,
     branchId: string | null,
     now = new Date(),
   ): Promise<RiskPolicyResolution> {
     const where: Prisma.RiskPolicyWhereInput = {
+      tenantId,
       action,
       enabled: true,
       effectiveFrom: { lte: now },
@@ -74,7 +76,7 @@ export class RiskPolicyService {
     };
   }
 
-  async resolveForContext(action: string, branchId: string | null, now = new Date()) {
-    return this.resolve(this.prisma, action, branchId, now);
+  async resolveForContext(tenantId: string, action: string, branchId: string | null, now = new Date()) {
+    return this.resolve(this.prisma, tenantId, action, branchId, now);
   }
 }

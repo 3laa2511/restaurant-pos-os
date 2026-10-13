@@ -11,8 +11,11 @@ type AsyncMock = jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
 
 const context: AuthContext = {
   userId: 'kitchen-user-1',
+  tenantId: 'tenant-1',
   branchId: 'branch-1',
   deviceId: 'device-1',
+  sessionId: 'session-1',
+  workspace: 'KITCHEN',
   roles: [],
   permissions: [PERMISSIONS.KITCHEN_TICKET_MANAGE],
 };

@@ -3,7 +3,7 @@ import type { SyncQueueItem } from './sync-contract.js';
 
 export interface SyncRepository {
   getPending(limit: number, maxAttempts: number, workerId: string, leaseMs: number): Promise<SyncQueueItem[]>;
-  markSynced(id: string, workerId: string): Promise<void>;
+  markSynced(id: string, workerId: string): Promise<boolean>;
   markFailed(id: string, workerId: string, message: string): Promise<void>;
 }
 
@@ -13,10 +13,14 @@ export function createSqliteSyncRepository(db: LocalDatabaseBridge): SyncReposit
       const leaseSeconds = Math.max(1, Math.ceil(leaseMs / 1000));
       await db.execute(
         `UPDATE sync_queue
-         SET status = 'PENDING', locked_by = NULL, locked_until = NULL, updated_at = datetime('now')
+         SET status = CASE WHEN attempts + 1 >= ? THEN 'FAILED' ELSE 'PENDING' END,
+             attempts = attempts + 1,
+             last_error = 'Sync lease expired before completion',
+             locked_by = NULL, locked_until = NULL, updated_at = datetime('now')
          WHERE status = 'SYNCING'
            AND locked_until IS NOT NULL
            AND locked_until <= datetime('now')`,
+        [maxAttempts],
       );
 
       await db.execute(
@@ -44,13 +48,21 @@ export function createSqliteSyncRepository(db: LocalDatabaseBridge): SyncReposit
         [workerId],
       );
     },
-    markSynced: (id, workerId) => db.execute(
-      `UPDATE sync_queue
-       SET status = 'SYNCED', locked_by = NULL, locked_until = NULL,
-           last_error = NULL, updated_at = datetime('now')
-       WHERE id = ? AND status = 'SYNCING' AND locked_by = ?`,
-      [id, workerId],
-    ),
+    markSynced: async (id, workerId) => {
+      await db.execute(
+        `UPDATE sync_queue
+         SET status = 'SYNCED', locked_by = NULL, locked_until = NULL,
+             last_error = NULL, updated_at = datetime('now')
+         WHERE id = ? AND status = 'SYNCING' AND locked_by = ?`,
+        [id, workerId],
+      );
+
+      const rows = await db.query<{ status: string }>(
+        `SELECT status FROM sync_queue WHERE id = ? LIMIT 1`,
+        [id],
+      );
+      return rows[0]?.status === 'SYNCED';
+    },
     markFailed: (id, workerId, message) => db.execute(
       `UPDATE sync_queue
        SET status = 'FAILED', attempts = attempts + 1,

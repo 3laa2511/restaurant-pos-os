@@ -10,8 +10,14 @@ import { SyncModule } from './modules/sync/sync.module.js';
 import { MenuModule } from './modules/menu/menu.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { KitchenModule } from './modules/kitchen/kitchen.module.js';
+import { HrModule } from './modules/hr/hr.module.js';
+import { InventoryModule } from './modules/inventory/inventory.module.js';
+import { AccountingModule } from './modules/accounting/accounting.module.js';
+import { SecurityModule } from './modules/security/security.module.js';
+import { OperationsModule } from './modules/operations/operations.module.js';
+import { BusinessCycleModule } from './modules/business-cycle/business-cycle.module.js';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, HealthModule, OrderModule, PaymentModule, ShiftModule, CashDrawerModule, SyncModule, MenuModule, AuditModule, KitchenModule],
+  imports: [DatabaseModule, AuthModule, HealthModule, OrderModule, PaymentModule, ShiftModule, CashDrawerModule, SyncModule, MenuModule, AuditModule, KitchenModule, HrModule, InventoryModule, AccountingModule, SecurityModule, OperationsModule, BusinessCycleModule],
 })
 export class AppModule {}

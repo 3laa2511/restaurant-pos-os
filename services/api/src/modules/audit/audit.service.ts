@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import { withRlsContext } from '../../database/rls-context.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { RiskPolicyService } from './risk-policy.service.js';
@@ -78,7 +79,7 @@ export class AuditService {
   ) {}
 
   async record(context: AuthContext, input: AuditEventInput): Promise<AuditEventResult> {
-    return this.recordWithClient(this.prisma, context, input);
+    return withRlsContext(this.prisma, context, (tx) => this.recordWithClient(tx, context, input));
   }
 
   async recordWithClient(
@@ -93,7 +94,9 @@ export class AuditService {
     if (!action) throw new Error('Audit action is required');
     if (!entityType) throw new Error('Audit entity type is required');
 
-    const policy = await this.riskPolicies.resolve(client, action, branchId);
+    const tenantId = context.tenantId?.trim();
+    if (!tenantId) throw new Error('Audit tenant context is required');
+    const policy = await this.riskPolicies.resolve(client, tenantId, action, branchId);
     const reason = cleanText(input.reason);
     if (policy.requiresReason && !reason) throw new Error(`Audit reason is required for ${action}`);
     if (policy.requiresApproval && policy.approvalPermission) assertPermission(context, policy.approvalPermission);
@@ -163,13 +166,13 @@ export class AuditService {
       if (to) where.createdAt.lt = to;
     }
 
-    const rows = await this.prisma.auditLog.findMany({
+    const rows = await withRlsContext(this.prisma, context, (tx) => tx.auditLog.findMany({
       where,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
       take: limit + 1,
       select: { id: true, actorUserId: true, branchId: true, action: true, entityType: true, entityId: true, metadata: true, createdAt: true },
-    });
+    }));
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
