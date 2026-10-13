@@ -167,6 +167,13 @@ export function RealPosApp() {
 
   async function handleCheckout() {
     if (!shift || !cart.items.length || checkoutState === 'SAVING') return;
+    if (paymentMethod === 'CARD') {
+      setCheckoutState('ERROR');
+      setMessage(language === 'ar'
+        ? 'تحصيل البطاقة غير مفعّل: لا يوجد ربط موثّق بجهاز الدفع. استخدم جهاز الدفع الخارجي وأكمل التحصيل من خلال مسار موثّق قبل تسجيل العملية.'
+        : 'Card collection is not enabled: no verified payment-terminal integration is configured. Do not mark a card payment as paid until a verified payment flow is available.');
+      return;
+    }
     setCheckoutState('SAVING');
     setMessage('');
     try {
