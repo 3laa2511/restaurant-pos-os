@@ -52,7 +52,7 @@ export class OperationsService {
       const [orders, customers, branches] = await Promise.all([
         tx.order.groupBy({ by: ['status'], where, _count: { _all: true }, _sum: { total: true } }),
         tx.customer.count({ where: { tenantId } }),
-        tx.branch.count({ where: { tenantId } }),
+        tx.branch.count({ where: { tenantId, ...(effectiveBranchId ? { id: effectiveBranchId } : {}) } }),
       ]);
       return {
         orders: orders.map((row) => ({ status: row.status, count: row._count._all, total: Number(row._sum.total ?? 0) })),
