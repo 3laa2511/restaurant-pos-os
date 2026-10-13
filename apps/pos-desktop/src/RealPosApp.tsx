@@ -184,7 +184,7 @@ export function RealPosApp() {
       const stations = [...new Set(order.items.map((item) => stationByProduct[item.productId] ?? 'KITCHEN'))];
       const printJobs = stations.map((station, index) => createPrintJob({ id: `${order.id}:kitchen:${index}`, order: { ...order, items: order.items.filter((item) => (stationByProduct[item.productId] ?? 'KITCHEN') === station) }, station }));
       printJobs.push(createPrintJob({ id: `${order.id}:customer`, order, station: 'CUSTOMER' }));
-      const payment: PaymentInput = { orderId: order.id, shiftId: shift.id, method: paymentMethod, amount: order.total, reference: paymentMethod === 'CARD' ? `POS:${order.id}` : null };
+      const payment: PaymentInput = { orderId: order.id, shiftId: shift.id, method: paymentMethod, amount: order.total, reference: null };
       await persistCompletedCheckout({ db, order, printJobs, payment, paymentId: `${order.id}:payment`, idempotencyKey: checkoutIdentity.idempotencyKey, clientSequence: checkoutIdentity.clientSequence });
       setCart(emptyCart());
       setCheckoutState('SUCCESS');
