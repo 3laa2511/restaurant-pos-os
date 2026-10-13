@@ -10,10 +10,11 @@ export class OperationsService {
 
   async callCenterOrders(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
-    if (branchId) assertBranchAccess(context, branchId);
+    const effectiveBranchId = branchId ?? context.branchId ?? undefined;
+    if (effectiveBranchId) assertBranchAccess(context, effectiveBranchId);
     return withRlsContext(this.prisma, context, async (tx) =>
       tx.order.findMany({
-        where: { branch: { tenantId, ...(branchId ? { id: branchId } : {}) }, source: 'CALL_CENTER' },
+        where: { branch: { tenantId, ...(effectiveBranchId ? { id: effectiveBranchId } : {}) }, source: 'CALL_CENTER' },
         orderBy: { createdAt: 'desc' },
         take: 100,
         include: { customer: { include: { addresses: true } }, items: true, branch: true },
@@ -23,11 +24,12 @@ export class OperationsService {
 
   async dispatchOrders(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
-    if (branchId) assertBranchAccess(context, branchId);
+    const effectiveBranchId = branchId ?? context.branchId ?? undefined;
+    if (effectiveBranchId) assertBranchAccess(context, effectiveBranchId);
     return withRlsContext(this.prisma, context, async (tx) =>
       tx.order.findMany({
         where: {
-          branch: { tenantId, ...(branchId ? { id: branchId } : {}) },
+          branch: { tenantId, ...(effectiveBranchId ? { id: effectiveBranchId } : {}) },
           type: 'DELIVERY',
           status: { in: ['CONFIRMED', 'SENT_TO_KITCHEN', 'PREPARING', 'READY', 'ASSIGNED', 'OUT_FOR_DELIVERY'] },
         },
@@ -40,12 +42,13 @@ export class OperationsService {
 
   async managementOverview(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
-    if (branchId) assertBranchAccess(context, branchId);
+    const effectiveBranchId = branchId ?? context.branchId ?? undefined;
+    if (effectiveBranchId) assertBranchAccess(context, effectiveBranchId);
     return withRlsContext(this.prisma, context, async (tx) => {
-      const cycleWhere = { tenantId, status: 'OPEN', ...(branchId ? { branchId } : {}) };
+      const cycleWhere = { tenantId, status: 'OPEN', ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}) };
       const cycles = await tx.businessCycle.findMany({ where: cycleWhere, select: { id: true } });
       const cycleIds = cycles.map((cycle) => cycle.id);
-      const where = { branch: { tenantId, ...(branchId ? { id: branchId } : {}) }, cycleId: { in: cycleIds } };
+      const where = { branch: { tenantId, ...(effectiveBranchId ? { id: effectiveBranchId } : {}) }, cycleId: { in: cycleIds } };
       const [orders, customers, branches] = await Promise.all([
         tx.order.groupBy({ by: ['status'], where, _count: { _all: true }, _sum: { total: true } }),
         tx.customer.count({ where: { tenantId } }),
