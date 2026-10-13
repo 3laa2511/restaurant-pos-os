@@ -1,6 +1,7 @@
 import { SyncOrchestrator } from './sync-orchestrator.js';
 import type { SyncRepository } from './sync-repository.js';
-import { assertSyncAcknowledgement, type SyncQueueItem, type SyncTransport } from './sync-contract.js';
+import type { SyncQueueItem, SyncTransport } from './sync-contract.js';
+import { assertSyncAcknowledgement } from '../../../services/api/src/modules/sync/sync-contract.js';
 import { ExponentialRetryPolicy } from './retry-policy.js';
 import { getAccessToken } from './auth-client.js';
 import { getPosRuntimeIdentity } from './runtime-identity.js';
