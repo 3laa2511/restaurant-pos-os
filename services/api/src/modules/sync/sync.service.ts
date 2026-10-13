@@ -41,6 +41,7 @@ function assertCheckoutPayload(payload: unknown, envelope: SyncEnvelope): Checko
   if (!value.payment || value.payment.orderId !== value.id) throw new Error('Payment order does not match checkout order');
   text(value.payment.paymentId, 'payment.paymentId'); text(value.payment.shiftId, 'payment.shiftId');
   if (!['CASH', 'CARD', 'WALLET', 'OTHER'].includes(value.payment.method ?? '')) throw new Error('Invalid payment method');
+  if (value.payment.method === 'CARD') throw new Error('Card checkout cannot be synced until a verified payment processor integration is configured');
   money(value.payment.amount, 'payment.amount', false); if (value.payment.method !== 'CASH') text(value.payment.reference, 'payment.reference');
   return value as CheckoutPayload;
 }
