@@ -7,6 +7,7 @@ import { assertBranchAccess, assertPermission, assertTenantScope, type AuthConte
 import { AccountingService } from '../accounting/accounting.service.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { SyncEnvelope, SyncResult, validateSyncEnvelope } from './sync-contract.js';
+import { assertCheckoutPrices } from './checkout-price-policy.js';
 
 interface CheckoutPayload {
   id: string; orderNumber: string; branchId: string; deviceId: string; cashierId: string;
@@ -86,8 +87,19 @@ export class SyncService {
         if (!cycle) throw new Error('An open business cycle is required for checkout sync');
 
         const productIds = [...new Set(payload.items.map((item) => item.productId))];
-        const products = await tx.product.findMany({ where: { id: { in: productIds }, tenantId, active: true }, select: { id: true } });
+        const products = await tx.product.findMany({
+          where: { id: { in: productIds }, tenantId, active: true },
+          select: {
+            id: true,
+            price: true,
+            branchProducts: {
+              where: { branchId: envelope.branchId },
+              select: { enabled: true, available: true, priceOverride: true },
+            },
+          },
+        });
         if (products.length !== productIds.length) throw new Error('Checkout contains unavailable products');
+        assertCheckoutPrices(payload.items, products);
         const subtotal = Number(payload.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0).toFixed(2));
         if (subtotal !== payload.subtotal) throw new Error('Checkout subtotal does not match its line items');
         const expectedTotal = Number((payload.subtotal - payload.discount + payload.tax + payload.serviceFee + payload.deliveryFee).toFixed(2));
