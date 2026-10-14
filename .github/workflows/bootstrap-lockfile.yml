@@ -1,12 +1,14 @@
 name: Bootstrap pnpm lockfile (temporary)
 
 on:
-  pull_request:
-    branches: ['feat/**']
+  push:
+    branches: ['fix/review-phase-0']
     paths:
       - ".github/workflows/bootstrap-lockfile.yml"
       - "package.json"
       - "pnpm-workspace.yaml"
+  pull_request:
+    branches: ['feat/**']
   workflow_dispatch:
 
 permissions:
