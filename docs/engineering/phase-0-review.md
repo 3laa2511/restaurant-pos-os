@@ -20,14 +20,15 @@ Safe resolution: generate the lockfile using the pinned pnpm version, review the
 
 ## F-00b — Duplicate Prisma migration sequence number
 
-**Status: CONFIRMED / NOT FIXED**
+**Status: DUPLICATE PREFIX CONFIRMED / RUNTIME FAILURE NOT ESTABLISHED**
 
 Evidence:
 - `prisma/migrations/0025_accounting_fiscal_periods/migration.sql`
 - `prisma/migrations/0025_settings_workspace/migration.sql`
 - Subsequent migrations include `0026_normalize_initial_fiscal_period`, `0027_accounting_journal_immutability`, and `0028_inventory_receipt_idempotency`.
+- Prisma migration directories are ordered by their full directory names; the current names sort lexicographically as accounting fiscal periods, then settings workspace, then `0026`. Both `0025` migrations therefore sort before `0026` in the current repository.
 
-Risk: duplicate numeric prefixes make migration ordering ambiguous across tooling and human review.
+Risk: duplicate numeric prefixes are confusing for human review and external tooling that assumes a unique numeric sequence. The duplicate prefix alone is not proof of a Prisma execution-order failure in this repository.
 
 Safety constraint: do not rename or delete either migration until the target database's `_prisma_migrations` history and deployment status are verified. If either migration has been applied, use a documented forward-only reconciliation plan; do not rewrite deployed history.
 
@@ -48,11 +49,12 @@ Safe resolution: move the shared, framework-independent payment policy into a de
 
 **Status: CONFIRMED / ROOT CAUSE UNKNOWN**
 
-Observed on 2026-10-14:
+Observed on 2026-10-14 and rechecked 2026-10-15:
 - Bootstrap run: [38564434988](https://github.com/3laa2511/restaurant-pos-os/actions/runs/38564434988), job ID `115853391659`, conclusion `failure`, zero reported steps.
 - Desktop run: [38564434934](https://github.com/3laa2511/restaurant-pos-os/actions/runs/38564434934), job ID `115853391381`, conclusion `failure`, zero reported steps.
-- Job-step lookup returned an empty array; log retrieval returned `BlobNotFound`.
-- Combined commit status returned no status entries.
+- PR-triggered runs for API [38565220926](https://github.com/3laa2511/restaurant-pos-os/actions/runs/38565220926), Desktop [38565220598](https://github.com/3laa2511/restaurant-pos-os/actions/runs/38565220598), and bootstrap [38565220824](https://github.com/3laa2511/restaurant-pos-os/actions/runs/38565220824) all report `startup_failure`.
+- Latest job lookup for API and Desktop returned empty job arrays; earlier step/log lookup returned no steps and `BlobNotFound`.
+- This affects three distinct workflows before any steps are exposed. Root cause remains unknown; repository settings, billing/usage, runner provisioning, or a GitHub-side startup issue still need verification.
 
 This does not prove a code or YAML defect. Verify repository Actions policy, runner availability, and usage/billing restrictions in GitHub settings before attributing the failure to source code. Do not treat an empty step list as a passing test.
 
