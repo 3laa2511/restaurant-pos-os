@@ -129,6 +129,40 @@ test('stale worker cannot complete a lease it no longer owns', () => {
   }
 });
 
+test('authentication pause releases the lease without consuming an attempt or changing idempotency order', () => {
+  const { db, path } = openDatabase('authentication');
+  try {
+    seedQueue(db, 2);
+    assert.deepEqual(claim(db, 'worker-a', 1).map((row) => row.id), ['item-1']);
+
+    const release = db.prepare(`
+      UPDATE sync_queue
+      SET status = 'PENDING', locked_by = NULL, locked_until = NULL,
+          last_error = ?, updated_at = datetime('now')
+      WHERE id = ? AND status = 'SYNCING' AND locked_by = ?
+    `).run('Sync session expired; sign in again to continue syncing', 'item-1', 'worker-a');
+
+    assert.equal(release.changes, 1);
+    const item = db.prepare(`
+      SELECT id, idempotency_key, client_sequence, status, attempts, locked_by
+      FROM sync_queue WHERE id = 'item-1'
+    `).get();
+    assert.deepEqual({ ...item }, {
+      id: 'item-1',
+      idempotency_key: 'key-1',
+      client_sequence: 1,
+      status: 'PENDING',
+      attempts: 0,
+      locked_by: null,
+    });
+
+    assert.deepEqual(claim(db, 'worker-b', 2).map((row) => row.id), ['item-1', 'item-2']);
+  } finally {
+    db.close();
+    rmSync(path, { force: true });
+  }
+});
+
 test('failed attempts remain bounded by maxAttempts', () => {
   const { db, path } = openDatabase('attempts');
   try {

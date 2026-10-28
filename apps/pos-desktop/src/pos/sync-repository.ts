@@ -5,6 +5,7 @@ export interface SyncRepository {
   getPending(limit: number, maxAttempts: number, workerId: string, leaseMs: number): Promise<SyncQueueItem[]>;
   markSynced(id: string, workerId: string): Promise<void>;
   markFailed(id: string, workerId: string, message: string): Promise<void>;
+  releaseForAuthentication(id: string, workerId: string, message: string): Promise<void>;
 }
 
 export function createSqliteSyncRepository(db: LocalDatabaseBridge): SyncRepository {
@@ -55,6 +56,13 @@ export function createSqliteSyncRepository(db: LocalDatabaseBridge): SyncReposit
       `UPDATE sync_queue
        SET status = 'FAILED', attempts = attempts + 1,
            locked_by = NULL, locked_until = NULL,
+           last_error = ?, updated_at = datetime('now')
+       WHERE id = ? AND status = 'SYNCING' AND locked_by = ?`,
+      [message, id, workerId],
+    ),
+    releaseForAuthentication: (id, workerId, message) => db.execute(
+      `UPDATE sync_queue
+       SET status = 'PENDING', locked_by = NULL, locked_until = NULL,
            last_error = ?, updated_at = datetime('now')
        WHERE id = ? AND status = 'SYNCING' AND locked_by = ?`,
       [message, id, workerId],

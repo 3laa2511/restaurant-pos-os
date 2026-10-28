@@ -1,6 +1,13 @@
 export type SyncQueueStatus = 'PENDING' | 'SYNCING' | 'SYNCED' | 'FAILED';
 export type SyncOperation = 'CREATE' | 'UPDATE' | 'DELETE' | 'CHECKOUT';
 
+export class SyncAuthenticationRequiredError extends Error {
+  constructor(message = 'Sync requires an authenticated desktop session') {
+    super(message);
+    this.name = 'SyncAuthenticationRequiredError';
+  }
+}
+
 export interface SyncQueueItem {
   id: string;
   entity_type: string;
