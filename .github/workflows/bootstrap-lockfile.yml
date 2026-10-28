@@ -37,7 +37,9 @@ jobs:
         run: pnpm install --lockfile-only --ignore-scripts
       - name: Commit generated lockfile
         run: |
-          if git diff --quiet -- pnpm-lock.yaml; then
+          # git diff does not report untracked files; use status so a newly
+          # generated lockfile is staged and committed on the first run.
+          if [ -z "$(git status --porcelain -- pnpm-lock.yaml)" ]; then
             echo "No lockfile changes generated."
             exit 0
           fi
