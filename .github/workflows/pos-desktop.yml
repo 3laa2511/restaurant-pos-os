@@ -59,11 +59,15 @@ jobs:
       - name: Apply migrations to disposable PostgreSQL
         run: pnpm --dir services/api exec prisma migrate deploy --schema ../../prisma/schema.prisma
 
-      - name: Grant minimum permissions for RLS integration test
+      - name: Grant required privileges to disposable integration-test role
         run: |
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
           GRANT USAGE ON SCHEMA public, app TO pos_app;
           GRANT SELECT, INSERT, UPDATE ON TABLE "Branch" TO pos_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "BusinessCycle" TO pos_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+            "PaymentAdjustment", "Payment", "CashDrawer", "Shift", "Order",
+            "Device", "CashDrawerMovement" TO pos_app;
           SQL
 
       - name: Lint API
