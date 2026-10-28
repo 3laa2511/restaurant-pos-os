@@ -91,7 +91,7 @@ describe('auth service', () => {
     });
 
     const service = new AuthService(prisma as never);
-    await expect(service.login({ username: 'branchless-cashier', password: 'correct-horse' }))
+    await expect(service.login({ username: 'branchless-cashier', password: 'correct-horse', branchId: 'branch-1' }))
       .rejects.toThrow('User must be assigned to a branch or have only tenant-wide roles');
     expect(prisma.branch.findUnique).not.toHaveBeenCalled();
     expect(prisma.session.create).not.toHaveBeenCalled();
