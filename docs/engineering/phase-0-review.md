@@ -6,17 +6,19 @@ Pull request: [#4](https://github.com/3laa2511/restaurant-pos-os/pull/4)
 
 ## F-00a — Dependency lockfile and reproducibility
 
-**Status: CONFIRMED / NOT FIXED**
+**Status: IMPLEMENTED ON BRANCH / FROZEN-INSTALL CI PENDING**
 
-Evidence:
-- Root `package.json` declares `packageManager: pnpm@10.15.0` and Node `>=22.0.0`.
-- `pnpm-workspace.yaml` includes `apps/*`, `packages/*`, and `services/*`.
-- No `pnpm-lock.yaml` was present on this branch at review time.
-- `.github/workflows/api-quality.yml` and `.github/workflows/pos-desktop.yml` install with `pnpm install --no-frozen-lockfile`.
+Evidence and changes:
+- Root `package.json` pins `pnpm@10.15.0` and requires Node `>=22.0.0`.
+- The lockfile was generated from all four workspace projects and committed to this branch by the temporary bootstrap workflow.
+- Fixed the bootstrap workflow's first-run detection: `git diff` misses untracked files, so it incorrectly reported no changes after generating a new lockfile. It now checks `git status --porcelain`.
+- Both API and desktop quality workflows now use `pnpm install --frozen-lockfile`.
 
-Risk: CI may resolve different dependency graphs over time and cannot enforce frozen-lockfile reproducibility.
+Remaining validation:
+- Confirm the API and desktop CI runs pass with frozen installs on the latest branch head.
+- Remove the temporary bootstrap workflow after the committed lockfile is verified, so routine dependency changes remain deliberate code-review changes rather than workflow-generated commits.
 
-Safe resolution: generate the lockfile using the pinned pnpm version, review the resulting diff, then switch CI to frozen installs. Do not claim this is fixed until the lockfile exists and clean installs pass.
+Risk addressed: CI now has a committed dependency graph and is configured to fail when package manifests drift from the lockfile. Do not mark resolved until the frozen-install runs complete successfully.
 
 ## F-00b — Duplicate Prisma migration sequence number
 
