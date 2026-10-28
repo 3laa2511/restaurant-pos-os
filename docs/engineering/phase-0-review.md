@@ -34,16 +34,20 @@ Safety constraint: do not rename or delete either migration until the target dat
 
 ## F-00c — Desktop imports API implementation source directly
 
-**Status: CONFIRMED / NOT FIXED**
+**Status: IMPLEMENTED ON BRANCH / CI PENDING**
 
-Evidence:
-- `apps/pos-desktop/src/pos/checkout.ts` imports `PaymentInput`, `PaymentMethod`, `calculateCashChange`, and `validatePayment` from `../../../../services/api/src/modules/payments/payment-policy.js`.
-- The API package has `rootDir: src` and NodeNext module resolution in `services/api/tsconfig.json`; the desktop uses ESNext/Bundler resolution.
-- The policy implementation lives in `services/api/src/modules/payments/payment-policy.ts`.
+Changes on this branch:
+- Added `@restaurant-pos/payment-policy` as a workspace package with explicit ESM and TypeScript declaration exports.
+- Moved the framework-independent payment validation and cash-change logic into `packages/payment-policy/src/index.mjs`.
+- Added Node test coverage for positive cash payments, non-cash references, invalid amounts, and cash change.
+- The API keeps a compatibility re-export from its previous module path, while desktop imports the shared package directly.
+- Added the workspace dependency to both the API and desktop package manifests.
 
-Risk: desktop builds depend on API source layout and cross-package TypeScript resolution; this blurs the domain boundary and can break builds during API refactors.
+Remaining validation:
+- Wait for the branch's API and desktop CI workflows to complete.
+- Confirm package tests, API typecheck/tests, desktop typecheck/tests, and frontend build all pass before treating this finding as resolved.
 
-Safe resolution: move the shared, framework-independent payment policy into a dedicated workspace package with explicit package exports and declaration types; update both consumers and add parity tests before removing the API-local implementation. Do not mark resolved until desktop and API typechecks/tests pass.
+Risk addressed by the change: desktop no longer imports implementation source from inside the API package. The finding remains pending CI until the new workspace package is verified end to end.
 
 ## CI execution blocker — runner/log visibility
 
