@@ -90,14 +90,14 @@ Safety note: this finding documents an exposed command surface, not evidence of 
 
 ## F-00f — Product branding mismatch in login screen
 
-**Status: CONFIRMED**
+**Status: FIXED ON BRANCH / CI VALIDATION PENDING**
 
 Evidence:
 - `apps/pos-desktop/src/LoginGate.tsx` labels the application `BO'SH` and `BO'SH SYSTEM`, while the application shell and repository identify the product as Restaurant POS OS.
 
 Impact: confusing product identity and accidental carryover of branding from another product.
 
-Next action: replace the login branding with Restaurant POS OS branding and add a lightweight regression check or documented manual verification. Keep brand assets/configuration centralized so future rebranding does not require editing multiple screens.
+Change on this branch: the login mark now reads `RPOS`, and the login heading reads `Restaurant POS OS`. CI must pass on the latest branch head before this fix is considered validated. A dedicated automated UI assertion is not currently present; manually verify the login screen during the next UI smoke test.
 
 ## CI execution blocker — runner/log visibility
 
