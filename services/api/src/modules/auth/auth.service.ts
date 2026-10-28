@@ -90,11 +90,30 @@ export class AuthService {
       throw new UnauthorizedException('User is not assigned to this branch');
     }
 
+    const roles = user.roleLinks.map(({ role }) => role.code as RoleCode);
+    if (roles.length === 0) throw new UnauthorizedException('User has no assigned role');
+
+    // A null branch becomes tenant-wide scope in the current RLS context.
+    // Never let a caller-supplied branch elevate a branchless user's scope.
+    const tenantWideRoles = new Set<RoleCode>(['OWNER', 'CENTRAL_ADMIN']);
+    if (user.branchId === null && !roles.every((role) => tenantWideRoles.has(role))) {
+      throw new UnauthorizedException('User must be assigned to a branch or have only tenant-wide roles');
+    }
+
     let selectedBranchId = user.branchId;
     let deviceId: string | null = null;
 
     if (input.branchId !== undefined) {
-      const branch = await this.prisma.branch.findUnique({ where: { id: input.branchId }, select: { id: true, active: true } });
+      // This schema has no tenant-to-branch membership relation, so a tenant-wide
+      // account cannot safely prove that a caller-supplied branch belongs to it.
+      // Fail closed until branch membership is modeled and enforced server-side.
+      if (user.branchId === null) {
+        throw new UnauthorizedException('Tenant-wide branch selection is not configured');
+      }
+      const branch = await this.prisma.branch.findUnique({
+        where: { id: input.branchId },
+        select: { id: true, active: true },
+      });
       if (!branch?.active) throw new UnauthorizedException('Branch is unavailable');
       selectedBranchId = input.branchId;
     }
@@ -117,8 +136,6 @@ export class AuthService {
       deviceId = device.id;
     }
 
-    const roles = user.roleLinks.map(({ role }) => role.code as RoleCode);
-    if (roles.length === 0) throw new UnauthorizedException('User has no assigned role');
     const permissions = [...new Set(roles.flatMap((role) => permissionsForRole(role)))];
     const accessToken = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
