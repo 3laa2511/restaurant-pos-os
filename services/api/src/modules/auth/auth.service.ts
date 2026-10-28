@@ -119,6 +119,13 @@ export class AuthService {
 
     const roles = user.roleLinks.map(({ role }) => role.code as RoleCode);
     if (roles.length === 0) throw new UnauthorizedException('User has no assigned role');
+
+    // A null branch becomes tenant-wide scope in the current RLS context.
+    // Only explicitly tenant-wide roles may authenticate without a branch.
+    const tenantWideRoles = new Set<RoleCode>(['OWNER', 'CENTRAL_ADMIN']);
+    if (selectedBranchId === null && !roles.every((role) => tenantWideRoles.has(role))) {
+      throw new UnauthorizedException('User must be assigned to a branch or have only tenant-wide roles');
+    }
     const permissions = [...new Set(roles.flatMap((role) => permissionsForRole(role)))];
     const accessToken = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
