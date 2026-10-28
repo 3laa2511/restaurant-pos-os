@@ -15,10 +15,11 @@ async function loadOrchestrator() {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
   }).outputText;
   writeFileSync(join(directory, 'sync-contract.mjs'), compile(sourceText('sync-contract.ts')));
+  const contract = await import(pathToFileURL(join(directory, 'sync-contract.mjs')).href);
   const orchestrator = compile(sourceText('sync-orchestrator.ts')).replaceAll('./sync-contract.js', './sync-contract.mjs');
   writeFileSync(join(directory, 'sync-orchestrator.mjs'), orchestrator);
   const loaded = await import(pathToFileURL(join(directory, 'sync-orchestrator.mjs')).href);
-  return { ...loaded, cleanup: () => rmSync(directory, { recursive: true, force: true }) };
+  return { ...loaded, contract, cleanup: () => rmSync(directory, { recursive: true, force: true }) };
 }
 
 const item = {
@@ -47,7 +48,7 @@ test('orchestrator releases the item on authentication failure without consuming
       releaseForAuthentication: async (...args) => calls.push(['released', ...args]),
     };
     const transport = {
-      push: async () => { throw new loaded.SyncAuthenticationRequiredError('session expired'); },
+      push: async () => { throw new loaded.contract.SyncAuthenticationRequiredError('session expired'); },
     };
     const orchestrator = new loaded.SyncOrchestrator(repository, transport, { workerId: 'worker-test' });
 
