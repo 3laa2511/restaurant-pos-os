@@ -16,7 +16,9 @@ Evidence and changes:
 
 Remaining validation:
 - Confirm the API and desktop CI runs pass with frozen installs on the latest branch head.
-- Remove the temporary bootstrap workflow after the committed lockfile is verified, so routine dependency changes remain deliberate code-review changes rather than workflow-generated commits.
+
+Safety note:
+- The temporary bootstrap workflow has been removed after generating the lockfile. It had `contents: write` permission and was only intended to bootstrap this one-time file; normal CI should not create commits automatically.
 
 Risk addressed: CI now has a committed dependency graph and is configured to fail when package manifests drift from the lockfile. Do not mark resolved until the frozen-install runs complete successfully.
 
