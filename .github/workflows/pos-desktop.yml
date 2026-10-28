@@ -41,6 +41,9 @@ jobs:
       - name: Test API
         run: pnpm --dir services/api test --runInBand
 
+      - name: Test shared payment policy
+        run: pnpm --filter @restaurant-pos/payment-policy test
+
       - name: Lint desktop
         run: pnpm --dir apps/pos-desktop lint
 
