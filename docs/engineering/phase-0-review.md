@@ -50,6 +50,55 @@ Validation on branch head `5e015cc7d28998483bfec87b09b8b2aef9043414` (2026-10-28
 
 Risk addressed by the change: desktop no longer imports implementation source from inside the API package. The finding remains pending CI until the new workspace package is verified end to end.
 
+## F-00d — Workspace UI/API capability gap
+
+**Status: CONFIRMED IN CURRENT ROUTER / FEATURE COMPLETENESS NOT ESTABLISHED**
+
+Evidence inspected on `feat/hr-accounting-inventory`:
+- `apps/pos-desktop/src/WorkspaceRouter.tsx` routes HR, Accounting, and Inventory to `ReadWorkspace`, which only issues GET requests (`hr/employees`, `accounting/trial-balance`, `inventory/stock`) and renders data tables.
+- Call Center and Dispatch route to `OperationalWorkspace`, which only loads order lists; Management loads a compact overview of branches, customers, and order status counts.
+- The login selector describes broader functions (attendance, payroll, purchasing, reports, inventory receiving/recipes) than the corresponding current screen exposes.
+- API controllers include additional HR and Accounting operations, so a read-only UI does not imply the backend capability is missing.
+
+Impact: product scope shown at login exceeds what these current screens allow users to do. This is a UI integration/completeness gap, not proof that backend endpoints are absent.
+
+Next action:
+1. Create a screen-to-endpoint capability matrix for HR, Payroll, Accounting, Inventory, Call Center, Dispatch, and Management.
+2. Map each required operation to an existing permission-protected API endpoint and an integration test.
+3. Implement one workspace at a time; do not add UI controls until request DTOs, permission requirements, branch scoping, and success/error behavior are verified.
+4. Update login descriptions to distinguish available read-only screens from planned functionality until those operations are implemented.
+
+## F-00e — Renderer can issue arbitrary local SQL through Tauri commands
+
+**Status: COMMAND SURFACE CONFIRMED / EXPLOITABILITY DEPENDS ON RENDERER TRUST BOUNDARY**
+
+Evidence inspected on `feat/hr-accounting-inventory`:
+- `apps/pos-desktop/src/pos/tauri-bridge.ts` exposes generic `execute(sql, params)`, `query(sql, params)`, and `transaction(statements)` methods.
+- `apps/pos-desktop/src-tauri/src/lib.rs` registers `db_execute`, `db_query`, and `db_transaction` as Tauri commands and prepares the caller-supplied SQL without a table/statement allowlist.
+- SQL parameters are bound, which helps prevent value interpolation, but does not constrain which statements or tables the renderer can request.
+
+Impact: any compromised or unintended renderer code that can invoke these commands can read or mutate the local SQLite database beyond the intended repository operations. This is a broad trust-boundary capability and should be treated as a high-priority hardening item before production distribution.
+
+Next action:
+1. Inventory every frontend call site and SQL statement; classify required reads/writes by domain.
+2. Replace generic commands with typed, narrowly scoped Tauri commands/repository operations (for example checkout persistence, sync queue, shift reconciliation, and print queue).
+3. Keep parameter binding and transactions internally; do not accept arbitrary SQL strings from the renderer.
+4. Add tests that prove each command only performs its intended operation and that unapproved table/statement access is unavailable.
+5. Keep migrations and local schema evolution inside the Rust/data layer; do not expose migration execution to the UI.
+
+Safety note: this finding documents an exposed command surface, not evidence of an actual compromise. Do not remove or restrict commands blindly before enumerating callers, because that could break checkout, offline sync, or shift reconciliation.
+
+## F-00f — Product branding mismatch in login screen
+
+**Status: CONFIRMED**
+
+Evidence:
+- `apps/pos-desktop/src/LoginGate.tsx` labels the application `BO'SH` and `BO'SH SYSTEM`, while the application shell and repository identify the product as Restaurant POS OS.
+
+Impact: confusing product identity and accidental carryover of branding from another product.
+
+Next action: replace the login branding with Restaurant POS OS branding and add a lightweight regression check or documented manual verification. Keep brand assets/configuration centralized so future rebranding does not require editing multiple screens.
+
 ## CI execution blocker — runner/log visibility
 
 **Status: HISTORICAL INCIDENT / CURRENTLY NOT REPRODUCED**
