@@ -82,14 +82,21 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
     });
   });
 
-  it('denies cross-tenant insert and tenant-moving update', async () => {
+  it('denies cross-tenant insert', async () => {
     await inContext(ids.tenantA, ids.branchA, async (client) => {
       await expect(client.query(
         `INSERT INTO "Branch" ("id","code","name","active","tenantId","createdAt","updatedAt")
          VALUES ($1,'ILLEGAL','Illegal',true,$2,now(),now())`,
         [randomUUID(), ids.tenantB],
       )).rejects.toThrow();
+    });
+  });
 
+  it('denies moving an existing branch to another tenant', async () => {
+    // Keep this in its own transaction: a rejected PostgreSQL statement aborts
+    // the current transaction, which would otherwise make later assertions
+    // pass for the wrong reason.
+    await inContext(ids.tenantA, ids.branchA, async (client) => {
       await expect(client.query(
         `UPDATE "Branch" SET "tenantId" = $1 WHERE "id" = $2`,
         [ids.tenantB, ids.branchA],

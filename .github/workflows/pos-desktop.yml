@@ -2,7 +2,7 @@ name: POS Desktop Quality Gate
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main, 'feat/**', 'test/**']
   pull_request:
     branches: [main]
 
@@ -16,7 +16,25 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: restaurant_pos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d restaurant_pos"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_pos
+      RLS_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_pos
+      RLS_APP_DATABASE_URL: postgresql://pos_app:pos_app_test_password@localhost:5432/restaurant_pos
     steps:
       - uses: actions/checkout@v7
 
@@ -32,13 +50,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: Provision least-privilege RLS test role
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE pos_app LOGIN PASSWORD 'pos_app_test_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+          SQL
+
+      - name: Apply migrations to disposable PostgreSQL
+        run: pnpm --dir services/api exec prisma migrate deploy --schema ../../prisma/schema.prisma
+
+      - name: Grant required privileges to disposable integration-test role
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          GRANT USAGE ON SCHEMA public, app TO pos_app;
+          GRANT SELECT, INSERT, UPDATE ON TABLE "Branch" TO pos_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "BusinessCycle" TO pos_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+            "PaymentAdjustment", "Payment", "CashDrawer", "Shift", "Order",
+            "Device", "CashDrawerMovement" TO pos_app;
+          SQL
+
       - name: Lint API
         run: pnpm --dir services/api lint
 
       - name: Typecheck API
         run: pnpm --dir services/api typecheck
 
-      - name: Test API
+      - name: Test API (including real PostgreSQL RLS isolation)
         run: pnpm --dir services/api test --runInBand
 
       - name: Lint desktop
