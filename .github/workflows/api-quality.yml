@@ -66,5 +66,8 @@ jobs:
       - name: Typecheck
         run: pnpm --filter @restaurant-pos/api typecheck
 
+      - name: Test shared payment policy
+        run: pnpm --filter @restaurant-pos/payment-policy test
+
       - name: Unit and integration tests
         run: pnpm --filter @restaurant-pos/api test --runInBand
