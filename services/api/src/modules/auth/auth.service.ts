@@ -104,8 +104,11 @@ export class AuthService {
     let deviceId: string | null = null;
 
     if (input.branchId !== undefined) {
-      const branch = await this.prisma.branch.findUnique({ where: { id: input.branchId }, select: { id: true, active: true } });
+      const branch = await this.prisma.branch.findUnique({ where: { id: input.branchId }, select: { id: true, active: true, tenantId: true } });
       if (!branch?.active) throw new UnauthorizedException('Branch is unavailable');
+      // A tenant-wide user may select a branch only within their own tenant.
+      // The caller-supplied branch ID is untrusted and must not cross tenant boundaries.
+      if (branch.tenantId !== user.tenantId) throw new UnauthorizedException('Branch is unavailable');
       selectedBranchId = input.branchId;
     }
 
