@@ -106,6 +106,7 @@ describe('auth service', () => {
       passwordHash: await hashPassword('correct-horse'),
       status: 'ACTIVE',
       branchId: null,
+      tenantId: 'tenant-1',
       roleLinks: [{ role: { code: 'OWNER' } }],
     });
     prisma.session.create.mockResolvedValue({ id: 'session-owner' });
@@ -118,6 +119,29 @@ describe('auth service', () => {
     expect(prisma.session.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ userId: 'user-3', branchId: null }),
     }));
+  });
+
+  it('rejects a tenant-wide owner selecting a branch from another tenant', async () => {
+    const prisma = mockPrisma();
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-5',
+      username: 'owner-cross-tenant',
+      displayName: 'Owner',
+      passwordHash: await hashPassword('correct-horse'),
+      status: 'ACTIVE',
+      branchId: null,
+      tenantId: 'tenant-1',
+      roleLinks: [{ role: { code: 'OWNER' } }],
+    });
+    prisma.branch.findUnique.mockResolvedValue({ id: 'branch-other-tenant', active: true, tenantId: 'tenant-2' });
+
+    const service = new AuthService(prisma as never);
+    await expect(service.login({
+      username: 'owner-cross-tenant',
+      password: 'correct-horse',
+      branchId: 'branch-other-tenant',
+    })).rejects.toThrow('Branch is unavailable');
+    expect(prisma.session.create).not.toHaveBeenCalled();
   });
 
   it('rejects mixed tenant-wide and branch-scoped roles without a branch', async () => {
