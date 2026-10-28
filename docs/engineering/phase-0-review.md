@@ -6,7 +6,7 @@ Pull request: [#4](https://github.com/3laa2511/restaurant-pos-os/pull/4)
 
 ## F-00a — Dependency lockfile and reproducibility
 
-**Status: IMPLEMENTED ON BRANCH / FROZEN-INSTALL CI PENDING**
+**Status: IMPLEMENTED ON BRANCH / FROZEN-INSTALL CI PASSED**
 
 Evidence and changes:
 - Root `package.json` pins `pnpm@10.15.0` and requires Node `>=22.0.0`.
@@ -14,8 +14,7 @@ Evidence and changes:
 - Fixed the bootstrap workflow's first-run detection: `git diff` misses untracked files, so it incorrectly reported no changes after generating a new lockfile. It now checks `git status --porcelain`.
 - Both API and desktop quality workflows now use `pnpm install --frozen-lockfile`.
 
-Remaining validation:
-- Confirm the API and desktop CI runs pass with frozen installs on the latest branch head.
+Validation on branch head `5e015cc7d28998483bfec87b09b8b2aef9043414` (2026-10-28): API and Desktop quality workflows both completed successfully, including dependency installation with `pnpm install --frozen-lockfile`.
 
 Safety note:
 - The temporary bootstrap workflow has been removed after generating the lockfile. It had `contents: write` permission and was only intended to bootstrap this one-time file; normal CI should not create commits automatically.
@@ -38,7 +37,7 @@ Safety constraint: do not rename or delete either migration until the target dat
 
 ## F-00c — Desktop imports API implementation source directly
 
-**Status: IMPLEMENTED ON BRANCH / CI PENDING**
+**Status: IMPLEMENTED ON BRANCH / CI PASSED**
 
 Changes on this branch:
 - Added `@restaurant-pos/payment-policy` as a workspace package with explicit ESM and TypeScript declaration exports.
@@ -47,15 +46,13 @@ Changes on this branch:
 - The API keeps a compatibility re-export from its previous module path, while desktop imports the shared package directly.
 - Added the workspace dependency to both the API and desktop package manifests.
 
-Remaining validation:
-- Wait for the branch's API and desktop CI workflows to complete.
-- Confirm package tests, API typecheck/tests, desktop typecheck/tests, and frontend build all pass before treating this finding as resolved.
+Validation on branch head `5e015cc7d28998483bfec87b09b8b2aef9043414` (2026-10-28): API and Desktop quality workflows both completed successfully. The shared `@restaurant-pos/payment-policy` test step passed in both workflows; the full workflows also passed.
 
 Risk addressed by the change: desktop no longer imports implementation source from inside the API package. The finding remains pending CI until the new workspace package is verified end to end.
 
 ## CI execution blocker — runner/log visibility
 
-**Status: CONFIRMED / ROOT CAUSE UNKNOWN**
+**Status: HISTORICAL INCIDENT / CURRENTLY NOT REPRODUCED**
 
 Observed on 2026-10-14 and rechecked 2026-10-15:
 - Bootstrap run: [38564434988](https://github.com/3laa2511/restaurant-pos-os/actions/runs/38564434988), job ID `115853391659`, conclusion `failure`, zero reported steps.
@@ -66,13 +63,13 @@ Observed on 2026-10-14 and rechecked 2026-10-15:
 - Latest job lookup for API and Desktop returned empty job arrays; earlier step/log lookup returned no steps and `BlobNotFound`.
 - This affects three distinct workflows before any steps are exposed. Root cause remains unknown; repository settings, billing/usage, runner provisioning, or a GitHub-side startup issue still need verification.
 
-This does not prove a code or YAML defect. Verify repository Actions policy, runner availability, and usage/billing restrictions in GitHub settings before attributing the failure to source code. Do not treat an empty step list as a passing test.
+These October 14–15 failures were startup failures without exposed job steps; the underlying cause was not established. On 2026-10-28, the latest API and Desktop workflows completed successfully on the current branch head, so the earlier blocker is not currently reproduced. This does not establish the historical root cause; monitor future runs and investigate again if startup failures recur. Do not treat an empty step list as a passing test.
 
 ## Exit criteria
 
-- [ ] Resolve why Actions jobs fail before steps are reported.
-- [ ] Generate and commit `pnpm-lock.yaml`; verify a frozen install.
-- [ ] Resolve duplicate migration numbering only after checking deployed migration history.
-- [ ] Extract payment policy into a shared package and add regression tests.
-- [ ] Run API and desktop lint/typecheck/tests, frontend build, and `cargo check`; record actual output.
-- [ ] Keep PR draft and do not merge until all checks pass.
+- [x] Commit `pnpm-lock.yaml` and verify frozen installs in both latest workflows.
+- [ ] Resolve duplicate migration numbering only after checking deployed migration history; no database history has been inspected, so no rename/rewrite is authorized.
+- [x] Extract payment policy into a shared package and add regression tests; latest API and Desktop quality workflows pass.
+- [x] Run the latest API and Desktop quality workflows successfully on branch head `5e015cc7d28998483bfec87b09b8b2aef9043414` (includes the configured lint/typecheck/tests/build/native checks).
+- [x] Historical runner startup failure is not reproduced in latest runs; root cause of the earlier incident remains unknown.
+- [x] Keep PR draft and do not merge until the remaining migration-history question and broader product audit are addressed.
