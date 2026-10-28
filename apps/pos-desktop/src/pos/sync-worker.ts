@@ -1,29 +1,55 @@
+import { SyncAuthenticationRequiredError, type SyncQueueItem, type SyncTransport } from './sync-contract.js';
 import { SyncOrchestrator } from './sync-orchestrator.js';
 import type { SyncRepository } from './sync-repository.js';
-import type { SyncQueueItem, SyncTransport } from './sync-contract.js';
 import { ExponentialRetryPolicy } from './retry-policy.js';
 import { getAccessToken } from './auth-client.js';
 import { getPosRuntimeIdentity } from './runtime-identity.js';
 
 export type { SyncQueueItem, SyncTransport } from './sync-contract.js';
-export interface SyncWorkerOptions { batchSize?: number; maxRetries?: number; baseDelayMs?: number; maxDelayMs?: number; workerId?: string; leaseMs?: number; }
+export interface SyncWorkerOptions {
+  batchSize?: number;
+  maxRetries?: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+  workerId?: string;
+  leaseMs?: number;
+  accessTokenProvider?: () => string | null;
+}
 export interface SyncWorkerRuntimeOptions extends SyncWorkerOptions { repository: SyncRepository; transport: SyncTransport; intervalMs?: number; }
 export interface SyncWorkerRuntime { stop(): void; }
 
 export class OfflineSyncWorker {
   private running = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private pausedForAuthentication = false;
+  private tokenAtAuthenticationFailure: string | null = null;
   private readonly orchestrator: SyncOrchestrator;
   private readonly retryPolicy: ExponentialRetryPolicy;
+  private readonly accessTokenProvider: () => string | null;
+
   constructor(repository: SyncRepository, transport: SyncTransport, options: SyncWorkerOptions = {}) {
     this.orchestrator = new SyncOrchestrator(repository, transport, options);
     this.retryPolicy = new ExponentialRetryPolicy({ baseDelayMs: options.baseDelayMs, maxDelayMs: options.maxDelayMs });
+    this.accessTokenProvider = options.accessTokenProvider ?? getAccessToken;
   }
+
   async runOnce(): Promise<number> {
     if (this.running) return 0;
+    if (this.pausedForAuthentication) {
+      const currentToken = this.accessTokenProvider();
+      if (!currentToken || currentToken === this.tokenAtAuthenticationFailure) return 0;
+      this.pausedForAuthentication = false;
+      this.tokenAtAuthenticationFailure = null;
+    }
+
     this.running = true;
     try {
       const result = await this.orchestrator.runOnce();
+      if (result.authenticationRequired) {
+        this.pausedForAuthentication = true;
+        this.tokenAtAuthenticationFailure = this.accessTokenProvider();
+        return result.synced;
+      }
       const failedAttempts = result.failedAttempts ?? 0;
       if (failedAttempts > 0) {
         await new Promise((resolve) => setTimeout(resolve, this.retryPolicy.delayFor(failedAttempts)));
@@ -31,6 +57,7 @@ export class OfflineSyncWorker {
       return result.synced;
     } finally { this.running = false; }
   }
+
   start(intervalMs = 2000): () => void {
     let stopped = false;
     const tick = async (): Promise<void> => {
@@ -57,13 +84,14 @@ export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetc
       const deviceId = requireNonEmptyString(runtime.deviceId, 'deviceId');
       const branchId = requireNonEmptyString(runtime.branchId, 'branchId');
       const token = accessTokenProvider();
-      if (!token) throw new Error('Sync requires an authenticated desktop session');
+      if (!token) throw new SyncAuthenticationRequiredError();
       const headers: Record<string, string> = { 'content-type': 'application/json', Authorization: `Bearer ${token}` };
       const endpoint = item.entity_type === 'KITCHEN_TICKET' ? `${base}/api/kitchen/tickets/sync` : `${base}/api/sync/operations`;
       const response = await fetcher(endpoint, {
         method: 'POST', headers,
         body: JSON.stringify({ id: item.id, deviceId, branchId, operation: item.operation, entityType: item.entity_type, entityId: item.entity_id, idempotencyKey: item.idempotency_key, clientSequence: item.client_sequence, occurredAt: payload.createdAt ?? item.created_at, payload }),
       });
+      if (response.status === 401) throw new SyncAuthenticationRequiredError('Sync session expired; sign in again to continue syncing');
       if (!response.ok) throw new Error(`Sync HTTP ${response.status}`);
       const result = await response.json().catch(() => null) as { status?: string; reason?: string } | null;
       if (result?.status === 'CONFLICT' || result?.status === 'REJECTED') throw new Error(`Sync ${result.status.toLowerCase()}: ${result.reason ?? 'operation rejected'}`);
