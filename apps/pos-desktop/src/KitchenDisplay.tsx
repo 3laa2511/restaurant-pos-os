@@ -8,7 +8,7 @@ import {
 } from './pos/kitchen-api.js';
 import { getPosRuntimeIdentity } from './pos/runtime-identity.js';
 import type { KitchenStation } from './pos/auth-client.js';
-import { ensureKitchenLocalSchema, cacheKitchenTickets, getCachedKitchenTickets, getKitchenSyncStates, enqueueKitchenTransition, applyOptimisticKitchenCache, type KitchenSyncState } from './pos/sqlite-kitchen.js';
+import { ensureKitchenLocalSchema, cacheKitchenTickets, getCachedKitchenTickets, getKitchenSyncStates, enqueueKitchenTransition, applyOptimisticKitchenCache, markKitchenSyncState, type KitchenSyncState } from './pos/sqlite-kitchen.js';
 import { createDatabaseBridge } from './pos/tauri-bridge.js';
 import { invoke } from '@tauri-apps/api/core';
 import { nextDeviceSequence } from './pos/sqlite-sequence.js';
@@ -122,10 +122,7 @@ export function KitchenDisplay() {
         return false;
       }
       await cacheKitchenTickets(db, [serverTicket]);
-      await db.execute(
-        `UPDATE kitchen_tickets SET sync_state = 'CONFLICT', sync_error = ?, updated_at = ? WHERE id = ?`,
-        ['Server state changed while this device was offline or processing an older version.', new Date().toISOString(), ticketId],
-      );
+      await markKitchenSyncState(db, ticketId, 'CONFLICT', 'Server state changed while this device was offline or processing an older version.');
       const states = await getKitchenSyncStates(db, identity.kitchenStation);
       const cached = await getCachedKitchenTickets(db, identity.kitchenStation);
       setTickets(cached);
