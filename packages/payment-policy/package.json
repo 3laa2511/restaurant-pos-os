@@ -1,0 +1,16 @@
+{
+  "name": "@restaurant-pos/payment-policy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.mjs"
+    }
+  },
+  "types": "./src/index.d.ts",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}
