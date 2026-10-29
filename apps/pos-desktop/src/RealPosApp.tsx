@@ -11,6 +11,7 @@ import { persistCompletedCheckout } from './pos/sqlite-checkout.js';
 import { nextDeviceSequence } from './pos/sqlite-sequence.js';
 import { closeLocalShift, getOpenShift, openLocalShift } from './pos/sqlite-shift.js';
 import { reconcileLocalCashDrawer } from './pos/sqlite-cash-drawer.js';
+import { listRecentLocalOrders } from './pos/sqlite-orders.js';
 import { loadMenu, type LocalMenu } from './pos/sqlite-menu.js';
 import { openShift, requestShiftClose } from './pos/shift.js';
 import { formatOrderNumber } from './pos/order-number.js';
@@ -94,8 +95,7 @@ export function RealPosApp() {
   const previewVariance = reconciliation && Number.isFinite(actualCash) ? Math.round((actualCash - reconciliation.expectedCash) * 100) / 100 : null;
 
   async function refreshRecentOrders() {
-    const rows = await db.query<RecentOrder>('SELECT order_number, type, total, status, created_at FROM orders ORDER BY created_at DESC LIMIT 8');
-    setRecentOrders(rows.map((row) => ({ ...row, total: Number(row.total) })));
+    setRecentOrders(await listRecentLocalOrders(db));
   }
 
   useEffect(() => {
