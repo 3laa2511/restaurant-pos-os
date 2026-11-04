@@ -15,6 +15,7 @@ try {
   if ($Sources.Count -ne 11) { throw "Expected 11 Replica skill folders; found $($Sources.Count)." }
   function Install-To([string]$Destination) {
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    Copy-Item (Join-Path $TempRoot "LICENSE") (Join-Path $Destination "replica-skill-LICENSE.txt") -Force
     $Installed=0
     foreach($Source in $Sources) {
       $Target=Join-Path $Destination $Source.Name
