@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
-import { assertBranchAccess, assertKitchenStationAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
+import { assertBranchAccess, assertKitchenStationAccess, assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AuditService } from '../audit/audit.service.js';
 import { OrderStatus } from '../../generated/prisma/enums.js';
@@ -20,12 +20,14 @@ export class KitchenService {
 
   async list(context: AuthContext, branchId?: string) {
     assertPermission(context, PERMISSIONS.ORDER_VIEW);
+    const tenantId = assertTenantScope(context);
     const scopedBranchId = (branchId ?? context.branchId)?.trim();
     if (scopedBranchId) assertBranchAccess(context, scopedBranchId);
 
     return this.prisma.order.findMany({
       where: {
         ...(scopedBranchId ? { branchId: scopedBranchId } : {}),
+        branch: { tenantId },
         status: { in: [...ACTIVE_STATUSES] },
       },
       orderBy: { updatedAt: 'asc' },
@@ -35,12 +37,14 @@ export class KitchenService {
 
   async listTickets(context: AuthContext, branchId?: string) {
     assertPermission(context, PERMISSIONS.ORDER_VIEW);
+    const tenantId = assertTenantScope(context);
     const scopedBranchId = (branchId ?? context.branchId)?.trim();
     if (scopedBranchId) assertBranchAccess(context, scopedBranchId);
 
     return this.prisma.kitchenTicket.findMany({
       where: {
         ...(scopedBranchId ? { branchId: scopedBranchId } : {}),
+        branch: { tenantId },
         ...(context.kitchenStation != null ? { station: context.kitchenStation } : {}),
         status: { in: ['SENT_TO_KITCHEN', 'PREPARING', 'READY'] },
       },
@@ -51,12 +55,13 @@ export class KitchenService {
 
   async materializeTickets(context: AuthContext, orderId: string) {
     assertPermission(context, PERMISSIONS.KITCHEN_TICKET_MANAGE);
+    const tenantId = assertTenantScope(context);
     const id = orderId.trim();
     if (!id) throw new Error('orderId is required');
 
     return this.prisma.$transaction(async (tx) => {
-      const order = await tx.order.findUnique({
-        where: { id },
+      const order = await tx.order.findFirst({
+        where: { id, branch: { tenantId } },
         select: { id: true, branchId: true, status: true },
       });
       if (!order) throw new Error('Order not found');
@@ -132,14 +137,15 @@ export class KitchenService {
     expectedVersion?: number,
   ) {
     assertPermission(context, PERMISSIONS.KITCHEN_TICKET_MANAGE);
+    const tenantId = assertTenantScope(context);
     const id = ticketId.trim();
     if (!id) throw new Error('ticketId is required');
     const cleanReason = reason?.trim() || null;
     if (target === 'CANCELLED' && !cleanReason) throw new Error('Cancellation reason is required');
 
     return this.prisma.$transaction(async (tx) => {
-      const ticket = await tx.kitchenTicket.findUnique({
-        where: { id },
+      const ticket = await tx.kitchenTicket.findFirst({
+        where: { id, branch: { tenantId } },
         select: { id: true, orderId: true, branchId: true, station: true, status: true, version: true },
       });
       if (!ticket) throw new Error('Kitchen ticket not found');
@@ -170,8 +176,8 @@ export class KitchenService {
         select: { status: true },
       });
       const projected = deriveOrderStatusFromKitchenTickets(statuses.map((entry) => entry.status));
-      const order = await tx.order.findUnique({
-        where: { id: ticket.orderId },
+      const order = await tx.order.findFirst({
+        where: { id: ticket.orderId, branch: { tenantId } },
         select: { id: true, branchId: true, status: true, version: true, orderNumber: true },
       });
       if (!order) throw new Error('Order not found');
@@ -225,6 +231,7 @@ export class KitchenService {
 
   async transition(context: AuthContext, orderId: string, target: KitchenTicketStatus, reason?: string) {
     assertPermission(context, PERMISSIONS.KITCHEN_TICKET_MANAGE);
+    const tenantId = assertTenantScope(context);
     if (context.kitchenStation != null) throw new Error('Station-scoped kitchen users must transition individual tickets');
     const id = orderId.trim();
     if (!id) throw new Error('orderId is required');
@@ -232,8 +239,8 @@ export class KitchenService {
     if (target === 'CANCELLED' && !cleanReason) throw new Error('Cancellation reason is required');
 
     return this.prisma.$transaction(async (tx) => {
-      const order = await tx.order.findUnique({
-        where: { id },
+      const order = await tx.order.findFirst({
+        where: { id, branch: { tenantId } },
         select: { id: true, branchId: true, status: true, version: true },
       });
       if (!order) throw new Error('Order not found');

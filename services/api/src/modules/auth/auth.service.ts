@@ -94,7 +94,10 @@ export class AuthService {
     let deviceId: string | null = null;
 
     if (input.branchId !== undefined) {
-      const branch = await this.prisma.branch.findUnique({ where: { id: input.branchId }, select: { id: true, active: true } });
+      const branch = await this.prisma.branch.findUnique({
+        where: { id: input.branchId },
+        select: { id: true, active: true },
+      });
       if (!branch?.active) throw new UnauthorizedException('Branch is unavailable');
       selectedBranchId = input.branchId;
     }
@@ -167,6 +170,7 @@ export class AuthService {
     const session = await this.prisma.session.findUnique({
       where: { tokenHash: hashToken(accessToken) },
       include: {
+        branch: { select: { tenantId: true } },
         user: {
           select: {
             id: true,
@@ -191,6 +195,7 @@ export class AuthService {
         {
           sessionId: session.id,
           userId: session.user.id,
+          tenantId: session.branch?.tenantId ?? null,
           branchId: session.branchId,
           deviceId: session.deviceId,
           expiresAt: session.expiresAt,

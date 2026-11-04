@@ -96,12 +96,30 @@ enum KitchenTicketStatus {
   CANCELLED
 }
 
-model Branch {
+model Tenant {
   id String @id @default(cuid())
-  code String @unique
+  slug String @unique
   name String
   nameAr String?
   active Boolean @default(true)
+  currency String @default("EGP")
+  branches Branch[]
+  categories Category[]
+  products Product[]
+  customers Customer[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([active])
+}
+
+model Branch {
+  id String @id @default(cuid())
+  code String
+  name String
+  nameAr String?
+  active Boolean @default(true)
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   users User[]
   devices Device[]
   orders Order[]
@@ -113,7 +131,10 @@ model Branch {
   kitchenTickets KitchenTicket[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@unique([tenantId, code])
+  @@index([tenantId, active])
 }
+
 model User {
   id String @id @default(cuid())
   username String @unique
@@ -133,6 +154,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
 model Role {
   id String @id @default(cuid())
   code RoleCode @unique
@@ -160,6 +182,7 @@ model RolePermission {
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   @@id([roleId, permissionId])
 }
+
 model Device {
   id String @id @default(cuid())
   deviceCode String @unique
@@ -176,6 +199,7 @@ model Device {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
 model Session {
   id String @id @default(cuid())
   tokenHash String @unique
@@ -193,17 +217,23 @@ model Session {
   @@index([expiresAt])
   @@index([deviceId, revokedAt])
 }
+
 model Category {
   id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   name String
   nameAr String?
   sortOrder Int @default(0)
   active Boolean @default(true)
   products Product[]
+  @@index([tenantId, active, sortOrder])
 }
 model Product {
   id String @id @default(cuid())
-  sku String @unique
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  sku String
   name String
   nameAr String?
   price Decimal @db.Decimal(12, 2)
@@ -214,7 +244,11 @@ model Product {
   orderItems OrderItem[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@unique([tenantId, sku])
+  @@index([tenantId, active])
+  @@index([categoryId, active])
 }
+
 model Order {
   id String @id @default(cuid())
   orderNumber String
@@ -300,14 +334,19 @@ model KitchenTicketItem {
   @@unique([ticketId, orderItemId])
   @@index([orderItemId])
 }
+
 model Customer {
   id String @id @default(cuid())
-  phone String @unique
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  phone String
   name String?
   orders Order[]
   addresses CustomerAddress[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@unique([tenantId, phone])
+  @@index([tenantId])
 }
 model CustomerAddress {
   id String @id @default(cuid())
@@ -318,6 +357,7 @@ model CustomerAddress {
   area String?
   notes String?
 }
+
 model Payment {
   id String @id @default(cuid())
   orderId String

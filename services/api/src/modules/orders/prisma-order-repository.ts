@@ -7,12 +7,21 @@ import type { OrderStatus } from './order-status.js';
 export class PrismaOrderRepository implements OrderRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findById(id: string): Promise<CreateOrderRecord | null> {
-    const order = await this.prisma.order.findUnique({ where: { id } });
+  async findById(id: string, tenantId: string): Promise<CreateOrderRecord | null> {
+    const order = await this.prisma.order.findFirst({
+      where: { id, branch: { tenantId } },
+      include: { branch: { select: { tenantId: true } } },
+    });
     return order ? this.map(order) : null;
   }
 
   async create(input: Omit<CreateOrderRecord, 'version'>): Promise<CreateOrderRecord> {
+    const branch = await this.prisma.branch.findFirst({
+      where: { id: input.branchId, tenantId: input.tenantId, active: true },
+      select: { id: true, tenantId: true },
+    });
+    if (!branch) throw new Error('Branch not found in tenant scope');
+
     const order = await this.prisma.order.create({
       data: {
         id: input.id,
@@ -24,30 +33,51 @@ export class PrismaOrderRepository implements OrderRepository {
         status: input.status as never,
         total: input.total,
       },
+      include: { branch: { select: { tenantId: true } } },
     });
     return this.map(order);
   }
 
-  async transition(id: string, expectedVersion: number, status: OrderStatus): Promise<CreateOrderRecord> {
+  async transition(
+    id: string,
+    tenantId: string,
+    expectedVersion: number,
+    status: OrderStatus,
+  ): Promise<CreateOrderRecord> {
     const result = await this.prisma.order.updateMany({
-      where: { id, version: expectedVersion },
+      where: { id, version: expectedVersion, branch: { tenantId } },
       data: { status: status as never, version: { increment: 1 } },
     });
 
     if (result.count !== 1) {
-      throw new Error('Order was changed by another operation or does not exist');
+      throw new Error('Order was changed by another operation or does not exist in tenant scope');
     }
 
-    const order = await this.prisma.order.findUnique({ where: { id } });
+    const order = await this.prisma.order.findFirst({
+      where: { id, branch: { tenantId } },
+      include: { branch: { select: { tenantId: true } } },
+    });
     if (!order) throw new Error('Order not found after transition');
     return this.map(order);
   }
 
-  private map(order: { id: string; orderNumber: string; branchId: string; createdById: string; source: unknown; type: unknown; status: unknown; total: { toString(): string }; version: number }): CreateOrderRecord {
+  private map(order: {
+    id: string;
+    orderNumber: string;
+    branchId: string;
+    branch: { tenantId: string };
+    createdById: string;
+    source: unknown;
+    type: unknown;
+    status: unknown;
+    total: { toString(): string };
+    version: number;
+  }): CreateOrderRecord {
     return {
       id: order.id,
       orderNumber: order.orderNumber,
       branchId: order.branchId,
+      tenantId: order.branch.tenantId,
       createdById: order.createdById,
       source: String(order.source),
       type: String(order.type),

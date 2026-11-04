@@ -8,7 +8,7 @@ type AsyncMock = jest.Mock<(...args: any[]) => Promise<unknown>>;
 type AuditMock = { recordWithClient: AsyncMock };
 
 function context(...permissions: AuthContext['permissions']): AuthContext {
-  return { userId: 'user-1', branchId: 'branch-1', deviceId: 'device-1', roles: [], permissions };
+  return { userId: 'user-1', tenantId: 'tenant-1', branchId: 'branch-1', deviceId: 'device-1', roles: [], permissions };
 }
 
 function prismaMock() {

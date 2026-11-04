@@ -4,6 +4,7 @@ import type { KitchenStation } from '../../generated/prisma/enums.js';
 
 const context = (kitchenStation?: KitchenStation | null): AuthContext => ({
   userId: 'u',
+  tenantId: 'tenant-1',
   branchId: 'b',
   deviceId: null,
   roles: [],

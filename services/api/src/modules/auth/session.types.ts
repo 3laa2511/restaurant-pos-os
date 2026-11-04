@@ -4,6 +4,7 @@ import type { AuthContext } from './authorization.types.js';
 export interface SessionRecord {
   sessionId: string;
   userId: string;
+  tenantId: string | null;
   branchId: string | null;
   deviceId: string | null;
   expiresAt: Date;
@@ -25,6 +26,7 @@ export function buildAuthContext(
   assertSessionActive(session);
   return {
     userId: session.userId,
+    tenantId: session.tenantId,
     branchId: session.branchId,
     deviceId: session.deviceId,
     roles,
