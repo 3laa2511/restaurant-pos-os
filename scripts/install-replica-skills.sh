@@ -17,7 +17,7 @@ TMP_ROOT="$(mktemp -d)"; trap 'rm -rf "$TMP_ROOT"' EXIT
 git clone --quiet --no-checkout "$REPO_URL" "$TMP_ROOT/replica-skill"
 git -C "$TMP_ROOT/replica-skill" checkout --quiet "$REPLICA_COMMIT"
 install_to(){
-  local dest="$1"; mkdir -p "$dest"; local count=0
+  local dest="$1"; mkdir -p "$dest"; cp "$TMP_ROOT/replica-skill/LICENSE" "$dest/replica-skill-LICENSE.txt"; local count=0
   for source in "$TMP_ROOT"/replica-skill/replica-*; do
     [[ -d "$source" ]] || continue
     local target="$dest/$(basename "$source")"
