@@ -24,6 +24,8 @@
 - [x] Connect Inventory recipe editor and Accounting general-ledger, cash/bank and read-only reconciliation report views; correct inclusive end-date and cash/bank opening-balance handling.
 - [x] Improve HR branch selection/attendance employee lookup and add payroll statement detail view.
 - [x] Add call-center and dispatch order search/status filters with customer contact, delivery address, timestamps and item counts; order mutation/assignment lifecycle remains a separate API phase.
+- [x] Add tenant-scoped supplier directory and supplier selection on inventory receipts; purchase-order lifecycle remains open.
+- [x] API and POS Desktop Quality Gates passed on exact integration SHA `136aa42f078eb8cfc4edf4aa24cf4f1db7a58030` (PostgreSQL migrations/bootstrap, API build and tests, desktop lint/typecheck/sync tests/frontend build and Tauri native check).
 - [x] API and POS Desktop Quality Gates passed on exact integration SHA `ab05f25b121cffab0858b0f4c5b919bfa5bfca73` (API tests, desktop lint/typecheck/sync tests/frontend build and Tauri native check).
 - [ ] Execute the Windows local bootstrap against a clean Docker PostgreSQL instance and verify sign-in in the actual Vite/Tauri runtime.
 - [ ] Restore the FlutterFlow source and 32-page UI Directions PDF, then verify visual/interaction parity.
