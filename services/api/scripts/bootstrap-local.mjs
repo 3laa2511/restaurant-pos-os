@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { createInterface } from 'node:readline';
 import pg from 'pg';
+import process from 'node:process';
 
 const { Pool } = pg;
 const scrypt = promisify(scryptCallback);
