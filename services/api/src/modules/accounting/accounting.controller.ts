@@ -97,13 +97,15 @@ export class AccountingController {
   @Get('reports/general-ledger')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   generalLedger(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto & { accountCode?: string }) {
-    return this.accounting.generalLedger(context, { ...query, ...(resolveBranchScope(context, query.branchId) ? { branchId: resolveBranchScope(context, query.branchId) } : {}) });
+    const branchId = resolveBranchScope(context, query.branchId);
+    return this.accounting.generalLedger(context, { ...query, ...(branchId ? { branchId } : {}) });
   }
 
   @Get('reports/profit-and-loss')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   profitAndLoss(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) {
-    return this.accounting.profitAndLoss(context, { ...query, ...(resolveBranchScope(context, query.branchId) ? { branchId: resolveBranchScope(context, query.branchId) } : {}) });
+    const branchId = resolveBranchScope(context, query.branchId);
+    return this.accounting.profitAndLoss(context, { ...query, ...(branchId ? { branchId } : {}) });
   }
 
   @Get('reports/balance-sheet')
@@ -116,12 +118,14 @@ export class AccountingController {
   @Get('reports/reconciliation')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   reconciliation(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) {
-    return this.accounting.reconciliation(context, { ...query, ...(resolveBranchScope(context, query.branchId) ? { branchId: resolveBranchScope(context, query.branchId) } : {}) });
+    const branchId = resolveBranchScope(context, query.branchId);
+    return this.accounting.reconciliation(context, { ...query, ...(branchId ? { branchId } : {}) });
   }
 
   @Get('reports/cash-bank')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   cashBankMovement(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) {
-    return this.accounting.cashBankMovement(context, { ...query, ...(resolveBranchScope(context, query.branchId) ? { branchId: resolveBranchScope(context, query.branchId) } : {}) });
+    const branchId = resolveBranchScope(context, query.branchId);
+    return this.accounting.cashBankMovement(context, { ...query, ...(branchId ? { branchId } : {}) });
   }
 }
