@@ -241,7 +241,7 @@ describe('InventoryService supplier directory', () => {
   };
 
   it('lists only active suppliers belonging to the authenticated tenant', async () => {
-    const findMany = jest.fn(async () => [{ id: 'supplier-1', name: 'Local Foods', phone: null, active: true }]);
+    const findMany = jest.fn(async (_args: unknown) => [{ id: 'supplier-1', name: 'Local Foods', phone: null, active: true }]);
     const tx = { $executeRaw: jest.fn(async () => 1), supplier: { findMany } };
     const prisma = { $transaction: jest.fn(async (work: (transaction: typeof tx) => Promise<unknown>) => work(tx)) };
     const service = new InventoryService(prisma as never, {} as never);
