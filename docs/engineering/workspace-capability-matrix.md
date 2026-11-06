@@ -19,6 +19,13 @@
 | Management | `OperationalWorkspace` fetches `GET /api/operations/management/overview`; shows branch/customer counts and order status totals. | The inspected operations controller exposes this overview only. | Build a role-scoped management dashboard and reports from verified endpoints. Do not present overview metrics as a full admin/HR/accounting control plane. |
 | Settings | Supports starting a new business cycle after a confirmation prompt. | Business-cycle current/start-new endpoints exist. | Add guarded settings for company/branch/device and configuration only when backed by audited, permission-protected APIs. |
 
+## Additional gaps confirmed during recovery
+
+- The separate `backup/menu-variants-2026-09-16` branch is not integrated. Its old migration conflicts with the occupied `0008` tenant-catalog migration and does not enforce tenant ownership for modifier groups/options. Its API only reads variants/modifiers; order creation and immutable order-line price snapshots are not wired. A new tenant-safe schema, API validation, local SQLite contract, POS selection UI and pricing/idempotency tests are required.
+- A first-run local owner bootstrap and API/Vite startup path now exist on the recovery branch. They still require a real Windows Docker Desktop run and sign-in smoke test on the user's machine.
+- Payment Hub intent and webhook adapter contracts are integrated, but there is no configured real provider, provider-specific signature verifier, automatic settlement, or accounting booking consumer.
+- The existing print worker renews its lease during long printer operations; this does not replace real printer-device QA, paper/connection failure recovery, or audited reprint acceptance tests.
+
 ## High-priority security review
 
 ### Generic local SQL command surface
