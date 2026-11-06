@@ -3,6 +3,7 @@ import { getDesktopSession } from '../pos/auth-client.js';
 import { apiGet, apiPost } from '../pos/workspace-api.js';
 import { actionStyle, DataTable, fieldStyle, WorkspaceShell } from './shared.js';
 
+type HrBranch = { id: string; code: string; name: string };
 type Employee = {
   userId: string; employeeCode: string; jobTitle: string; baseSalary: string | number;
   overtimeRate: string | number; user: { id: string; username: string; displayName: string; status: string; branchId: string | null };
@@ -27,12 +28,13 @@ export function HrWorkspace() {
   const canPayrollView = permissions.includes('HR_PAYROLL_VIEW');
   const canPayrollManage = permissions.includes('HR_PAYROLL_MANAGE');
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [branches, setBranches] = useState<HrBranch[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState('');
   const [error, setError] = useState('');
-  const [employeeForm, setEmployeeForm] = useState({ username: '', password: '', displayName: '', employeeCode: '', jobTitle: '', baseSalary: '', overtimeRate: '0', phone: '' });
+  const [employeeForm, setEmployeeForm] = useState({ username: '', password: '', displayName: '', employeeCode: '', jobTitle: '', baseSalary: '', overtimeRate: '0', phone: '', branchId: session?.user.branchId ?? '' });
   const [attendanceFilter, setAttendanceFilter] = useState({ from: monthStart, to: today });
   const [payrollForm, setPayrollForm] = useState({ name: 'مرتبات ' + today.slice(0, 7), periodStart: monthStart, periodEnd: today });
 
@@ -40,15 +42,18 @@ export function HrWorkspace() {
     setLoading(true);
     setError('');
     try {
-      const [employeeRows, attendanceRows, payrollRows] = await Promise.all([
+      const [employeeRows, attendanceRows, payrollRows, branchRows] = await Promise.all([
         canEmployees || canAttendance ? apiGet<Employee[]>('hr/employees') : Promise.resolve([]),
         canAttendance ? Promise.all([
           apiGet<Attendance[]>(`hr/attendance?from=${encodeURIComponent(attendanceFilter.from)}&to=${encodeURIComponent(attendanceFilter.to)}`),
           apiGet<Attendance[]>(`hr/attendance?from=${encodeURIComponent(today)}&to=${encodeURIComponent(today)}`),
         ]).then(([rangeRows, todayRows]) => Array.from(new Map([...rangeRows, ...todayRows].map(row => [row.id, row])).values())) : Promise.resolve([]),
         canPayrollView || canPayrollManage ? apiGet<PayrollPeriod[]>('hr/payroll/periods') : Promise.resolve([]),
+        canEmployees ? apiGet<HrBranch[]>('hr/branches') : Promise.resolve([]),
       ]);
       setEmployees(employeeRows);
+      setBranches(branchRows);
+      setEmployeeForm(value => ({ ...value, branchId: value.branchId || session?.user.branchId || branchRows[0]?.id || '' }));
       setAttendance(attendanceRows);
       setPeriods(payrollRows);
     } catch (cause) {
@@ -73,9 +78,9 @@ export function HrWorkspace() {
         baseSalary: Number(employeeForm.baseSalary),
         overtimeRate: Number(employeeForm.overtimeRate || 0),
         ...(employeeForm.phone.trim() ? { phone: employeeForm.phone.trim() } : {}),
-        ...(session?.user.branchId ? { branchId: session.user.branchId } : {}),
+        ...(session?.user.branchId ? { branchId: session.user.branchId } : employeeForm.branchId ? { branchId: employeeForm.branchId } : {}),
       });
-      setEmployeeForm({ username: '', password: '', displayName: '', employeeCode: '', jobTitle: '', baseSalary: '', overtimeRate: '0', phone: '' });
+      setEmployeeForm({ username: '', password: '', displayName: '', employeeCode: '', jobTitle: '', baseSalary: '', overtimeRate: '0', phone: '', branchId: session?.user.branchId ?? branches[0]?.id ?? '' });
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'تعذر إضافة الموظف');
@@ -145,6 +150,7 @@ export function HrWorkspace() {
       <input required value={employeeForm.displayName} onChange={e => setEmployeeForm(v => ({ ...v, displayName: e.target.value }))} placeholder="اسم الموظف" style={fieldStyle} />
       <input required value={employeeForm.employeeCode} onChange={e => setEmployeeForm(v => ({ ...v, employeeCode: e.target.value }))} placeholder="كود الموظف" style={fieldStyle} />
       <input required value={employeeForm.jobTitle} onChange={e => setEmployeeForm(v => ({ ...v, jobTitle: e.target.value }))} placeholder="الوظيفة" style={fieldStyle} />
+      {!session?.user.branchId && <select required value={employeeForm.branchId} onChange={e => setEmployeeForm(v => ({ ...v, branchId: e.target.value }))} style={fieldStyle}><option value="">اختر الفرع</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.name}</option>)}</select>}
       <input required value={employeeForm.username} onChange={e => setEmployeeForm(v => ({ ...v, username: e.target.value }))} placeholder="اسم المستخدم" style={fieldStyle} />
       <input required type="password" minLength={8} value={employeeForm.password} onChange={e => setEmployeeForm(v => ({ ...v, password: e.target.value }))} placeholder="كلمة المرور (8 أحرف على الأقل)" style={fieldStyle} />
       <input required type="number" min="0" step="0.01" value={employeeForm.baseSalary} onChange={e => setEmployeeForm(v => ({ ...v, baseSalary: e.target.value }))} placeholder="الراتب الأساسي" style={fieldStyle} />
