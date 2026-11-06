@@ -19,6 +19,8 @@ const permissions = [
   ['cash_drawer.manage', 'Manage cash drawer movements'],
   ['report.view_operational', 'View operational reports'],
   ['report.view_financial', 'View financial reports'],
+  ['business_cycle.view', 'View business cycles'],
+  ['business_cycle.manage', 'Manage business cycles'],
   ['user.manage', 'Manage users'],
   ['menu.manage', 'Manage menu'],
   ['inventory.manage', 'Manage inventory'],
@@ -26,6 +28,17 @@ const permissions = [
   ['audit.view', 'View audit logs'],
   ['audit.policy_manage', 'Manage audit risk policies'],
   ['kitchen.ticket_manage', 'Manage kitchen tickets'],
+  ['hr.employee_manage', 'Manage employee accounts'],
+  ['hr.attendance_manage', 'Manage attendance'],
+  ['hr.payroll_view', 'View payroll'],
+  ['hr.payroll_manage', 'Manage payroll'],
+  ['inventory.view', 'View inventory'],
+  ['accounting.view', 'View accounting'],
+  ['accounting.post', 'Post accounting journals'],
+  ['accounting.manage', 'Manage accounting periods and reversals'],
+  ['inventory.purchase', 'Receive inventory purchases'],
+  ['inventory.adjust', 'Adjust inventory'],
+  ['inventory.recipe_manage', 'Manage recipes'],
 ] as const;
 
 async function main() {
@@ -42,6 +55,9 @@ async function main() {
     BRANCH_MANAGER: 'Branch Manager',
     CENTRAL_ADMIN: 'Central Admin',
     OWNER: 'Owner',
+    HR_MANAGER: 'HR Manager',
+    ACCOUNTANT: 'Accountant',
+    INVENTORY_MANAGER: 'Inventory Manager',
   };
 
   for (const code of Object.values(RoleCode)) {
@@ -54,14 +70,44 @@ async function main() {
   const supervisor = [...callCenter, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_operational', 'report.view_financial', 'driver.assign', 'audit.view', 'cash_drawer.view'];
   const kitchen = ['order.view', 'kitchen.ticket_manage'];
   const dispatcher = ['order.view', 'driver.assign'];
-  const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'audit.view', 'cash_drawer.manage', 'kitchen.ticket_manage'];
-  const matrix: Record<RoleCode, readonly string[]> = { CASHIER: cashier, CALL_CENTER_OPERATOR: callCenter, CALL_CENTER_SUPERVISOR: supervisor, KITCHEN: kitchen, DISPATCHER: dispatcher, BRANCH_MANAGER: manager, CENTRAL_ADMIN: fullAccess, OWNER: fullAccess };
+  const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'menu.manage', 'audit.view', 'cash_drawer.manage', 'kitchen.ticket_manage'];
+  const hrManager = ['hr.employee_manage', 'hr.attendance_manage', 'hr.payroll_view', 'hr.payroll_manage', 'report.view_operational', 'audit.view'];
+  const accountant = ['hr.payroll_view', 'hr.payroll_manage', 'report.view_financial', 'inventory.view', 'inventory.purchase', 'report.view_operational', 'accounting.view', 'accounting.post', 'accounting.manage'];
+  const inventoryManager = ['inventory.view', 'inventory.purchase', 'inventory.adjust', 'inventory.recipe_manage', 'report.view_operational'];
+  const matrix: Record<RoleCode, readonly string[]> = { CASHIER: cashier, CALL_CENTER_OPERATOR: callCenter, CALL_CENTER_SUPERVISOR: supervisor, KITCHEN: kitchen, DISPATCHER: dispatcher, BRANCH_MANAGER: manager, CENTRAL_ADMIN: fullAccess, OWNER: fullAccess, HR_MANAGER: hrManager, ACCOUNTANT: accountant, INVENTORY_MANAGER: inventoryManager };
 
   for (const [roleCode, permissionCodes] of Object.entries(matrix) as [RoleCode, readonly string[]][]) {
     const role = await prisma.role.findUniqueOrThrow({ where: { code: roleCode } });
     await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
     const rows = await prisma.permission.findMany({ where: { code: { in: permissionCodes } }, select: { id: true } });
     await prisma.rolePermission.createMany({ data: rows.map(({ id }) => ({ roleId: role.id, permissionId: id })) });
+  }
+
+  const systemAccounts = [
+    ['1000', 'Cash', 'النقدية', 'ASSET'],
+    ['1010', 'Card Receivables', 'ذمم بطاقات الدفع', 'ASSET'],
+    ['1020', 'Wallet Receivables', 'ذمم المحافظ الإلكترونية', 'ASSET'],
+    ['1030', 'Bank', 'البنك', 'ASSET'],
+    ['1200', 'Inventory', 'المخزون', 'ASSET'],
+    ['1250', 'Inventory In Transit', 'مخزون بالطريق', 'ASSET'],
+    ['2100', 'Accounts Payable', 'الموردون', 'LIABILITY'],
+    ['2200', 'Payroll Payable', 'رواتب مستحقة', 'LIABILITY'],
+    ['4100', 'Sales Revenue', 'إيرادات المبيعات', 'REVENUE'],
+    ['4900', 'Inventory Adjustment Gain', 'أرباح تسويات المخزون', 'REVENUE'],
+    ['5100', 'Cost of Goods Sold', 'تكلفة البضاعة المباعة', 'EXPENSE'],
+    ['5900', 'Inventory Adjustment Loss', 'خسائر تسويات المخزون', 'EXPENSE'],
+    ['6100', 'Payroll Expense', 'مصروف الرواتب', 'EXPENSE'],
+  ] as const;
+
+  const tenants = await prisma.tenant.findMany({ select: { id: true } });
+  for (const tenant of tenants) {
+    for (const [code, name, nameAr, type] of systemAccounts) {
+      await prisma.accountingAccount.upsert({
+        where: { tenantId_code: { tenantId: tenant.id, code } },
+        update: { name, nameAr, type, active: true, allowPosting: true },
+        create: { tenantId: tenant.id, code, name, nameAr, type, active: true, allowPosting: true },
+      });
+    }
   }
 }
 

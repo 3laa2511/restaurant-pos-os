@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from './auth.guard.js';
 import { AuthService } from './auth.service.js';
-import type { AuthenticatedRequest, LoginInput } from './auth.service.js';
+import type { AuthenticatedRequest } from './auth.service.js';
+import { LoginDto } from './auth.dto.js';
 import { CurrentAuth } from './auth.decorators.js';
 import type { AuthContext } from './authorization.types.js';
 
@@ -10,7 +12,8 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post('login')
-  login(@Body() input: LoginInput) {
+  @Throttle({ default: { limit: 5, ttl: 60_000, blockDuration: 300_000 } })
+  login(@Body() input: LoginDto) {
     return this.auth.login(input);
   }
 

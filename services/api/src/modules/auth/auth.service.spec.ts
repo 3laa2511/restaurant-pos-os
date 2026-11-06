@@ -4,17 +4,25 @@ import { AuthService, hashPassword } from './auth.service.js';
 type MockArgs = Record<string, unknown>;
 type MockResult = Promise<any>;
 
-const mockPrisma = () => ({
-  user: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
-  branch: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
-  device: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
-  session: {
+const mockPrisma = () => {
+  const prisma = {
+    $executeRaw: jest.fn<() => Promise<number>>().mockResolvedValue(4),
+    $transaction: jest.fn(async (callback: (tx: typeof prisma) => Promise<any>) => callback(prisma)),
+    user: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
+    branch: {
+    findUnique: jest.fn<(args: MockArgs) => MockResult>(),
+    findFirst: jest.fn<(args: MockArgs) => MockResult>(),
+  },
+    device: { findUnique: jest.fn<(args: MockArgs) => MockResult>() },
+    session: {
     create: jest.fn<(args: MockArgs) => MockResult>(),
     findUnique: jest.fn<(args: MockArgs) => MockResult>(),
     updateMany: jest.fn<(args: MockArgs) => MockResult>(),
   },
-  auditLog: { create: jest.fn<(args: MockArgs) => MockResult>() },
-});
+    auditLog: { create: jest.fn<(args: MockArgs) => MockResult>() },
+    };
+  return prisma;
+};
 
 describe('auth service', () => {
   it('hashes and verifies a password through the login flow', async () => {
@@ -26,6 +34,7 @@ describe('auth service', () => {
       displayName: 'Cashier',
       passwordHash,
       status: 'ACTIVE',
+      tenantId: 'tenant-1',
       branchId: 'branch-1',
       roleLinks: [{ role: { code: 'CASHIER' } }],
     });
@@ -52,6 +61,7 @@ describe('auth service', () => {
       displayName: 'Cashier',
       passwordHash: await hashPassword('correct-horse'),
       status: 'ACTIVE',
+      tenantId: 'tenant-1',
       branchId: 'branch-1',
       roleLinks: [{ role: { code: 'CASHIER' } }],
     });
@@ -69,6 +79,7 @@ describe('auth service', () => {
       displayName: 'Cashier',
       passwordHash: await hashPassword('correct-horse'),
       status: 'ACTIVE',
+      tenantId: 'tenant-1',
       branchId: 'branch-1',
       roleLinks: [{ role: { code: 'CASHIER' } }],
     });

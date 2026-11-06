@@ -14,7 +14,7 @@ function buildPrisma(rows: unknown[]) {
 
 function row(overrides: Record<string, unknown> = {}) {
   return {
-    id: 'policy-1', action: 'PAYMENT_REFUND', branchId: null, baseScore: 50,
+    id: 'policy-1', tenantId: 'tenant-1', action: 'PAYMENT_REFUND', branchId: null, baseScore: 50,
     amountThreshold: null, varianceThreshold: null, requiresReason: false,
     requiresApproval: false, approvalPermission: null, enabled: true,
     effectiveFrom: new Date('2026-01-01T00:00:00.000Z'), effectiveTo: null,
@@ -29,21 +29,21 @@ describe('RiskPolicyService.resolve', () => {
       row({ id: 'global-policy', branchId: null, baseScore: 40 }),
     ]);
     const service = new RiskPolicyService(prisma as unknown as PrismaService);
-    await expect(service.resolveForContext('PAYMENT_REFUND', 'branch-1', new Date('2026-09-01T00:00:00.000Z')))
+    await expect(service.resolveForContext('tenant-1', 'PAYMENT_REFUND', 'branch-1', new Date('2026-09-01T00:00:00.000Z')))
       .resolves.toEqual(expect.objectContaining({ policyId: 'branch-policy', baseScore: 80 }));
   });
 
   it('falls back to the global policy when no branch override exists', async () => {
     const prisma = buildPrisma([row({ id: 'global-policy', branchId: null, baseScore: 40 })]);
     const service = new RiskPolicyService(prisma as unknown as PrismaService);
-    await expect(service.resolveForContext('PAYMENT_REFUND', 'branch-9'))
+    await expect(service.resolveForContext('tenant-1', 'PAYMENT_REFUND', 'branch-9'))
       .resolves.toEqual(expect.objectContaining({ policyId: 'global-policy', baseScore: 40 }));
   });
 
   it('returns the safe default when no active policy exists', async () => {
     const prisma = buildPrisma([]);
     const service = new RiskPolicyService(prisma as unknown as PrismaService);
-    await expect(service.resolveForContext('PAYMENT_REFUND', 'branch-1'))
+    await expect(service.resolveForContext('tenant-1', 'PAYMENT_REFUND', 'branch-1'))
       .resolves.toEqual({ baseScore: 10, requiresReason: false, requiresApproval: false, approvalPermission: null, amountThreshold: null, varianceThreshold: null, policyId: null });
   });
 
@@ -51,7 +51,7 @@ describe('RiskPolicyService.resolve', () => {
     const prisma = buildPrisma([]);
     const service = new RiskPolicyService(prisma as unknown as PrismaService);
     const now = new Date('2026-09-09T08:00:00.000Z');
-    await service.resolveForContext('PAYMENT_REFUND', 'branch-1', now);
+    await service.resolveForContext('tenant-1', 'PAYMENT_REFUND', 'branch-1', now);
     expect(prisma.riskPolicy.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         action: 'PAYMENT_REFUND',
@@ -69,7 +69,7 @@ describe('RiskPolicyService.resolve', () => {
       requiresReason: true, requiresApproval: true, approvalPermission: 'payment.refund',
     })]);
     const service = new RiskPolicyService(prisma as unknown as PrismaService);
-    await expect(service.resolveForContext('PAYMENT_REFUND', null))
+    await expect(service.resolveForContext('tenant-1', 'PAYMENT_REFUND', null))
       .resolves.toEqual(expect.objectContaining({ baseScore: 65, amountThreshold: 500.25, varianceThreshold: 25.5, requiresReason: true, requiresApproval: true, approvalPermission: 'payment.refund', policyId: 'configured' }));
   });
 });

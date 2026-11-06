@@ -1,0 +1,66 @@
+name: API Quality Gate
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_pos_test
+      RLS_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_pos_test
+      RLS_APP_DATABASE_URL: postgresql://rls_app:rls_app@localhost:5432/restaurant_pos_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Start PostgreSQL
+        run: |
+          docker run -d --name restaurant-pos-postgres             -e POSTGRES_USER=postgres             -e POSTGRES_PASSWORD=postgres             -e POSTGRES_DB=restaurant_pos_test             -p 5432:5432 postgres:17
+          for i in {1..30}; do
+            docker exec restaurant-pos-postgres pg_isready -U postgres -d restaurant_pos_test && break
+            sleep 2
+          done
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Prepare RLS test role
+        run: |
+          psql "$RLS_ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE rls_app LOGIN PASSWORD 'rls_app' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+          GRANT CONNECT ON DATABASE restaurant_pos_test TO rls_app;
+          SQL
+
+      - name: Apply migrations
+        working-directory: services/api
+        run: pnpm exec prisma migrate deploy --schema ../../prisma/schema.prisma
+
+      - name: Grant RLS test role
+        run: |
+          psql "$RLS_ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          GRANT USAGE ON SCHEMA public, app TO rls_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO rls_app;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO rls_app;
+          SQL
+
+      - name: Generate Prisma client
+        run: pnpm --filter @restaurant-pos/api generate
+
+      - name: Typecheck
+        run: pnpm --filter @restaurant-pos/api typecheck
+
+      - name: Unit and integration tests
+        run: pnpm --filter @restaurant-pos/api test --runInBand
