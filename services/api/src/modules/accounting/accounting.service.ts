@@ -22,7 +22,7 @@ type Line = {
 const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const reportDate = (value: string, endOfDay = false) => {
   const date = new Date(value);
-  if (endOfDay && /^\\d{4}-\\d{2}-\\d{2}$/.test(value)) date.setUTCHours(23, 59, 59, 999);
+  if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) date.setUTCHours(23, 59, 59, 999);
   return date;
 };
 const positiveMoney = (n: number, field: string) => {
