@@ -586,9 +586,9 @@ export class AccountingService {
 
   async journal(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
-    if (branchId) assertBranchAccess(context, branchId);
+    const scopedBranchId = resolveBranchScope(context, branchId);
     return withRlsContext(this.prisma, context, (tx) => tx.journalEntry.findMany({
-      where: { tenantId, ...(branchId ? { branchId } : {}) },
+      where: { tenantId, ...(scopedBranchId ? { branchId: scopedBranchId } : {}) },
       include: { lines: { include: { account: true } }, fiscalPeriod: true, reversalOf: true, reversalEntry: true },
       orderBy: { entryDate: 'desc' },
     }));
@@ -596,10 +596,10 @@ export class AccountingService {
 
   async trialBalance(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
-    if (branchId) assertBranchAccess(context, branchId);
+    const scopedBranchId = resolveBranchScope(context, branchId);
     const entries = await withRlsContext(this.prisma, context, (tx) => tx.journalLine.findMany({
       where: {
-        entry: { tenantId, status: 'POSTED', ...(branchId ? { branchId } : {}) },
+        entry: { tenantId, status: 'POSTED', ...(scopedBranchId ? { branchId: scopedBranchId } : {}) },
       },
       include: { account: true },
     }));
@@ -619,14 +619,14 @@ export class AccountingService {
     input: { branchId?: string; from?: string; to?: string; accountCode?: string },
   ) {
     const tenantId = assertTenantScope(context);
-    if (input.branchId) assertBranchAccess(context, input.branchId);
+    const scopedBranchId = resolveBranchScope(context, input.branchId);
     const from = input.from ? new Date(input.from) : new Date('1970-01-01T00:00:00.000Z');
     const to = input.to ? new Date(input.to) : new Date();
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) throw new Error('Report date range is invalid');
 
     return withRlsContext(this.prisma, context, async (tx) => {
       const scope = {
-        entry: { tenantId, status: 'POSTED' as const, ...(input.branchId ? { branchId: input.branchId } : {}) },
+        entry: { tenantId, status: 'POSTED' as const, ...(scopedBranchId ? { branchId: scopedBranchId } : {}) },
         ...(input.accountCode ? { account: { is: { code: input.accountCode, tenantId } } } : {}),
       };
       const [openingLines, lines] = await Promise.all([
