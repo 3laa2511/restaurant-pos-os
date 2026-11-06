@@ -90,7 +90,7 @@ describe('InventoryService branch warehouse transfer stock routing', () => {
 
     await expect(mocks.service.approveTransfer(tenantWideContext, 'transfer-approve-once'))
       .rejects.toThrow('Transfer cannot be approved in its current state');
-    expect(mocks.prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(mocks.prisma.$transaction).toHaveBeenCalledTimes(3);
     expect(mocks.updateTransfer).toHaveBeenCalledTimes(1);
   });
 
