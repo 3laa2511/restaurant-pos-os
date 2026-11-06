@@ -508,7 +508,6 @@ model PayrollPeriod {
   entries PayrollEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  @@index([tenantId, branchId, periodStart, periodEnd])
   @@index([tenantId, status, periodStart])
   @@index([tenantId, branchId, status, periodStart])
 }
