@@ -6,6 +6,7 @@ import { actionStyle, DataTable, fieldStyle, WorkspaceShell } from './shared.js'
 type IngredientRow = { id: string; sku: string; name: string; nameAr: string | null; baseUnit: string; purchaseUnit: string; purchaseUnitFactor: string | number; active: boolean };
 type StockRow = { quantityBaseUnit: string | number; averageCostPerBaseUnit: string | number; ingredient: IngredientRow; branch: { code: string; name: string } };
 type BranchOption = { id: string; code: string; name: string };
+type SupplierRow = { id: string; name: string; phone: string | null; active: boolean };
 type WarehouseRow = { id: string; code: string; name: string; type: string; branchId: string | null; branch: BranchOption | null };
 type TransferItemRow = { id: string; quantityBaseUnit: string | number; ingredient: { sku: string; name: string; baseUnit: string } };
 type ProductOption = { id: string; sku: string; name: string; nameAr: string | null };
@@ -35,6 +36,7 @@ export function InventoryWorkspace() {
   const canManage = permissions.includes('INVENTORY_MANAGE');
   const canRecipe = permissions.includes('RECIPE_MANAGE');
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
@@ -45,7 +47,8 @@ export function InventoryWorkspace() {
   const [working, setWorking] = useState('');
   const [error, setError] = useState('');
   const [ingredientForm, setIngredientForm] = useState({ sku: '', name: '', nameAr: '', baseUnit: 'g', purchaseUnit: 'kg', purchaseUnitFactor: '1000', reorderLevel: '0' });
-  const [receiptForm, setReceiptForm] = useState({ branchId: session?.user.branchId ?? '', ingredientId: '', quantity: '', unitCost: '', reference: '' });
+  const [receiptForm, setReceiptForm] = useState({ branchId: session?.user.branchId ?? '', ingredientId: '', supplierId: '', quantity: '', unitCost: '', reference: '' });
+  const [supplierForm, setSupplierForm] = useState({ name: '', phone: '' });
   const [receiptKey, setReceiptKey] = useState(newKey);
   const [adjustForm, setAdjustForm] = useState({ branchId: session?.user.branchId ?? '', ingredientId: '', quantity: '', direction: 'OUT' as 'IN' | 'OUT', reason: '' });
   const [adjustKey, setAdjustKey] = useState(newKey);
@@ -55,14 +58,16 @@ export function InventoryWorkspace() {
     setLoading(true);
     setError('');
     try {
-      const [ingredientRows, stockRows, warehouseRows, transferRows, menuCategories] = await Promise.all([
+      const [ingredientRows, supplierRows, stockRows, warehouseRows, transferRows, menuCategories] = await Promise.all([
         canView ? apiGet<IngredientRow[]>('inventory/ingredients') : Promise.resolve([]),
+        canView ? apiGet<SupplierRow[]>('inventory/suppliers') : Promise.resolve([]),
         canView ? apiGet<StockRow[]>('inventory/stock') : Promise.resolve([]),
         canView ? apiGet<WarehouseRow[]>('inventory/warehouses') : Promise.resolve([]),
         canView ? apiGet<TransferRow[]>('inventory/transfers') : Promise.resolve([]),
         canRecipe ? apiGet<MenuCategory[]>('menu') : Promise.resolve([]),
       ]);
       setIngredients(ingredientRows);
+      setSuppliers(supplierRows);
       setStock(stockRows);
       setWarehouses(warehouseRows);
       setTransfers(transferRows);
@@ -141,6 +146,26 @@ export function InventoryWorkspace() {
     }
   }
 
+  async function createSupplier(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (working || !supplierForm.name.trim()) return;
+    setWorking('supplier');
+    setError('');
+    try {
+      const supplier = await apiPost<SupplierRow>('inventory/suppliers', {
+        name: supplierForm.name.trim(),
+        ...(supplierForm.phone.trim() ? { phone: supplierForm.phone.trim() } : {}),
+      });
+      setSuppliers(rows => [...rows.filter(row => row.id !== supplier.id), supplier].sort((a, b) => a.name.localeCompare(b.name)));
+      setReceiptForm(value => ({ ...value, supplierId: supplier.id }));
+      setSupplierForm({ name: '', phone: '' });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'تعذر حفظ المورد');
+    } finally {
+      setWorking('');
+    }
+  }
+
   async function receiveStock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (working || !receiptForm.branchId || !receiptForm.ingredientId) return;
@@ -149,6 +174,7 @@ export function InventoryWorkspace() {
     try {
       await apiPost('inventory/receipts', {
         branchId: receiptForm.branchId,
+        ...(receiptForm.supplierId ? { supplierId: receiptForm.supplierId } : {}),
         ...(receiptForm.reference.trim() ? { reference: receiptForm.reference.trim() } : {}),
         idempotencyKey: receiptKey,
         items: [{ ingredientId: receiptForm.ingredientId, quantityPurchaseUnit: Number(receiptForm.quantity), unitCost: Number(receiptForm.unitCost) }],
@@ -245,11 +271,20 @@ export function InventoryWorkspace() {
       <button type="submit" disabled={working === 'ingredient'} style={actionStyle}>{working === 'ingredient' ? 'جاري الحفظ…' : 'حفظ المادة'}</button>
     </form>}
 
+    {canPurchase && <form onSubmit={createSupplier} style={{ padding: 16, marginBottom: 16, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 9 }}>
+      <h2 style={{ margin: 0, fontSize: 16, gridColumn: '1 / -1' }}>دليل الموردين</h2>
+      <div style={{ gridColumn: '1 / -1', color: '#8e9baa', fontSize: 11 }}>الموردون النشطون: {suppliers.length}</div>
+      <input required value={supplierForm.name} onChange={event => setSupplierForm(value => ({ ...value, name: event.target.value }))} placeholder="اسم المورد" style={fieldStyle} />
+      <input value={supplierForm.phone} onChange={event => setSupplierForm(value => ({ ...value, phone: event.target.value }))} placeholder="رقم الهاتف (اختياري)" style={fieldStyle} />
+      <button type="submit" disabled={working === 'supplier'} style={actionStyle}>{working === 'supplier' ? 'جاري الحفظ…' : 'إضافة مورد'}</button>
+    </form>}
+
     {(canPurchase || canAdjust) && <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 14, marginBottom: 16 }}>
       {canPurchase && <form onSubmit={receiveStock} style={{ padding: 16, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b', display: 'grid', gap: 9 }}>
         <h2 style={{ margin: 0, fontSize: 16 }}>استلام مشتريات</h2>
         {tenantWide && <select required value={receiptForm.branchId} onChange={e => setReceiptForm(v => ({ ...v, branchId: e.target.value }))} style={fieldStyle}><option value="">اختر الفرع</option>{branchOptions.map(branch => <option key={branch.id} value={branch.id}>{branch.code} — {branch.name}</option>)}</select>}
         <select required value={receiptForm.ingredientId} onChange={e => setReceiptForm(v => ({ ...v, ingredientId: e.target.value }))} style={fieldStyle}><option value="">اختر المادة</option>{ingredients.map(ingredient => <option key={ingredient.id} value={ingredient.id}>{ingredient.sku} — {ingredient.nameAr || ingredient.name}</option>)}</select>
+        <select value={receiptForm.supplierId} onChange={event => setReceiptForm(value => ({ ...value, supplierId: event.target.value }))} style={fieldStyle}><option value="">بدون تحديد مورد</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}{supplier.phone ? ' — ' + supplier.phone : ''}</option>)}</select>
         <input required type="number" min="0.0001" step="0.0001" value={receiptForm.quantity} onChange={e => setReceiptForm(v => ({ ...v, quantity: e.target.value }))} placeholder="الكمية بوحدة الشراء" style={fieldStyle} />
         <input required type="number" min="0" step="0.0001" value={receiptForm.unitCost} onChange={e => setReceiptForm(v => ({ ...v, unitCost: e.target.value }))} placeholder="تكلفة وحدة الشراء" style={fieldStyle} />
         <input value={receiptForm.reference} onChange={e => setReceiptForm(v => ({ ...v, reference: e.target.value }))} placeholder="رقم الفاتورة / المرجع" style={fieldStyle} />
