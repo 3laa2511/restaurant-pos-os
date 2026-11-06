@@ -20,7 +20,10 @@
 - [x] Default accounting journal posting to the authenticated branch and validate all referenced branches against the tenant.
 - [x] Require tenant-wide access to approve, dispatch from, or receive into the central warehouse; preserve branch-level stock operations.
 - [x] API and POS Desktop Quality Gates passed on exact SHA `f87d01dfed9c0655ccccfed4eb59ef46dd972963`, including PostgreSQL migrations, local owner login/session smoke test and Tauri native check.
-- [ ] Confirm both workflows finish successfully on the exact latest integration SHA after the subsequent documentation update.
+- [x] API and POS Desktop Quality Gates passed on exact integration SHA `8f58f72f0e77aec55b366e570ad012b70fffa830` (API, desktop lint/typecheck/tests/build, and Tauri native check).
+- [x] Connect Inventory recipe editor and Accounting general-ledger, cash/bank and read-only reconciliation report views; correct inclusive end-date and cash/bank opening-balance handling.
+- [x] Improve HR branch selection/attendance employee lookup and add payroll statement detail view.
+- [ ] Re-run both quality gates after the latest documentation-only capability-matrix update.
 - [ ] Execute the Windows local bootstrap against a clean Docker PostgreSQL instance and verify sign-in in the actual Vite/Tauri runtime.
 - [ ] Restore the FlutterFlow source and 32-page UI Directions PDF, then verify visual/interaction parity.
 - [ ] Complete menu variants/modifiers as a tenant-safe end-to-end feature; the old backup branch is not safe to cherry-pick.
