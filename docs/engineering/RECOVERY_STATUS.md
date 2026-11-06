@@ -6,7 +6,7 @@ This document records the active recovery integration branch. Refresh GitHub and
 
 - Repository: `3laa2511/restaurant-pos-os`
 - Integration branch: `feat/recovery-integration`
-- Latest commit when this status was written: `ec7718bf2f6a809a7ec5a4aa5dde8ac0e7cb922b`
+- Last fully validated code SHA: `f87d01dfed9c0655ccccfed4eb59ef46dd972963`
 - Target: `main` at `4a81d8dbf6c480cdc5aef27f466de20c93b87985`
 - Umbrella PR: #13 (draft, open)
 - No changes have been merged into `main` by this recovery work.
@@ -31,12 +31,12 @@ This document records the active recovery integration branch. Refresh GitHub and
 
 ## Latest validation state
 
-GitHub Actions validation for exact integration SHA `ec7718bf2f6a809a7ec5a4aa5dde8ac0e7cb922b`:
+GitHub Actions validation for exact integration SHA `f87d01dfed9c0655ccccfed4eb59ef46dd972963`:
 
-- API Quality Gate: **success**. PostgreSQL startup, migration deployment, RLS test-role grants, Prisma generation, typecheck, NestJS build, bootstrap script syntax, shared payment-policy tests, and API unit/integration tests passed.
-- POS Desktop Quality Gate: all validation steps passed, including API lint/typecheck/tests, desktop lint/typecheck, sync queue tests, frontend build, and Tauri native check. The workflow was still completing post-job cleanup when this status was updated.
+- API Quality Gate: **success**. PostgreSQL startup, all migrations including payroll branch scope, first-run bootstrap, RLS test-role grants, Prisma generation, typecheck, NestJS build, live owner login/session smoke test, shared payment-policy tests, and API unit/integration tests passed.
+- POS Desktop Quality Gate: **success**. API lint/typecheck/tests, desktop lint/typecheck, sync queue tests, frontend build, Linux Tauri native check and Rust compilation passed.
 
-The next code change creates a new SHA and must receive fresh CI. Do not carry this green result forward to later commits.
+A later code commit requires fresh CI. Do not carry this green result forward to later SHAs.
 
 ## Known product gaps — not declared complete
 
@@ -56,6 +56,14 @@ The next code change creates a new SHA and must receive fresh CI. Do not carry t
 - A provider event may change a verified payment intent; it must not directly close an order, post accounting, consume inventory, or mutate a cash drawer.
 - Never treat screenshots, customer-submitted references, or arbitrary SMS text as proof of payment.
 
+
+
+## Branch-scope hardening added in this recovery
+
+- Added a shared branch-scope resolver: branch-scoped sessions always query their authenticated branch when the client omits a filter, and cannot override it with another branch.
+- HR employee and attendance lists, employee creation and payroll periods now inherit the authenticated branch. Payroll periods carry an optional branch relation and use partial unique indexes for branch-specific and tenant-wide periods.
+- Accounting journal posting defaults to the authenticated branch, validates every referenced branch against the current tenant, and preserves branch allocation for tenant-wide payroll accruals. Accounting report endpoints apply the session branch by default.
+- Inventory stock queries inherit the session branch. Approval/dispatch/receipt actions involving the central warehouse require tenant-wide access; branch operators may request central-to-branch transfers and receive into their own branch.
 
 ## Additional branch review
 
