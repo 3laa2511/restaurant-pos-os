@@ -10,6 +10,11 @@ type JournalRow = { id: string; entryNumber: string; entryDate: string; descript
 type TrialBalanceRow = { code: string; name: string; nameAr: string | null; type: string; debit: number; credit: number; balance: number };
 type ProfitLossRow = { revenue: number; expenses: number; netIncome: number; accounts: Array<{ code: string; name: string; nameAr: string | null; type: string; amount: number }> };
 type BalanceSheetRow = { assets: number; liabilities: number; equity: number; netIncome: number; liabilitiesAndEquity: number; difference: number };
+type LedgerRow = { entryId: string; entryNumber: string; entryDate: string; description: string; sourceType: string; account: { code: string; name: string; nameAr: string | null }; debit: number; credit: number; balance: number; memo: string | null };
+type CashBankAccount = { openingBalance: number; totalDebit: number; totalCredit: number; closingBalance: number; lines: LedgerRow[] };
+type CashBankReport = { cash: CashBankAccount; bank: CashBankAccount };
+type ReconciliationFinding = { category: string; sourceId: string; orderNumber?: string; scope?: string; expectedRevenue?: number; postedRevenue?: number | null; movementCost?: number; postedCogs?: number | null; stockValuation?: number; inventoryAccountBalance?: number; difference?: number | null; status: string };
+type ReconciliationReport = { summary: { findingCount: number; status: string; checkedPaidOrders: number; checkedCogsEntries: number; checkedConsumptionMovements: number; checkedInventoryBranches: number }; findings: ReconciliationFinding[]; inventoryValuationAsOf: string };
 
 const today = new Date().toLocaleDateString('en-CA');
 const monthStart = today.slice(0, 8) + '01';
@@ -29,6 +34,9 @@ export function AccountingWorkspace() {
   const [trialBalance, setTrialBalance] = useState<TrialBalanceRow[]>([]);
   const [profitLoss, setProfitLoss] = useState<ProfitLossRow | null>(null);
   const [balanceSheet, setBalanceSheet] = useState<BalanceSheetRow | null>(null);
+  const [ledgerRows, setLedgerRows] = useState<LedgerRow[] | null>(null);
+  const [cashBank, setCashBank] = useState<CashBankReport | null>(null);
+  const [reconciliation, setReconciliation] = useState<ReconciliationReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState('');
   const [error, setError] = useState('');
@@ -63,6 +71,27 @@ export function AccountingWorkspace() {
       setError(cause instanceof Error ? cause.message : 'تعذر تحميل بيانات المحاسبة');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadDetailedReports() {
+    if (working) return;
+    setWorking('reports');
+    setError('');
+    try {
+      const query = `from=${encodeURIComponent(monthStart)}&to=${encodeURIComponent(today)}`;
+      const [ledger, cash, reconciliationReport] = await Promise.all([
+        apiGet<LedgerRow[]>('accounting/reports/general-ledger?' + query),
+        apiGet<CashBankReport>('accounting/reports/cash-bank?' + query),
+        apiGet<ReconciliationReport>('accounting/reports/reconciliation?' + query),
+      ]);
+      setLedgerRows(ledger);
+      setCashBank(cash);
+      setReconciliation(reconciliationReport);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'تعذر تحميل التقارير التفصيلية');
+    } finally {
+      setWorking('');
     }
   }
 
@@ -214,6 +243,38 @@ export function AccountingWorkspace() {
       <input required type="number" min="0.01" step="0.01" value={journalForm.amount} onChange={e => setJournalForm(v => ({ ...v, amount: e.target.value }))} placeholder="المبلغ بالجنيه" style={fieldStyle} />
       <button type="submit" disabled={working === 'journal' || postingAccounts.length < 2} style={actionStyle}>{working === 'journal' ? 'جاري الترحيل…' : 'ترحيل القيد'}</button>
     </form>}
+
+    <section style={{ marginBottom: 18, padding: 16, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div><h2 style={{ margin: 0, fontSize: 17 }}>التقارير التفصيلية والمطابقة</h2><p style={{ margin: '5px 0 0', color: '#8e9baa', fontSize: 11 }}>دفتر الأستاذ، حركة النقدية والبنك، ومطابقة المبيعات والمخزون مع القيود</p></div>
+        <button type="button" disabled={working === 'reports'} onClick={() => void loadDetailedReports()} style={actionStyle}>{working === 'reports' ? 'جاري إعداد التقارير…' : 'تحميل التقارير التفصيلية'}</button>
+      </div>
+      {reconciliation && <div style={{ marginTop: 14, padding: 12, border: '1px solid #26313d', borderRadius: 10 }}>
+        <strong>{reconciliation.summary.status === 'NO_MISMATCHES_FOUND' ? 'لا توجد فروق في المطابقة' : 'توجد فروق تحتاج مراجعة'}</strong>
+        <span style={{ marginInlineStart: 12, color: '#9ca8b5', fontSize: 12 }}>عدد الملاحظات: {reconciliation.summary.findingCount} · أوامر مدفوعة: {reconciliation.summary.checkedPaidOrders} · حركات استهلاك: {reconciliation.summary.checkedConsumptionMovements}</span>
+        <DataTable headers={['النوع','المصدر','المتوقع / قيمة المخزون','المسجل / قيمة الدفتر','الفرق','الحالة']} rows={reconciliation.findings.map(item => [
+          item.category, item.orderNumber || item.sourceId,
+          money(item.expectedRevenue ?? item.movementCost ?? item.stockValuation ?? 0),
+          money(item.postedRevenue ?? item.postedCogs ?? item.inventoryAccountBalance ?? 0),
+          item.difference === null || item.difference === undefined ? '—' : money(item.difference), item.status,
+        ])} />
+        <p style={{ color: '#8e9baa', fontSize: 10, marginBottom: 0 }}>تقييم المخزون الحالي محسوب حتى {new Date(reconciliation.inventoryValuationAsOf).toLocaleString('ar-EG')}. التقرير للقراءة فقط ولا يعدّل الأرصدة.</p>
+      </div>}
+      {cashBank && <div style={{ marginTop: 14 }}>
+        <h3 style={{ fontSize: 14 }}>ملخص النقدية والبنك</h3>
+        <DataTable headers={['الحساب','رصيد أول المدة','إجمالي مدين','إجمالي دائن','رصيد آخر المدة']} rows={[
+          ['الخزينة', money(cashBank.cash.openingBalance), money(cashBank.cash.totalDebit), money(cashBank.cash.totalCredit), money(cashBank.cash.closingBalance)],
+          ['البنك', money(cashBank.bank.openingBalance), money(cashBank.bank.totalDebit), money(cashBank.bank.totalCredit), money(cashBank.bank.closingBalance)],
+        ]} />
+      </div>}
+      {ledgerRows && <div style={{ marginTop: 14 }}>
+        <h3 style={{ fontSize: 14 }}>دفتر الأستاذ العام ({ledgerRows.length})</h3>
+        <DataTable headers={['التاريخ','رقم القيد','الحساب','البيان','مدين','دائن','الرصيد']} rows={ledgerRows.map(row => [
+          new Date(row.entryDate).toLocaleDateString('ar-EG'), row.entryNumber, row.account.nameAr || row.account.name,
+          row.description, money(row.debit), money(row.credit), money(row.balance),
+        ])} />
+      </div>}
+    </section>
 
     <section style={{ marginBottom: 18 }}>
       <h2 style={{ fontSize: 17 }}>ميزان المراجعة</h2>
