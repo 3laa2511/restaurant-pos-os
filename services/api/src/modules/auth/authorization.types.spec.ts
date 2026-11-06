@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
+import { RoleCode } from '../../generated/prisma/enums.js';
 import type { AuthContext } from './authorization.types.js';
 import { resolveBranchScope } from './authorization.types.js';
 
@@ -10,7 +11,7 @@ function context(branchId: string | null): AuthContext {
     deviceId: null,
     sessionId: 'session-1',
     workspace: 'HR',
-    roles: ['HR_MANAGER'],
+    roles: [RoleCode.HR_MANAGER],
     permissions: [],
   };
 }
