@@ -268,6 +268,7 @@ model Branch {
   journalLines JournalLine[]
   warehouses Warehouse[]
   departments Department[]
+  payrollPeriods PayrollPeriod[]
   paymentProviderAccounts PaymentProviderAccount[]
   paymentIntents PaymentIntent[]
   createdAt DateTime @default(now())
@@ -498,6 +499,8 @@ model PayrollPeriod {
   id String @id @default(cuid())
   tenantId String
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId String?
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
   name String
   periodStart DateTime
   periodEnd DateTime
@@ -505,8 +508,9 @@ model PayrollPeriod {
   entries PayrollEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  @@unique([tenantId, periodStart, periodEnd])
+  @@unique([tenantId, branchId, periodStart, periodEnd])
   @@index([tenantId, status, periodStart])
+  @@index([tenantId, branchId, status, periodStart])
 }
 
 model PayrollEntry {
