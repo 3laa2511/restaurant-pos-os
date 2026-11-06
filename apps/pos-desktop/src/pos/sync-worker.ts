@@ -1,13 +1,21 @@
+import { SyncAuthenticationRequiredError, type SyncQueueItem, type SyncTransport } from './sync-contract.js';
 import { SyncOrchestrator } from './sync-orchestrator.js';
 import type { SyncRepository } from './sync-repository.js';
-import type { SyncQueueItem, SyncTransport } from './sync-contract.js';
 import { assertSyncAcknowledgement } from '../../../../services/api/src/modules/sync/sync-contract.js';
 import { ExponentialRetryPolicy } from './retry-policy.js';
 import { getAccessToken } from './auth-client.js';
 import { getPosRuntimeIdentity } from './runtime-identity.js';
 
 export type { SyncQueueItem, SyncTransport } from './sync-contract.js';
-export interface SyncWorkerOptions { batchSize?: number; maxRetries?: number; baseDelayMs?: number; maxDelayMs?: number; workerId?: string; leaseMs?: number; }
+export interface SyncWorkerOptions {
+  batchSize?: number;
+  maxRetries?: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+  workerId?: string;
+  leaseMs?: number;
+  accessTokenProvider?: () => string | null;
+}
 export interface SyncWorkerRuntimeOptions extends SyncWorkerOptions { repository: SyncRepository; transport: SyncTransport; intervalMs?: number; onError?: (error: unknown) => void; }
 export interface SyncWorkerRuntime { stop(): void; }
 
@@ -15,16 +23,31 @@ export class OfflineSyncWorker {
   private running = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly orchestrator: SyncOrchestrator;
+  private pausedForAuthentication = false;
+  private tokenAtAuthenticationFailure: string | null = null;
   private readonly retryPolicy: ExponentialRetryPolicy;
+  private readonly accessTokenProvider: () => string | null;
   constructor(repository: SyncRepository, transport: SyncTransport, options: SyncWorkerOptions = {}) {
     this.orchestrator = new SyncOrchestrator(repository, transport, options);
     this.retryPolicy = new ExponentialRetryPolicy({ baseDelayMs: options.baseDelayMs, maxDelayMs: options.maxDelayMs });
+    this.accessTokenProvider = options.accessTokenProvider ?? getAccessToken;
   }
   async runOnce(): Promise<number> {
     if (this.running) return 0;
+    if (this.pausedForAuthentication) {
+      const currentToken = this.accessTokenProvider();
+      if (!currentToken || currentToken === this.tokenAtAuthenticationFailure) return 0;
+      this.pausedForAuthentication = false;
+      this.tokenAtAuthenticationFailure = null;
+    }
     this.running = true;
     try {
       const result = await this.orchestrator.runOnce();
+      if (result.authenticationRequired) {
+        this.pausedForAuthentication = true;
+        this.tokenAtAuthenticationFailure = this.accessTokenProvider();
+        return result.synced;
+      }
       const failedAttempts = result.failedAttempts ?? 0;
       if (failedAttempts > 0) {
         await new Promise((resolve) => setTimeout(resolve, this.retryPolicy.delayFor(failedAttempts)));
@@ -64,7 +87,7 @@ export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetc
       const deviceId = requireNonEmptyString(runtime.deviceId, 'deviceId');
       const branchId = requireNonEmptyString(runtime.branchId, 'branchId');
       const token = accessTokenProvider();
-      if (!token) throw new Error('Sync requires an authenticated desktop session');
+      if (!token) throw new SyncAuthenticationRequiredError();
       const headers: Record<string, string> = { 'content-type': 'application/json', Authorization: `Bearer ${token}` };
       const endpoint = item.entity_type === 'KITCHEN_TICKET' ? `${base}/api/kitchen/tickets/sync` : `${base}/api/sync/operations`;
       const controller = new AbortController();
@@ -80,6 +103,9 @@ export function createHttpSyncTransport(apiBaseUrl: string, fetcher: typeof fetc
         throw error;
       } finally {
         clearTimeout(timeout);
+      }
+      if (response.status === 401) {
+        throw new SyncAuthenticationRequiredError('Sync session expired; sign in again to continue syncing');
       }
       const result: unknown = await response.json().catch(() => null);
       assertSyncAcknowledgement(response.status, result);
