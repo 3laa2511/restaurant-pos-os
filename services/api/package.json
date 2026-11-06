@@ -6,7 +6,11 @@
     "generate": "prisma generate --schema ../../prisma/schema.prisma",
     "typecheck": "pnpm generate && tsc --noEmit",
     "lint": "eslint .",
-    "test": "jest"
+    "test": "jest",
+    "build": "pnpm generate && nest build",
+    "start:dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "migrate:deploy": "prisma migrate deploy --schema ../../prisma/schema.prisma"
   },
   "dependencies": {
     "@restaurant-pos/payment-policy": "workspace:*",
