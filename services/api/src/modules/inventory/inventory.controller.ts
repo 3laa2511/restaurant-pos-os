@@ -58,6 +58,12 @@ export class InventoryController {
   @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
   receiveTransfer(@CurrentAuth() context: AuthContext, @Param('transferId') transferId: string) { return this.inventory.receiveTransfer(context, transferId); }
 
+  @Get('recipes/:productId')
+  @RequirePermission(PERMISSIONS.RECIPE_MANAGE)
+  recipe(@CurrentAuth() context: AuthContext, @Param('productId') productId: string) {
+    return this.inventory.listRecipe(context, productId);
+  }
+
   @Post('recipes/:productId')
   @RequirePermission(PERMISSIONS.RECIPE_MANAGE)
   setRecipe(@CurrentAuth() context: AuthContext, @Param('productId') productId: string, @Body() input: SetRecipeDto) { return this.inventory.setRecipe(context, productId, input); }
