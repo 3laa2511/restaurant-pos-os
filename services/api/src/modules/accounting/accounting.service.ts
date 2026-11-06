@@ -806,8 +806,8 @@ export class AccountingService {
   ) {
     const tenantId = assertTenantScope(context);
     if (input.branchId) assertBranchAccess(context, input.branchId);
-    const from = input.from ? new Date(input.from) : new Date('1970-01-01T00:00:00.000Z');
-    const to = input.to ? new Date(input.to) : new Date();
+    const from = input.from ? reportDate(input.from) : new Date('1970-01-01T00:00:00.000Z');
+    const to = input.to ? reportDate(input.to, true) : new Date();
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) {
       throw new Error('Reconciliation date range is invalid');
     }
