@@ -20,6 +20,11 @@ type Line = {
 };
 
 const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+const reportDate = (value: string, endOfDay = false) => {
+  const date = new Date(value);
+  if (endOfDay && /^\\d{4}-\\d{2}-\\d{2}$/.test(value)) date.setUTCHours(23, 59, 59, 999);
+  return date;
+};
 const positiveMoney = (n: number, field: string) => {
   if (!Number.isFinite(n) || n < 0) throw new Error(`${field} must be a non-negative finite number`);
   return money(n);
@@ -620,8 +625,8 @@ export class AccountingService {
   ) {
     const tenantId = assertTenantScope(context);
     const scopedBranchId = resolveBranchScope(context, input.branchId);
-    const from = input.from ? new Date(input.from) : new Date('1970-01-01T00:00:00.000Z');
-    const to = input.to ? new Date(input.to) : new Date();
+    const from = input.from ? reportDate(input.from) : new Date('1970-01-01T00:00:00.000Z');
+    const to = input.to ? reportDate(input.to, true) : new Date();
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) throw new Error('Report date range is invalid');
 
     return withRlsContext(this.prisma, context, async (tx) => {
@@ -696,7 +701,7 @@ export class AccountingService {
   async balanceSheet(context: AuthContext, input: { branchId?: string; asOf?: string }) {
     const tenantId = assertTenantScope(context);
     if (input.branchId) assertBranchAccess(context, input.branchId);
-    const asOf = input.asOf ? new Date(input.asOf) : new Date();
+    const asOf = input.asOf ? reportDate(input.asOf, true) : new Date();
     if (!Number.isFinite(asOf.getTime())) throw new Error('Balance sheet date is invalid');
 
     return withRlsContext(this.prisma, context, async (tx) => {
