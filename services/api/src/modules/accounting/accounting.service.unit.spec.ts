@@ -58,3 +58,42 @@ describe('AccountingService.ensureAccount', () => {
     });
   });
 });
+
+describe('AccountingService report date boundaries', () => {
+  it('includes the entire selected end date in the general ledger query', async () => {
+    const findMany = jest.fn<(...args: unknown[]) => Promise<unknown[]>>()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const tx = {
+      $executeRaw: jest.fn(async () => 1),
+      journalLine: { findMany },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (work: (transaction: typeof tx) => Promise<unknown>) => work(tx)),
+    };
+    const service = new AccountingService(prisma as never);
+    const context = {
+      tenantId: 'tenant-1',
+      branchId: 'branch-1',
+      userId: 'user-1',
+      sessionId: 'session-1',
+      deviceId: 'device-1',
+      workspace: 'ACCOUNTING' as const,
+      roles: [],
+      permissions: [],
+    };
+
+    await service.generalLedger(context, { from: '2026-11-01', to: '2026-11-06' });
+
+    expect(findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: expect.objectContaining({
+        entry: expect.objectContaining({
+          entryDate: {
+            gte: new Date('2026-11-01T00:00:00.000Z'),
+            lte: new Date('2026-11-06T23:59:59.999Z'),
+          },
+        }),
+      }),
+    }));
+  });
+});
