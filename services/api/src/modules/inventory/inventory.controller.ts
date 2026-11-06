@@ -6,7 +6,7 @@ import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { InventoryService } from './inventory.service.js';
-import { OptionalBranchQueryDto, ProductIdParamDto, TransferIdParamDto, TransferStatusQueryDto } from '../security/request.dto.js';
+import { OptionalBranchQueryDto, TransferStatusQueryDto } from '../security/request.dto.js';
 import { AdjustInventoryDto, CreateIngredientDto, CreateTransferDto, ReceiveInventoryDto, SetRecipeDto } from './inventory.dto.js';
 
 @Controller('inventory')
@@ -48,17 +48,17 @@ export class InventoryController {
 
   @Post('transfers/:transferId/approve')
   @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
-  approveTransfer(@CurrentAuth() context: AuthContext, @Param() params: TransferIdParamDto) { return this.inventory.approveTransfer(context, params.id); }
+  approveTransfer(@CurrentAuth() context: AuthContext, @Param('transferId') transferId: string) { return this.inventory.approveTransfer(context, transferId); }
 
   @Post('transfers/:transferId/dispatch')
   @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
-  dispatchTransfer(@CurrentAuth() context: AuthContext, @Param() params: TransferIdParamDto) { return this.inventory.dispatchTransfer(context, params.id); }
+  dispatchTransfer(@CurrentAuth() context: AuthContext, @Param('transferId') transferId: string) { return this.inventory.dispatchTransfer(context, transferId); }
 
   @Post('transfers/:transferId/receive')
   @RequirePermission(PERMISSIONS.INVENTORY_MANAGE)
-  receiveTransfer(@CurrentAuth() context: AuthContext, @Param() params: TransferIdParamDto) { return this.inventory.receiveTransfer(context, params.id); }
+  receiveTransfer(@CurrentAuth() context: AuthContext, @Param('transferId') transferId: string) { return this.inventory.receiveTransfer(context, transferId); }
 
   @Post('recipes/:productId')
   @RequirePermission(PERMISSIONS.RECIPE_MANAGE)
-  setRecipe(@CurrentAuth() context: AuthContext, @Param() params: ProductIdParamDto, @Body() input: SetRecipeDto) { return this.inventory.setRecipe(context, params.id, input); }
+  setRecipe(@CurrentAuth() context: AuthContext, @Param('productId') productId: string, @Body() input: SetRecipeDto) { return this.inventory.setRecipe(context, productId, input); }
 }
