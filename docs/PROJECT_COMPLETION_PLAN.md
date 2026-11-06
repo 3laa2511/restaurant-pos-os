@@ -1,6 +1,26 @@
 # Restaurant POS OS — Completion and Release Plan
 
-> Living checklist for the active `feat/hr-accounting-inventory` workstream. Update this file as tasks are verified. A merged implementation is not considered complete until its automated checks and required database/product verification pass.
+> Living checklist for the active `feat/recovery-integration` workstream. The original PR branches remain preserved; this branch is the integration target and does not imply production readiness. Update this file as tasks are verified. A merged implementation is not considered complete until its automated checks and required database/product verification pass.
+
+## Recovery integration — 2026-11-06
+
+- [x] Create a protected integration branch and umbrella PR #13 targeting `main`; no direct main update.
+- [x] Carry forward the tenant/catalog foundation and HR, payroll, accounting, inventory, workspace and offline-first code from the existing feature stack.
+- [x] Integrate the RPOS branding correction, frozen pnpm lockfile, shared payment-policy package and workspace capability matrix.
+- [x] Integrate kitchen conflict persistence through the repository layer.
+- [x] Add branchless account role-scope validation and regression tests while retaining tenant-scoped branch selection for tenant-wide owners.
+- [x] Add sync authentication-expiry pause/release behavior without consuming retry budget or changing queue order/idempotency.
+- [x] Carry forward Payment Hub intent policy, provider account/attempt/inbox schema and provider-neutral webhook adapter contract; no live provider verifier or settlement side effects.
+- [x] Add Prisma migration provider lock and isolate rejected RLS SQL assertions in separate transactions.
+- [x] Add local API build/start/migrate scripts, Vite CORS defaults and a non-default-password first-run local owner bootstrap.
+- [x] Add Windows local development instructions and Replica-derived engineering/quality workflow.
+- [x] API Quality Gate passed on `ec7718bf2f6a809a7ec5a4aa5dde8ac0e7cb922b`; desktop validation steps passed through Tauri native check on that SHA. A newer documentation-only commit requires fresh CI before release.
+- [ ] Confirm both workflows finish successfully on the exact latest integration SHA.
+- [ ] Execute the Windows local bootstrap against a clean Docker PostgreSQL instance and verify sign-in in the actual Vite/Tauri runtime.
+- [ ] Restore the FlutterFlow source and 32-page UI Directions PDF, then verify visual/interaction parity.
+- [ ] Complete menu variants/modifiers as a tenant-safe end-to-end feature; the old backup branch is not safe to cherry-pick.
+- [ ] Complete the branch-LAN coordination service for multi-cashier offline operation.
+- [ ] Finish typed Tauri IPC migration, workspace workflows, installer/updater, diagnostics and release operations.
 
 ## Product contract (must not regress)
 
