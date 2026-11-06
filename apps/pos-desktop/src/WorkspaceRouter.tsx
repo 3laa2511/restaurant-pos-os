@@ -5,6 +5,7 @@ import { API_BASE_URL, apiGet, apiPost } from './pos/workspace-api.js';
 import { DataTable, WorkspaceShell } from './workspaces/shared.js';
 import { AccountingWorkspace } from './workspaces/AccountingWorkspace.js';
 import { InventoryWorkspace } from './workspaces/InventoryWorkspace.js';
+import { HrWorkspace } from './workspaces/HrWorkspace.js';
 import { useEffect, useState, type ReactNode } from 'react';
 
 const labels: Record<string, string> = {
@@ -18,6 +19,9 @@ const labels: Record<string, string> = {
   MANAGEMENT: 'الإدارة',
   SETTINGS: 'الإعدادات',
 };
+
+type OperationalOrder = { id: string; orderNumber: string; status: string; type: string; source: string; total: string | number; createdAt: string; updatedAt: string; customer: { name: string | null; phone: string; addresses: Array<{ address: string; area: string | null }> } | null; branch: { code: string; name: string } };
+type ManagementOverview = { orders: Array<{ status: string; count: number; total: number }>; customers: number; branches: number };
 
 function SettingsWorkspace() {
   const session = getDesktopSession();
