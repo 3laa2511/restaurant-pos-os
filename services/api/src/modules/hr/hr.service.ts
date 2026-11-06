@@ -27,6 +27,16 @@ const day = (value: string): Date => {
 export class HrService {
   constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingService) {}
 
+  async listBranches(context: AuthContext) {
+    const tenantId = assertTenantScope(context);
+    const branchId = resolveBranchScope(context);
+    return withRlsContext(this.prisma, context, (tx) => tx.branch.findMany({
+      where: { tenantId, active: true, ...(branchId ? { id: branchId } : {}) },
+      select: { id: true, code: true, name: true },
+      orderBy: { name: 'asc' },
+    }));
+  }
+
   async listEmployees(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
     const scopedBranchId = resolveBranchScope(context, branchId);
