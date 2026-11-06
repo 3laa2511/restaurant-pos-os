@@ -15,6 +15,11 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
     branchA: randomUUID(),
     branchB: randomUUID(),
     branchC: randomUUID(),
+    userA: randomUUID(),
+    orderA: randomUUID(),
+    providerAccountA: randomUUID(),
+    paymentIntentA: randomUUID(),
+    paymentAttemptA: randomUUID(),
   };
 
   beforeAll(async () => {
@@ -29,9 +34,45 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
               ($3,'B-1','Branch B',true,$5,now(),now())`,
       [ids.branchA, ids.branchB, ids.branchC, ids.tenantA, ids.tenantB],
     );
+
+    await admin.query(
+      `INSERT INTO "User" ("id","username","displayName","passwordHash","tenantId","createdAt","updatedAt")
+       VALUES ($1,$2,'RLS User','test-hash',$3,now(),now())`,
+      [ids.userA, `rls-user-${ids.userA}`, ids.tenantA],
+    );
+    await admin.query(
+      `INSERT INTO "Order" ("id","orderNumber","source","type","branchId","createdById","total","createdAt","updatedAt")
+       VALUES ($1,'RLS-ORDER','POS','TAKEAWAY',$2,$3,12.00,now(),now())`,
+      [ids.orderA, ids.branchA, ids.userA],
+    );
+    await admin.query(
+      `INSERT INTO "PaymentProviderAccount"
+       ("id","tenantId","branchId","providerCode","displayName","currency","active","createdAt","updatedAt")
+       VALUES ($1,$2,$3,'TEST_PROVIDER','RLS Test Account','EGP',true,now(),now())`,
+      [ids.providerAccountA, ids.tenantA, ids.branchA],
+    );
+    await admin.query(
+      `INSERT INTO "PaymentIntent"
+       ("id","tenantId","branchId","orderId","providerAccountId","channel","amountMinor","currency",
+        "status","merchantReference","idempotencyKey","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,'DIRECT_TRANSFER',1200,'EGP','PENDING',$6,$7,now(),now())`,
+      [ids.paymentIntentA, ids.tenantA, ids.branchA, ids.orderA, ids.providerAccountA,
+       `merchant-${ids.paymentIntentA}`, `intent-${ids.paymentIntentA}`],
+    );
+    await admin.query(
+      `INSERT INTO "PaymentAttempt"
+       ("id","tenantId","intentId","attemptNumber","status","startedAt","createdAt")
+       VALUES ($1,$2,$3,1,'PENDING',now(),now())`,
+      [ids.paymentAttemptA, ids.tenantA, ids.paymentIntentA],
+    );
   });
 
   afterAll(async () => {
+    await admin.query('DELETE FROM "PaymentAttempt" WHERE "id" = $1', [ids.paymentAttemptA]);
+    await admin.query('DELETE FROM "PaymentIntent" WHERE "id" = $1', [ids.paymentIntentA]);
+    await admin.query('DELETE FROM "PaymentProviderAccount" WHERE "id" = $1', [ids.providerAccountA]);
+    await admin.query('DELETE FROM "Order" WHERE "id" = $1', [ids.orderA]);
+    await admin.query('DELETE FROM "User" WHERE "id" = $1', [ids.userA]);
     await admin.query('DELETE FROM "Branch" WHERE "id" IN ($1,$2,$3)', [ids.branchA, ids.branchB, ids.branchC]);
     await admin.query('DELETE FROM "Tenant" WHERE "id" IN ($1,$2)', [ids.tenantA, ids.tenantB]);
     await Promise.all([app.end(), admin.end()]);
@@ -80,6 +121,49 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
       const result = await client.query(`SELECT "id" FROM "Branch"`);
       expect(result.rows.map((row) => row.id)).toEqual([ids.branchC]);
     });
+  });
+
+  it('isolates payment provider accounts, intents, and attempts by tenant and branch', async () => {
+    await inContext(ids.tenantA, ids.branchA, async (client) => {
+      const accounts = await client.query(
+        `SELECT "id" FROM "PaymentProviderAccount" WHERE "id" = $1`,
+        [ids.providerAccountA],
+      );
+      const intents = await client.query(
+        `SELECT "id" FROM "PaymentIntent" WHERE "id" = $1`,
+        [ids.paymentIntentA],
+      );
+      const attempts = await client.query(
+        `SELECT "id" FROM "PaymentAttempt" WHERE "id" = $1`,
+        [ids.paymentAttemptA],
+      );
+      expect(accounts.rows).toHaveLength(1);
+      expect(intents.rows).toHaveLength(1);
+      expect(attempts.rows).toHaveLength(1);
+    });
+
+    await inContext(ids.tenantA, ids.branchB, async (client) => {
+      expect((await client.query(`SELECT "id" FROM "PaymentProviderAccount"`)).rows).toHaveLength(0);
+      expect((await client.query(`SELECT "id" FROM "PaymentIntent"`)).rows).toHaveLength(0);
+      expect((await client.query(`SELECT "id" FROM "PaymentAttempt"`)).rows).toHaveLength(0);
+    });
+
+    await inContext(ids.tenantB, ids.branchC, async (client) => {
+      expect((await client.query(`SELECT "id" FROM "PaymentProviderAccount"`)).rows).toHaveLength(0);
+      expect((await client.query(`SELECT "id" FROM "PaymentIntent"`)).rows).toHaveLength(0);
+      expect((await client.query(`SELECT "id" FROM "PaymentAttempt"`)).rows).toHaveLength(0);
+    });
+  });
+
+  it('rejects payment intent links that cross tenant or branch boundaries', async () => {
+    await expect(admin.query(
+      `INSERT INTO "PaymentIntent"
+       ("id","tenantId","branchId","orderId","providerAccountId","channel","amountMinor","currency",
+        "status","merchantReference","idempotencyKey","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,'DIRECT_TRANSFER',1200,'EGP','PENDING',$6,$7,now(),now())`,
+      [randomUUID(), ids.tenantB, ids.branchA, ids.orderA, ids.providerAccountA,
+       `invalid-${randomUUID()}`, `invalid-${randomUUID()}`],
+    )).rejects.toThrow();
   });
 
   it('denies cross-tenant insert and tenant-moving update', async () => {
