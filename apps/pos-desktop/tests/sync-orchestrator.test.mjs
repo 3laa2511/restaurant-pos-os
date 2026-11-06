@@ -34,6 +34,7 @@ test('overlapping runOnce calls on one orchestrator do not push the same batch t
     async getPending() { return [item]; },
     async markSynced() {},
     async markFailed() {},
+    async releaseForAuthentication() {},
   };
   const transport = {
     async push() {
@@ -52,6 +53,7 @@ test('overlapping runOnce calls on one orchestrator do not push the same batch t
     synced: 0,
     failed: 0,
     failedAttempts: null,
+    authenticationRequired: false,
   });
   assert.equal(pushCount, 1);
 
@@ -73,6 +75,7 @@ test('a failed sync is recorded for retry and stops later items in sequence', as
     async getPending() { return items; },
     async markSynced() {},
     async markFailed(id, workerId, message) { failures.push({ id, workerId, message }); },
+    async releaseForAuthentication() {},
   };
   const transport = {
     async push() { pushCount += 1; throw new Error('network unavailable'); },
@@ -81,7 +84,7 @@ test('a failed sync is recorded for retry and stops later items in sequence', as
 
   const result = await orchestrator.runOnce();
 
-  assert.deepEqual(result, { attempted: 1, synced: 0, failed: 1, failedAttempts: 3 });
+  assert.deepEqual(result, { attempted: 1, synced: 0, failed: 1, failedAttempts: 3, authenticationRequired: false });
   assert.deepEqual(failures, [{ id: 'sync-1', workerId: 'worker-retry', message: 'network unavailable' }]);
   assert.equal(pushCount, 1);
 });
@@ -99,6 +102,7 @@ test('reports partial progress accurately and stops at the first failed item', a
     async getPending() { return items; },
     async markSynced(id) { synced.push(id); },
     async markFailed(id, workerId, message) { failures.push({ id, workerId, message }); },
+    async releaseForAuthentication() {},
   };
   const transport = {
     async push(item) {
@@ -110,7 +114,7 @@ test('reports partial progress accurately and stops at the first failed item', a
 
   const result = await orchestrator.runOnce();
 
-  assert.deepEqual(result, { attempted: 2, synced: 1, failed: 1, failedAttempts: 2 });
+  assert.deepEqual(result, { attempted: 2, synced: 1, failed: 1, failedAttempts: 2, authenticationRequired: false });
   assert.deepEqual(pushed, ['sync-1', 'sync-2']);
   assert.deepEqual(synced, ['sync-1']);
   assert.deepEqual(failures, [{ id: 'sync-2', workerId: 'worker-partial', message: 'temporary server error' }]);
@@ -143,6 +147,48 @@ test('does not report success or overwrite state when a worker loses its lease d
 
   const result = await orchestrator.runOnce();
 
-  assert.deepEqual(result, { attempted: 1, synced: 0, failed: 1, failedAttempts: null });
+  assert.deepEqual(result, { attempted: 1, synced: 0, failed: 1, failedAttempts: null, authenticationRequired: false });
   assert.deepEqual(failedWrites, []);
+});
+
+
+test('authentication failure releases the current lease without consuming a retry', async () => {
+  const item = {
+    id: 'sync-auth',
+    entity_type: 'ORDER',
+    entity_id: 'order-auth',
+    operation: 'CHECKOUT',
+    idempotency_key: 'checkout-auth',
+    client_sequence: 1,
+    payload: '{}',
+    status: 'SYNCING',
+    attempts: 2,
+    last_error: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  };
+  const released = [];
+  const failed = [];
+  const repository = {
+    async getPending() { return [item]; },
+    async markSynced() { return true; },
+    async markFailed(...args) { failed.push(args); },
+    async releaseForAuthentication(...args) { released.push(args); },
+  };
+  const authError = new Error('session expired');
+  authError.name = 'SyncAuthenticationRequiredError';
+  const transport = { async push() { throw authError; } };
+  const orchestrator = new SyncOrchestrator(repository, transport, { workerId: 'worker-auth' });
+
+  const result = await orchestrator.runOnce();
+
+  assert.deepEqual(result, {
+    attempted: 1,
+    synced: 0,
+    failed: 0,
+    failedAttempts: null,
+    authenticationRequired: true,
+  });
+  assert.deepEqual(released, [['sync-auth', 'worker-auth', 'session expired']]);
+  assert.deepEqual(failed, []);
 });
