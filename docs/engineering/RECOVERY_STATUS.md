@@ -6,7 +6,7 @@ This document records the active recovery integration branch. Refresh GitHub and
 
 - Repository: `3laa2511/restaurant-pos-os`
 - Integration branch: `feat/recovery-integration`
-- Latest commit when this status was written: `813227e325dd092d5da812111afe5b59d50d7611`
+- Latest commit when this status was written: `ec7718bf2f6a809a7ec5a4aa5dde8ac0e7cb922b`
 - Target: `main` at `4a81d8dbf6c480cdc5aef27f466de20c93b87985`
 - Umbrella PR: #13 (draft, open)
 - No changes have been merged into `main` by this recovery work.
@@ -31,9 +31,12 @@ This document records the active recovery integration branch. Refresh GitHub and
 
 ## Latest validation state
 
-At the time this file was written, GitHub Actions was still running against the integration branch. The API workflow had completed PostgreSQL startup, dependency installation, migration deployment, and least-privilege RLS test-role grants; typecheck, build, and test steps were still pending. The desktop workflow was also pending/in progress.
+GitHub Actions validation for exact integration SHA `ec7718bf2f6a809a7ec5a4aa5dde8ac0e7cb922b`:
 
-Do not treat a previous green run on another commit as validation of the current head. Record the exact SHA and results after the current run finishes.
+- API Quality Gate: **success**. PostgreSQL startup, migration deployment, RLS test-role grants, Prisma generation, typecheck, NestJS build, bootstrap script syntax, shared payment-policy tests, and API unit/integration tests passed.
+- POS Desktop Quality Gate: all validation steps passed, including API lint/typecheck/tests, desktop lint/typecheck, sync queue tests, frontend build, and Tauri native check. The workflow was still completing post-job cleanup when this status was updated.
+
+The next code change creates a new SHA and must receive fresh CI. Do not carry this green result forward to later commits.
 
 ## Known product gaps — not declared complete
 
@@ -52,3 +55,13 @@ Do not treat a previous green run on another commit as validation of the current
 - Do not run production migrations, enable live providers, or deploy without explicit approval.
 - A provider event may change a verified payment intent; it must not directly close an order, post accounting, consume inventory, or mutate a cash drawer.
 - Never treat screenshots, customer-submitted references, or arbitrary SMS text as proof of payment.
+
+
+## Additional branch review
+
+- `feat/tenant-catalog-foundation` is an ancestor of `feat/hr-accounting-inventory`; its tenant-scoped catalog foundation is included through PR #3.
+- `refactor/kitchen-conflict-repository` (closed PR #8) is superseded by the later kitchen repository work carried in PR #9.
+- `feat/print-lifecycle` is an older branch with an obsolete App.tsx shape. The current integration already has the Tauri print command, print worker runtime and lease heartbeat; the old App.tsx was not copied.
+- `backup/menu-variants-2026-09-16` was reviewed but not copied. Its migration uses the already-occupied `0008` prefix and its variant/modifier tables lack tenant ownership and same-tenant relational constraints. The menu API also does not carry variant/modifier selections into order pricing snapshots. Reimplement this as a new tenant-safe migration and complete vertical slice; do not cherry-pick the old migration.
+- `reconcile/staging-migration-recovery-2026-09-19` is a separate historical Supabase migration stream with a different schema/backend from the current Prisma/PostgreSQL app. Do not merge its Supabase migrations or staging workflow into this codebase. Reuse only generic lessons after a specific need is established.
+- `test/rls-ci-check` points at the current main baseline and contains no additional feature work.
