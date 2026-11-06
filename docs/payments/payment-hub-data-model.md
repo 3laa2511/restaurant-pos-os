@@ -87,6 +87,18 @@ This bootstrap path needs integration tests for unknown/disabled account keys, i
 - Add migration validation against a real PostgreSQL service in CI, plus Prisma schema validation and generated-client typecheck.
 - No production migration or live provider credentials in this phase.
 
-## Current implementation boundary
+## Implemented foundation in PR #10
 
-PR #10 adds the provider-neutral intent state machine and its unit tests. It does not yet create these tables, expose intent APIs, receive webhooks, settle payments, or integrate a provider. Those are subsequent implementation steps after the webhook RLS bootstrap contract is designed and tested.
+The branch now adds the first database foundation in `0029_payment_hub_intents`:
+
+- `PaymentProviderAccount`: tenant-owned receiving/provider account metadata, optional branch restriction, masked account reference, and a secret-manager reference. No provider secret is stored in this table.
+- `PaymentIntent`: order- and branch-scoped intent with exact integer minor-unit amount, ISO-style three-letter currency, explicit status/channel, tenant-scoped merchant reference and idempotency key, optional checkout URL, and expiry/success timestamps.
+- `PaymentAttempt`: appendable attempt history with per-intent attempt sequence and tenant-scoped provider transaction uniqueness.
+- Composite foreign keys bind provider account to the same tenant, intent to the same tenant + branch + order, and attempt to the same tenant + intent. These constraints prevent accidental cross-tenant or cross-branch linking even if an application caller supplies mismatched IDs.
+- The three new tables receive explicit tenant/branch RLS policies and ENABLE + FORCE RLS in the same migration.
+
+The existing `Payment` model is intentionally unchanged. A successful external intent is not yet a booked payment and does not close an order, post accounting, consume inventory, or create a cash-drawer movement.
+
+## Not implemented yet
+
+This foundation does not yet expose intent APIs, receive provider webhooks, perform trusted bank-feed imports, reconcile transactions, create the final booked `Payment`, or integrate a live provider. The provider event inbox and reconciliation tables remain deferred until the unauthenticated webhook bootstrap context and its PostgreSQL integration tests are implemented. No production migration or live provider credentials are included in this phase.
