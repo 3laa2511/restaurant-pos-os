@@ -15,6 +15,10 @@ import { AttendanceDto, CreateEmployeeDto, CreatePayrollPeriodDto } from './hr.d
 export class HrController {
   constructor(private readonly hr: HrService) {}
 
+  @Get('branches')
+  @RequirePermission(PERMISSIONS.HR_EMPLOYEE_MANAGE)
+  listBranches(@CurrentAuth() context: AuthContext) { return this.hr.listBranches(context); }
+
   @Get('employees')
   @RequirePermission(PERMISSIONS.HR_EMPLOYEE_MANAGE)
   listEmployees(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) { return this.hr.listEmployees(context, query.branchId); }
