@@ -20,6 +20,7 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
     providerAccountA: randomUUID(),
     paymentIntentA: randomUUID(),
     paymentAttemptA: randomUUID(),
+    providerEventA: randomUUID(),
   };
 
   beforeAll(async () => {
@@ -47,9 +48,9 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
     );
     await admin.query(
       `INSERT INTO "PaymentProviderAccount"
-       ("id","tenantId","branchId","providerCode","displayName","currency","active","createdAt","updatedAt")
-       VALUES ($1,$2,$3,'TEST_PROVIDER','RLS Test Account','EGP',true,now(),now())`,
-      [ids.providerAccountA, ids.tenantA, ids.branchA],
+       ("id","tenantId","branchId","providerCode","displayName","currency","active","webhookKeyHash","createdAt","updatedAt")
+       VALUES ($1,$2,$3,'TEST_PROVIDER','RLS Test Account','EGP',true,$4,now(),now())`,
+      [ids.providerAccountA, ids.tenantA, ids.branchA, 'a'.repeat(64)],
     );
     await admin.query(
       `INSERT INTO "PaymentIntent"
@@ -65,9 +66,16 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
        VALUES ($1,$2,$3,1,'PENDING',now(),now())`,
       [ids.paymentAttemptA, ids.tenantA, ids.paymentIntentA],
     );
+    await admin.query(
+      `INSERT INTO "PaymentProviderEvent"
+       ("id","tenantId","providerAccountId","providerEventId","payloadHash","signatureValid","status","receivedAt","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,true,'RECEIVED',now(),now(),now())`,
+      [ids.providerEventA, ids.tenantA, ids.providerAccountA, `event-${ids.providerEventA}`, 'b'.repeat(64)],
+    );
   });
 
   afterAll(async () => {
+    await admin.query('DELETE FROM "PaymentProviderEvent" WHERE "id" = $1', [ids.providerEventA]);
     await admin.query('DELETE FROM "PaymentAttempt" WHERE "id" = $1', [ids.paymentAttemptA]);
     await admin.query('DELETE FROM "PaymentIntent" WHERE "id" = $1', [ids.paymentIntentA]);
     await admin.query('DELETE FROM "PaymentProviderAccount" WHERE "id" = $1', [ids.providerAccountA]);
@@ -77,6 +85,42 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
     await admin.query('DELETE FROM "Tenant" WHERE "id" IN ($1,$2)', [ids.tenantA, ids.tenantB]);
     await Promise.all([app.end(), admin.end()]);
   });
+
+  async function inProviderEndpointContext(
+    endpointHash: string,
+    work: (client: import('pg').PoolClient) => Promise<void>,
+  ) {
+    const client = await app.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.provider_endpoint_hash',$1,true)`, [endpointHash]);
+      await work(client);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function inProviderAccountContext(
+    providerAccountId: string,
+    work: (client: import('pg').PoolClient) => Promise<void>,
+  ) {
+    const client = await app.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.provider_account_id',$1,true)`, [providerAccountId]);
+      await work(client);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 
   async function inContext(
     tenantId: string,
@@ -153,6 +197,48 @@ describeIfConfigured('PostgreSQL RLS isolation', () => {
       expect((await client.query(`SELECT "id" FROM "PaymentIntent"`)).rows).toHaveLength(0);
       expect((await client.query(`SELECT "id" FROM "PaymentAttempt"`)).rows).toHaveLength(0);
     });
+  });
+
+  it('resolves exactly one active provider account from its endpoint-key hash', async () => {
+    await inProviderEndpointContext('a'.repeat(64), async (client) => {
+      const result = await client.query(
+        `SELECT "id","tenantId","branchId" FROM "PaymentProviderAccount"`,
+      );
+      expect(result.rows).toEqual([{
+        id: ids.providerAccountA,
+        tenantId: ids.tenantA,
+        branchId: ids.branchA,
+      }]);
+    });
+
+    await inProviderEndpointContext('c'.repeat(64), async (client) => {
+      const result = await client.query(`SELECT "id" FROM "PaymentProviderAccount"`);
+      expect(result.rows).toHaveLength(0);
+    });
+  });
+
+  it('limits provider event inbox access to the resolved provider account', async () => {
+    await inProviderAccountContext(ids.providerAccountA, async (client) => {
+      const result = await client.query(
+        `SELECT "id","providerEventId" FROM "PaymentProviderEvent"`,
+      );
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0].id).toBe(ids.providerEventA);
+    });
+
+    await inProviderAccountContext(randomUUID(), async (client) => {
+      const result = await client.query(`SELECT "id" FROM "PaymentProviderEvent"`);
+      expect(result.rows).toHaveLength(0);
+    });
+  });
+
+  it('deduplicates provider events within the provider account', async () => {
+    await expect(admin.query(
+      `INSERT INTO "PaymentProviderEvent"
+       ("id","tenantId","providerAccountId","providerEventId","payloadHash","signatureValid","status","receivedAt","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,true,'RECEIVED',now(),now(),now())`,
+      [randomUUID(), ids.tenantA, ids.providerAccountA, `event-${ids.providerEventA}`, 'c'.repeat(64)],
+    )).rejects.toThrow();
   });
 
   it('rejects payment intent links that cross tenant or branch boundaries', async () => {
