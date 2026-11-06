@@ -66,6 +66,9 @@ jobs:
       - name: Typecheck
         run: pnpm --filter @restaurant-pos/api typecheck
 
+      - name: Build API
+        run: pnpm --filter @restaurant-pos/api build
+
       - name: Test shared payment policy
         run: pnpm --filter @restaurant-pos/payment-policy test
 
