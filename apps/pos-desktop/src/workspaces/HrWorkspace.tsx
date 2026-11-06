@@ -145,6 +145,7 @@ export function HrWorkspace() {
     try {
       await apiPost(`hr/payroll/periods/${encodeURIComponent(id)}/${action}`, {});
       await load();
+      if (payrollDetail?.id === id) setPayrollDetail(await apiGet<PayrollDetail>(`hr/payroll/periods/${encodeURIComponent(id)}`));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'تعذر تحديث حالة المرتبات');
     } finally {
