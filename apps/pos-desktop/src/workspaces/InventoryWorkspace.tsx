@@ -8,6 +8,9 @@ type StockRow = { quantityBaseUnit: string | number; averageCostPerBaseUnit: str
 type BranchOption = { id: string; code: string; name: string };
 type WarehouseRow = { id: string; code: string; name: string; type: string; branchId: string | null; branch: BranchOption | null };
 type TransferItemRow = { id: string; quantityBaseUnit: string | number; ingredient: { sku: string; name: string; baseUnit: string } };
+type ProductOption = { id: string; sku: string; name: string; nameAr: string | null };
+type MenuCategory = { products: ProductOption[] };
+type RecipeRow = { ingredientId: string; quantityBaseUnit: number | string; wastePercent: number | string; ingredient?: { sku: string; name: string; nameAr: string | null; baseUnit: string } };
 type TransferRow = {
   id: string;
   transferNumber: string;
@@ -30,10 +33,14 @@ export function InventoryWorkspace() {
   const canPurchase = permissions.includes('INVENTORY_PURCHASE');
   const canAdjust = permissions.includes('INVENTORY_ADJUST');
   const canManage = permissions.includes('INVENTORY_MANAGE');
+  const canRecipe = permissions.includes('RECIPE_MANAGE');
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [recipeRows, setRecipeRows] = useState<Array<{ ingredientId: string; quantityBaseUnit: string; wastePercent: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState('');
   const [error, setError] = useState('');
@@ -48,16 +55,20 @@ export function InventoryWorkspace() {
     setLoading(true);
     setError('');
     try {
-      const [ingredientRows, stockRows, warehouseRows, transferRows] = await Promise.all([
+      const [ingredientRows, stockRows, warehouseRows, transferRows, menuCategories] = await Promise.all([
         canView ? apiGet<IngredientRow[]>('inventory/ingredients') : Promise.resolve([]),
         canView ? apiGet<StockRow[]>('inventory/stock') : Promise.resolve([]),
         canView ? apiGet<WarehouseRow[]>('inventory/warehouses') : Promise.resolve([]),
         canView ? apiGet<TransferRow[]>('inventory/transfers') : Promise.resolve([]),
+        canRecipe ? apiGet<MenuCategory[]>('menu') : Promise.resolve([]),
       ]);
       setIngredients(ingredientRows);
       setStock(stockRows);
       setWarehouses(warehouseRows);
       setTransfers(transferRows);
+      const productRows = menuCategories.flatMap(category => category.products);
+      setProducts(productRows);
+      setSelectedProductId(value => value || productRows[0]?.id || '');
       setReceiptForm(value => ({ ...value, ingredientId: value.ingredientId || ingredientRows[0]?.id || '' }));
       setAdjustForm(value => ({ ...value, ingredientId: value.ingredientId || ingredientRows[0]?.id || '' }));
       setTransferForm(value => ({
@@ -70,6 +81,39 @@ export function InventoryWorkspace() {
       setError(cause instanceof Error ? cause.message : 'تعذر تحميل بيانات المخزون');
     } finally {
       setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!canRecipe || !selectedProductId) { setRecipeRows([]); return; }
+    let active = true;
+    apiGet<RecipeRow[]>(`inventory/recipes/${encodeURIComponent(selectedProductId)}`)
+      .then(rows => { if (active) setRecipeRows(rows.map(row => ({ ingredientId: row.ingredientId, quantityBaseUnit: String(row.quantityBaseUnit), wastePercent: String(row.wastePercent) }))); })
+      .catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'تعذر تحميل الوصفة'); });
+    return () => { active = false; };
+  }, [canRecipe, selectedProductId]);
+
+  async function saveRecipe(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (working || !selectedProductId) return;
+    const items = recipeRows.filter(row => row.ingredientId && Number(row.quantityBaseUnit) > 0).map(row => ({
+      ingredientId: row.ingredientId,
+      quantityBaseUnit: Number(row.quantityBaseUnit),
+      wastePercent: Number(row.wastePercent || 0),
+    }));
+    if (items.length !== recipeRows.length) {
+      setError('راجع مكونات الوصفة: كل مادة تحتاج كمية أساسية أكبر من صفر.');
+      return;
+    }
+    setWorking('recipe');
+    setError('');
+    try {
+      await apiPost(`inventory/recipes/${encodeURIComponent(selectedProductId)}`, { items });
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'تعذر حفظ الوصفة');
+    } finally {
+      setWorking('');
     }
   }
 
@@ -221,6 +265,23 @@ export function InventoryWorkspace() {
         <button type="submit" disabled={working === 'adjust' || !adjustForm.branchId} style={actionStyle}>{working === 'adjust' ? 'جاري التسجيل…' : 'تسجيل التسوية'}</button>
       </form>}
     </section>}
+
+    {canRecipe && <form onSubmit={saveRecipe} style={{ padding: 16, marginBottom: 18, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b', display: 'grid', gap: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div><h2 style={{ margin: 0, fontSize: 16 }}>وصفات المنتجات</h2><p style={{ color: '#8e9baa', fontSize: 11, margin: '5px 0 0' }}>حدد استهلاك كل منتج من المواد الخام؛ تُستخدم الوصفة لحساب تكلفة المبيعات وخصم المخزون عند إتمام الدفع.</p></div>
+        <select required value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)} style={{ ...fieldStyle, maxWidth: 360 }}><option value="">اختر المنتج</option>{products.map(product => <option key={product.id} value={product.id}>{product.sku} — {product.nameAr || product.name}</option>)}</select>
+      </div>
+      {recipeRows.map((row, index) => <div key={index} style={{ display: 'grid', gridTemplateColumns: 'minmax(160px,2fr) minmax(110px,1fr) minmax(100px,1fr) auto', gap: 8 }}>
+        <select required value={row.ingredientId} onChange={e => setRecipeRows(rows => rows.map((item,i) => i === index ? { ...item, ingredientId: e.target.value } : item))} style={fieldStyle}><option value="">المادة الخام</option>{ingredients.map(item => <option key={item.id} value={item.id}>{item.sku} — {item.nameAr || item.name} ({item.baseUnit})</option>)}</select>
+        <input required type="number" min="0.0001" step="0.0001" value={row.quantityBaseUnit} onChange={e => setRecipeRows(rows => rows.map((item,i) => i === index ? { ...item, quantityBaseUnit: e.target.value } : item))} placeholder="الكمية الأساسية" style={fieldStyle} />
+        <input type="number" min="0" max="100" step="0.01" value={row.wastePercent} onChange={e => setRecipeRows(rows => rows.map((item,i) => i === index ? { ...item, wastePercent: e.target.value } : item))} placeholder="هالك %" style={fieldStyle} />
+        <button type="button" onClick={() => setRecipeRows(rows => rows.filter((_,i) => i !== index))} style={actionStyle}>حذف</button>
+      </div>)}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" disabled={!selectedProductId || !ingredients.length} onClick={() => setRecipeRows(rows => [...rows, { ingredientId: '', quantityBaseUnit: '', wastePercent: '0' }])} style={actionStyle}>إضافة مكوّن</button>
+        <button type="submit" disabled={working === 'recipe' || !selectedProductId} style={actionStyle}>{working === 'recipe' ? 'جاري الحفظ…' : 'حفظ الوصفة كاملة'}</button>
+      </div>
+    </form>}
 
     {canManage && <form onSubmit={createTransfer} style={{ padding: 16, marginBottom: 16, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 9 }}>
       <h2 style={{ margin: 0, fontSize: 16, gridColumn: '1 / -1' }}>طلب تحويل مخزون</h2>
