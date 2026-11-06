@@ -12,7 +12,9 @@ const scrypt = promisify(scryptCallback);
 const KEY_LENGTH = 64;
 const PASSWORD_PREFIX = 'scrypt-v1';
 
-function ask(rl, label, fallback) {
+function ask(rl, label, fallback, environmentKey) {
+  const configured = environmentKey ? process.env[environmentKey]?.trim() : '';
+  if (configured) return Promise.resolve(configured);
   return rl.question(fallback ? `${label} [${fallback}]: ` : `${label}: `).then((value) => value.trim() || fallback);
 }
 
@@ -63,13 +65,13 @@ async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Copy services/api/.env.example to services/api/.env first.');
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const tenantName = await ask(rl, 'Company / tenant name', 'Restaurant Local');
-  const tenantSlug = await ask(rl, 'Tenant slug (lowercase, unique)', 'restaurant-local');
-  const branchName = await ask(rl, 'Main branch name', 'Main Branch');
-  const branchCode = await ask(rl, 'Main branch code', 'BR01');
-  const username = await ask(rl, 'Owner username', 'owner');
-  const displayName = await ask(rl, 'Owner display name', 'System Owner');
-  const deviceCode = await ask(rl, 'POS device code', 'POS-01');
+  const tenantName = await ask(rl, 'Company / tenant name', 'Restaurant Local', 'BOOTSTRAP_TENANT_NAME');
+  const tenantSlug = await ask(rl, 'Tenant slug (lowercase, unique)', 'restaurant-local', 'BOOTSTRAP_TENANT_SLUG');
+  const branchName = await ask(rl, 'Main branch name', 'Main Branch', 'BOOTSTRAP_BRANCH_NAME');
+  const branchCode = await ask(rl, 'Main branch code', 'BR01', 'BOOTSTRAP_BRANCH_CODE');
+  const username = await ask(rl, 'Owner username', 'owner', 'BOOTSTRAP_OWNER_USERNAME');
+  const displayName = await ask(rl, 'Owner display name', 'System Owner', 'BOOTSTRAP_OWNER_DISPLAY_NAME');
+  const deviceCode = await ask(rl, 'POS device code', 'POS-01', 'BOOTSTRAP_DEVICE_CODE');
   rl.close();
 
   if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(tenantSlug)) throw new Error('Tenant slug must be 2–63 lowercase letters, digits, or hyphens.');
