@@ -278,6 +278,9 @@ export function InventoryWorkspace() {
       <input value={supplierForm.phone} onChange={event => setSupplierForm(value => ({ ...value, phone: event.target.value }))} placeholder="رقم الهاتف (اختياري)" style={fieldStyle} />
       <button type="submit" disabled={working === 'supplier'} style={actionStyle}>{working === 'supplier' ? 'جاري الحفظ…' : 'إضافة مورد'}</button>
     </form>}
+    {canView && suppliers.length > 0 && <div style={{ marginBottom: 16 }}>
+      <DataTable headers={['المورد','الهاتف','الحالة']} rows={suppliers.map(supplier => [supplier.name, supplier.phone || '—', supplier.active ? 'نشط' : 'موقوف'])} />
+    </div>}
 
     {(canPurchase || canAdjust) && <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 14, marginBottom: 16 }}>
       {canPurchase && <form onSubmit={receiveStock} style={{ padding: 16, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b', display: 'grid', gap: 9 }}>
