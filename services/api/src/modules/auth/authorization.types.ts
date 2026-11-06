@@ -45,6 +45,22 @@ export function assertBranchAccess(context: AuthContext, branchId: string): void
   }
 }
 
+/**
+ * Resolve a branch filter from the authenticated session first. A branch-scoped
+ * caller cannot widen a query by omitting branchId or override it with another
+ * branch supplied by the client. Tenant-wide sessions may optionally narrow
+ * their query to one branch; the service must still verify that branch belongs
+ * to the authenticated tenant.
+ */
+export function resolveBranchScope(context: AuthContext, requestedBranchId?: string): string | undefined {
+  const requested = requestedBranchId?.trim() || undefined;
+  if (context.branchId !== null) {
+    if (requested) assertBranchAccess(context, requested);
+    return context.branchId;
+  }
+  return requested;
+}
+
 export function assertKitchenStationAccess(
   context: AuthContext,
   station: KitchenStation,
