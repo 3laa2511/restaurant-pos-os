@@ -26,6 +26,7 @@
 - [x] Add call-center and dispatch order search/status filters with customer contact, delivery address, timestamps and item counts; order mutation/assignment lifecycle remains a separate API phase.
 - [x] Add tenant-scoped supplier directory and supplier selection on inventory receipts; purchase-order lifecycle remains open.
 - [x] API and POS Desktop Quality Gates passed on exact integration SHA `136aa42f078eb8cfc4edf4aa24cf4f1db7a58030` (PostgreSQL migrations/bootstrap, API build and tests, desktop lint/typecheck/sync tests/frontend build and Tauri native check).
+- [x] API and POS Desktop Quality Gates passed on exact integration SHA `7897d84d93803ba53bbdc80276dc83cd945f7864` after supplier directory/receipt UI integration (PostgreSQL migrations/bootstrap, API build/tests, desktop lint/typecheck/sync tests/frontend build and Tauri native check).
 - [x] API and POS Desktop Quality Gates passed on exact integration SHA `ab05f25b121cffab0858b0f4c5b919bfa5bfca73` (API tests, desktop lint/typecheck/sync tests/frontend build and Tauri native check).
 - [ ] Execute the Windows local bootstrap against a clean Docker PostgreSQL instance and verify sign-in in the actual Vite/Tauri runtime.
 - [ ] Restore the FlutterFlow source and 32-page UI Directions PDF, then verify visual/interaction parity.
@@ -58,7 +59,7 @@
 ## Active phase — COGS correctness and CI
 
 - [x] Fix zero-cost recipe retry edge case: consumption idempotency is checked against order consumption movements as well as the COGS journal. A zero-cost recipe can consume stock without creating a zero-value journal, so the journal alone is not a sufficient guard.
-- [ ] Confirm both API and POS Desktop Quality Gates pass for the COGS idempotency fix.
+- [x] API and POS Desktop Quality Gates pass on the integration branch after the COGS idempotency fix; remaining COGS behavioral coverage and real-data checks stay open below.
 - [ ] Add/verify automated cases: no recipe; exact recipe consumption; waste percentage; insufficient stock rolls back payment, journal, order transition, and movements; retry/duplicate settlement does not double-consume; shared ingredient across order lines; tenant/branch isolation.
 - [ ] Validate the COGS migration and seeded accounts against a real PostgreSQL database with RLS enabled.
 
@@ -66,7 +67,7 @@
 
 - [ ] Reconciliation report implementation is on the branch: `GET /api/accounting/reports/reconciliation` (read-only, `ACCOUNTING_VIEW`, tenant/branch scoped); compare paid-order original totals to `ORDER_SALE` revenue journals, recipe consumption movement costs to `ORDER_COGS`, and current branch stock valuation to the inventory control account. CI and behavioral/integration tests still need to pass before marking this complete.
 
-- [ ] Reconcile sales/order totals against revenue journals.
+- [ ] Reconcile sales/order totals against revenue journals with seeded paid-order scenarios and verify every reported mismatch against source records.
 - [ ] Reconcile payment allocations and cash-drawer movements against payment journals.
 - [ ] Reconcile order recipe consumption movements against COGS journals.
 - [ ] Reconcile stock valuation against the inventory control account.
