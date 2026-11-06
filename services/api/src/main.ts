@@ -14,7 +14,7 @@ async function bootstrap(): Promise<void> {
   }));
   const configuredOrigins = process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean);
   app.enableCors({
-    origin: configuredOrigins?.length ? configuredOrigins : ['tauri://localhost', 'http://localhost:1420'],
+    origin: configuredOrigins?.length ? configuredOrigins : ['http://localhost:5173', 'http://127.0.0.1:5173', 'tauri://localhost', 'http://tauri.localhost', 'http://localhost:1420'],
     credentials: true,
   });
   await app.listen(process.env.PORT ? Number(process.env.PORT) : 3000);
