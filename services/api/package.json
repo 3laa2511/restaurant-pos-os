@@ -8,9 +8,10 @@
     "lint": "eslint .",
     "test": "jest",
     "build": "pnpm generate && nest build",
-    "start:dev": "nest start --watch",
-    "start": "node dist/main.js",
-    "migrate:deploy": "prisma migrate deploy --schema ../../prisma/schema.prisma"
+    "start:dev": "node --env-file=.env ./node_modules/@nestjs/cli/bin/nest.js start --watch",
+    "start": "node --env-file=.env dist/main.js",
+    "migrate:deploy": "node --env-file=.env ./node_modules/prisma/build/index.js migrate deploy --schema ../../prisma/schema.prisma",
+    "bootstrap:local": "node --env-file=.env scripts/bootstrap-local.mjs"
   },
   "dependencies": {
     "@restaurant-pos/payment-policy": "workspace:*",
