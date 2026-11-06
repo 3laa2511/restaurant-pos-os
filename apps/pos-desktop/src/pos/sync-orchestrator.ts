@@ -1,4 +1,4 @@
-import type { SyncTransport } from './sync-contract.js';
+import { SyncAuthenticationRequiredError, type SyncTransport } from './sync-contract.js';
 import type { SyncRepository } from './sync-repository.js';
 
 export interface SyncOrchestratorOptions {
@@ -13,6 +13,7 @@ export interface SyncRunResult {
   synced: number;
   failed: number;
   failedAttempts: number | null;
+  authenticationRequired: boolean;
 }
 
 export class SyncOrchestrator {
@@ -32,7 +33,7 @@ export class SyncOrchestrator {
   async runOnce(): Promise<SyncRunResult> {
     // Do not let overlapping timer/manual triggers run the same worker concurrently.
     if (this.running) {
-      return { attempted: 0, synced: 0, failed: 0, failedAttempts: null };
+      return { attempted: 0, synced: 0, failed: 0, failedAttempts: null, authenticationRequired: false };
     }
 
     this.running = true;
@@ -52,6 +53,7 @@ export class SyncOrchestrator {
     let synced = 0;
     let failed = 0;
     let failedAttempts: number | null = null;
+    let authenticationRequired = false;
 
     for (const item of items) {
       attempted += 1;
@@ -68,6 +70,11 @@ export class SyncOrchestrator {
         synced += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        if (error instanceof SyncAuthenticationRequiredError) {
+          await this.repository.releaseForAuthentication(item.id, this.workerId, message);
+          authenticationRequired = true;
+          break;
+        }
         await this.repository.markFailed(item.id, this.workerId, message);
         failed += 1;
         failedAttempts = item.attempts + 1;
@@ -75,6 +82,6 @@ export class SyncOrchestrator {
       }
     }
 
-    return { attempted, synced, failed, failedAttempts };
+    return { attempted, synced, failed, failedAttempts, authenticationRequired };
   }
 }
