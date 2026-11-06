@@ -13,6 +13,8 @@ type Attendance = {
   overtimeMinutes: number; user: { id: string; username: string; displayName: string };
   branch: { id: string; code: string; name: string };
 };
+type PayrollEntry = { id: string; baseSalary: string | number; overtimeAmount: string | number; bonus: string | number; deduction: string | number; netAmount: string | number; paidAt: string | null; user: { id: string; username: string; displayName: string; branchId: string | null } };
+type PayrollDetail = { id: string; name: string; periodStart: string; periodEnd: string; status: string; entries: PayrollEntry[] };
 type PayrollPeriod = {
   id: string; name: string; periodStart: string; periodEnd: string; status: string;
   branch: { code: string; name: string } | null; _count: { entries: number };
@@ -31,6 +33,7 @@ export function HrWorkspace() {
   const [branches, setBranches] = useState<HrBranch[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
+  const [payrollDetail, setPayrollDetail] = useState<PayrollDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState('');
   const [error, setError] = useState('');
@@ -113,6 +116,19 @@ export function HrWorkspace() {
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'تعذر إنشاء كشف المرتبات');
+    } finally {
+      setWorking('');
+    }
+  }
+
+  async function loadPayrollDetail(id: string) {
+    if (working) return;
+    setWorking('payroll-detail');
+    setError('');
+    try {
+      setPayrollDetail(await apiGet<PayrollDetail>(`hr/payroll/periods/${encodeURIComponent(id)}`));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'تعذر تحميل تفاصيل المرتبات');
     } finally {
       setWorking('');
     }
@@ -201,10 +217,22 @@ export function HrWorkspace() {
         period.name, new Date(period.periodStart).toLocaleDateString('ar-EG'), new Date(period.periodEnd).toLocaleDateString('ar-EG'),
         period.branch?.name ?? 'كل الفروع', period._count.entries, period.status,
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button type="button" disabled={Boolean(working)} onClick={() => void loadPayrollDetail(period.id)} style={actionStyle}>تفاصيل</button>
           {canPayrollManage && period.status === 'DRAFT' && <button type="button" disabled={Boolean(working)} onClick={() => void payrollAction(period.id,'approve')} style={actionStyle}>اعتماد</button>}
           {canPayrollManage && period.status === 'APPROVED' && <button type="button" disabled={Boolean(working)} onClick={() => void payrollAction(period.id,'pay')} style={actionStyle}>تسجيل الصرف</button>}
         </div>,
       ])} />
     </section>}
+      {payrollDetail && <section style={{ marginTop: 14, padding: 14, border: '1px solid #26313d', borderRadius: 12, background: '#111820' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <strong>تفاصيل {payrollDetail.name} — {payrollDetail.status}</strong>
+          <button type="button" onClick={() => setPayrollDetail(null)} style={actionStyle}>إغلاق التفاصيل</button>
+        </div>
+        <DataTable headers={['الموظف','الراتب الأساسي','الإضافي','المكافآت','الخصومات','الصافي','تاريخ الصرف']} rows={payrollDetail.entries.map(entry => [
+          entry.user.displayName, Number(entry.baseSalary).toFixed(2), Number(entry.overtimeAmount).toFixed(2),
+          Number(entry.bonus).toFixed(2), Number(entry.deduction).toFixed(2), Number(entry.netAmount).toFixed(2),
+          entry.paidAt ? new Date(entry.paidAt).toLocaleDateString('ar-EG') : 'لم يُصرف',
+        ])} />
+      </section>}
   </WorkspaceShell>;
 }
