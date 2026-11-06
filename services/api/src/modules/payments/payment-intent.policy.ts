@@ -19,6 +19,9 @@ export type PaymentIntentEvent =
 
 export interface PaymentVerification {
   signatureValid: boolean;
+  eventFresh: boolean;
+  intentMatches: boolean;
+  merchantAccountMatches: boolean;
   transactionId: string;
   currency: string;
   expectedCurrency: string;
@@ -68,9 +71,20 @@ export function transitionPaymentIntent(
   if (event === 'PROVIDER_SUCCEEDED') {
     if (!verification) throw new Error('Verified provider transaction is required');
     if (!verification.signatureValid) throw new Error('Provider signature is invalid');
+    if (!verification.eventFresh) throw new Error('Provider event is stale or outside the replay window');
+    if (!verification.intentMatches) throw new Error('Provider event does not match payment intent');
+    if (!verification.merchantAccountMatches) throw new Error('Provider merchant account does not match');
     if (!verification.transactionId.trim()) throw new Error('Provider transaction ID is required');
-    if (verification.currency !== verification.expectedCurrency) throw new Error('Payment currency does not match intent');
-    if (!Number.isSafeInteger(verification.amountMinor) || verification.amountMinor !== verification.expectedAmountMinor) {
+    if (!verification.currency || verification.currency !== verification.expectedCurrency) {
+      throw new Error('Payment currency does not match intent');
+    }
+    if (
+      !Number.isSafeInteger(verification.amountMinor)
+      || !Number.isSafeInteger(verification.expectedAmountMinor)
+      || verification.amountMinor <= 0
+      || verification.expectedAmountMinor <= 0
+      || verification.amountMinor !== verification.expectedAmountMinor
+    ) {
       throw new Error('Payment amount does not match intent');
     }
     if (!verification.receivingAccountMatches) throw new Error('Receiving account does not match payment intent');
