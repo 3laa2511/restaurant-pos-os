@@ -22,5 +22,5 @@ CREATE UNIQUE INDEX "PayrollPeriod_tenant_global_period_unique"
 ON "PayrollPeriod"("tenantId", "periodStart", "periodEnd")
 WHERE "branchId" IS NULL;
 
-CREATE INDEX "PayrollPeriod_tenant_branch_status_start_idx"
+CREATE INDEX "PayrollPeriod_tenantId_branchId_status_periodStart_idx"
 ON "PayrollPeriod"("tenantId", "branchId", "status", "periodStart");
