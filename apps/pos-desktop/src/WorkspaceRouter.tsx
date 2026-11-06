@@ -2,7 +2,7 @@ import { KitchenDisplay } from './KitchenDisplay.js';
 import { RealPosApp } from './RealPosApp.js';
 import { getDesktopSession, logoutDesktop } from './pos/auth-client.js';
 import { API_BASE_URL, apiGet, apiPost } from './pos/workspace-api.js';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 
 const labels: Record<string, string> = {
   POS: 'الكاشير / POS',
@@ -17,7 +17,7 @@ const labels: Record<string, string> = {
 };
 
 
-type EmployeeRow = { employeeCode: string; jobTitle: string; baseSalary: string | number; user: { displayName: string; status: string; branchId: string | null } };
+type EmployeeRow = { employeeCode: string; jobTitle: string; baseSalary: string | number; user: { id: string; displayName: string; status: string; branchId: string | null } };
 type AccountingRow = { code: string; name: string; nameAr: string | null; type: string; debit: number; credit: number; balance: number };
 type StockRow = { quantityBaseUnit: string | number; averageCostPerBaseUnit: string | number; ingredient: { sku: string; name: string; nameAr: string | null; baseUnit: string }; branch: { code: string; name: string } };
 type OperationalOrder = { id: string; orderNumber: string; status: string; type: string; source: string; total: string | number; createdAt: string; updatedAt: string; customer: { name: string | null; phone: string; addresses: Array<{ address: string; area: string | null }> } | null; branch: { code: string; name: string } };
@@ -51,11 +51,11 @@ type PayrollPeriodRow = {
   _count?: { entries: number };
 };
 
-const fieldStyle: React.CSSProperties = {
+const fieldStyle: CSSProperties = {
   width: '100%', minWidth: 0, boxSizing: 'border-box', border: '1px solid #334150',
   borderRadius: 9, padding: '10px 12px', background: '#111820', color: '#e8edf5',
 };
-const actionStyle: React.CSSProperties = {
+const actionStyle: CSSProperties = {
   border: '1px solid #334150', borderRadius: 9, padding: '9px 13px',
   background: '#172331', color: '#e8edf5', cursor: 'pointer',
 };
@@ -69,7 +69,7 @@ function HrWorkspace() {
   const canManageAttendance = permissions.includes('HR_ATTENDANCE_MANAGE');
   const canViewPayroll = permissions.includes('HR_PAYROLL_VIEW');
   const canManagePayroll = permissions.includes('HR_PAYROLL_MANAGE');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toLocaleDateString('en-CA');
   const monthStart = today.slice(0, 8) + '01';
   const monthEnd = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).toISOString().slice(0, 10);
 
@@ -105,7 +105,7 @@ function HrWorkspace() {
     }
   }
 
-  async function createEmployee(event: React.FormEvent<HTMLFormElement>) {
+  async function createEmployee(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (working) return;
     setWorking('employee');
@@ -371,7 +371,8 @@ export function WorkspaceRouter() {
   let content: ReactNode;
   if (session.workspace === 'POS') content = <RealPosApp />;
   else if (session.workspace === 'KITCHEN') content = <KitchenDisplay />;
-  else if (session.workspace === 'HR' || session.workspace === 'ACCOUNTING' || session.workspace === 'INVENTORY') content = <ReadWorkspace workspace={session.workspace} />;
+  else if (session.workspace === 'HR') content = <HrWorkspace />;
+  else if (session.workspace === 'ACCOUNTING' || session.workspace === 'INVENTORY') content = <ReadWorkspace workspace={session.workspace} />;
   else if (session.workspace === 'CALL_CENTER' || session.workspace === 'DISPATCH' || session.workspace === 'MANAGEMENT') content = <OperationalWorkspace workspace={session.workspace} />;
   else if (session.workspace === 'SETTINGS') content = <SettingsWorkspace />;
   else content = <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#090d12', color: '#e8edf5', padding: 24, direction: 'rtl' }}><section><h1>{labels[session.workspace] ?? session.workspace}</h1><p>مساحة العمل غير مفعّلة تشغيليًا.</p></section></main>;
