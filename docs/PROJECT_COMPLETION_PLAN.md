@@ -15,7 +15,12 @@
 - [x] Add local API build/start/migrate scripts, Vite CORS defaults and a non-default-password first-run local owner bootstrap.
 - [x] Add Windows local development instructions and Replica-derived engineering/quality workflow.
 - [x] API Quality Gate passed on `ec7718bf2f6a809a7ec5a4aa5dde8ac0e7cb922b`; desktop validation steps passed through Tauri native check on that SHA. A newer documentation-only commit requires fresh CI before release.
-- [ ] Confirm both workflows finish successfully on the exact latest integration SHA.
+- [x] Add a shared authenticated branch-scope resolver and apply it to HR, Accounting report endpoints and Inventory stock queries.
+- [x] Make HR employee creation/listing and attendance listing inherit the authenticated branch; add branch-scoped payroll periods, a safe partial-unique migration and a payroll-period list endpoint.
+- [x] Default accounting journal posting to the authenticated branch and validate all referenced branches against the tenant.
+- [x] Require tenant-wide access to approve, dispatch from, or receive into the central warehouse; preserve branch-level stock operations.
+- [x] API and POS Desktop Quality Gates passed on exact SHA `f87d01dfed9c0655ccccfed4eb59ef46dd972963`, including PostgreSQL migrations, local owner login/session smoke test and Tauri native check.
+- [ ] Confirm both workflows finish successfully on the exact latest integration SHA after the subsequent documentation update.
 - [ ] Execute the Windows local bootstrap against a clean Docker PostgreSQL instance and verify sign-in in the actual Vite/Tauri runtime.
 - [ ] Restore the FlutterFlow source and 32-page UI Directions PDF, then verify visual/interaction parity.
 - [ ] Complete menu variants/modifiers as a tenant-safe end-to-end feature; the old backup branch is not safe to cherry-pick.
