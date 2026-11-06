@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, scrypt as scryptCallback } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { createInterface } from 'node:readline';
 import pg from 'pg';
@@ -148,7 +149,7 @@ async function main() {
       client.release();
     }
 
-    const appEnvPath = resolve(dirname(new URL(import.meta.url).pathname), '../../../apps/pos-desktop/.env.local');
+    const appEnvPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../apps/pos-desktop/.env.local');
     mkdirSync(dirname(appEnvPath), { recursive: true });
     writeFileSync(appEnvPath, `VITE_API_URL=http://localhost:3000\nVITE_BRANCH_ID=${branchId}\nVITE_DEVICE_CODE=${deviceCode}\n`, { encoding: 'utf8', mode: 0o600 });
 
