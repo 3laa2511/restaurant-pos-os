@@ -2,10 +2,10 @@ import { KitchenDisplay } from './KitchenDisplay.js';
 import { RealPosApp } from './RealPosApp.js';
 import { getDesktopSession, logoutDesktop } from './pos/auth-client.js';
 import { API_BASE_URL, apiGet, apiPost } from './pos/workspace-api.js';
-import { actionStyle, DataTable, fieldStyle, WorkspaceShell } from './workspaces/shared.js';
+import { DataTable, WorkspaceShell } from './workspaces/shared.js';
 import { AccountingWorkspace } from './workspaces/AccountingWorkspace.js';
 import { InventoryWorkspace } from './workspaces/InventoryWorkspace.js';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 const labels: Record<string, string> = {
   POS: 'الكاشير / POS',
@@ -19,8 +19,6 @@ const labels: Record<string, string> = {
   SETTINGS: 'الإعدادات',
 };
 
-
-type EmployeeRow = { employeeCode: string; jobTitle: string; baseSalary: string | number; user: { id: string; displayName: string; status: string; branchId: string | null } };
 function SettingsWorkspace() {
   const session = getDesktopSession();
   const branchId = session?.user.branchId;
