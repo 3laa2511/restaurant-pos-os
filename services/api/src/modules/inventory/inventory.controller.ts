@@ -7,12 +7,20 @@ import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import { InventoryService } from './inventory.service.js';
 import { OptionalBranchQueryDto, TransferStatusQueryDto } from '../security/request.dto.js';
-import { AdjustInventoryDto, CreateIngredientDto, CreateTransferDto, ReceiveInventoryDto, SetRecipeDto } from './inventory.dto.js';
+import { AdjustInventoryDto, CreateIngredientDto, CreateSupplierDto, CreateTransferDto, ReceiveInventoryDto, SetRecipeDto } from './inventory.dto.js';
 
 @Controller('inventory')
 @UseGuards(AuthGuard, PermissionGuard)
 export class InventoryController {
   constructor(private readonly inventory: InventoryService) {}
+
+  @Get('suppliers')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
+  suppliers(@CurrentAuth() context: AuthContext) { return this.inventory.listSuppliers(context); }
+
+  @Post('suppliers')
+  @RequirePermission(PERMISSIONS.INVENTORY_PURCHASE)
+  createSupplier(@CurrentAuth() context: AuthContext, @Body() input: CreateSupplierDto) { return this.inventory.createSupplier(context, input); }
 
   @Get('ingredients')
   @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
