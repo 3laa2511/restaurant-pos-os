@@ -430,7 +430,7 @@ export class AccountingService {
   async postPayrollAccrual(
     tx: Db,
     context: AuthContext,
-    input: { periodId: string; total: number; allocations: Array<{ branchId: string | null; amount: number }> },
+    input: { periodId: string; branchId?: string | null; total: number; allocations: Array<{ branchId: string | null; amount: number }> },
   ) {
     const total = positiveMoney(input.total, 'Payroll total');
     const lines: Line[] = [];
@@ -450,16 +450,18 @@ export class AccountingService {
       sourceType: 'PAYROLL_ACCRUAL',
       sourceId: input.periodId,
       description: `Payroll accrual ${input.periodId}`,
+      ...(input.branchId === undefined ? {} : { branchId: input.branchId }),
       lines,
     });
   }
 
-  async postPayrollPayment(tx: Db, context: AuthContext, input: { periodId: string; total: number }) {
+  async postPayrollPayment(tx: Db, context: AuthContext, input: { periodId: string; branchId?: string | null; total: number }) {
     const total = positiveMoney(input.total, 'Payroll payment');
     return this.post(tx, context, {
       sourceType: 'PAYROLL_PAYMENT',
       sourceId: input.periodId,
       description: `Payroll payment ${input.periodId}`,
+      ...(input.branchId === undefined ? {} : { branchId: input.branchId }),
       lines: [
         { code: '2200', name: 'Payroll Payable', nameAr: 'رواتب مستحقة', type: 'LIABILITY', debit: total },
         { code: '1000', name: 'Cash', nameAr: 'النقدية', type: 'ASSET', credit: total },
