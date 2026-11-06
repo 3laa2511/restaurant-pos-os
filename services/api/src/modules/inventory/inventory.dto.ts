@@ -63,3 +63,8 @@ export class SetRecipeDto {
   @IsArray() @ValidateNested({ each: true }) @Type(() => RecipeItemDto)
   items!: RecipeItemDto[];
 }
+
+export class CreateSupplierDto {
+  @IsString() @Length(1, 200) name!: string;
+  @IsOptional() @IsString() @Length(1, 32) phone?: string;
+}
