@@ -11,6 +11,25 @@ const n=(v:unknown,f:string)=>{const x=Number(v);if(!Number.isFinite(x)||x<0)thr
 export class InventoryService {
   constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingService) {}
 
+  async listSuppliers(context: AuthContext) {
+    const tenantId = assertTenantScope(context);
+    return withRlsContext(this.prisma, context, (tx) => tx.supplier.findMany({
+      where: { tenantId, active: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, phone: true, active: true },
+    }));
+  }
+
+  async createSupplier(context: AuthContext, input: { name: string; phone?: string }) {
+    const tenantId = assertTenantScope(context);
+    const name = input.name.trim();
+    if (!name) throw new Error('Supplier name is required');
+    return withRlsContext(this.prisma, context, (tx) => tx.supplier.create({
+      data: { id: randomUUID(), tenantId, name, phone: input.phone?.trim() || null },
+      select: { id: true, name: true, phone: true, active: true },
+    }));
+  }
+
   async listIngredients(context: AuthContext) {
     const tenantId = assertTenantScope(context);
     return withRlsContext(this.prisma, context, (tx) => tx.ingredient.findMany({ where:{ tenantId, active:true }, orderBy:{name:'asc'} }));
