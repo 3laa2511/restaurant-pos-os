@@ -212,7 +212,7 @@ export class AccountingService {
       const incomingAccounts = new Map<string, { debit: number; credit: number; branchId: string | null }>();
       for (const line of input.lines) {
         const account = await this.ensureAccount(tx, tenantId, line.code, line.type);
-        incomingAccounts.set(line.code, { debit: money(line.debit ?? 0), credit: money(line.credit ?? 0), branchId: line.branchId ?? input.branchId ?? null });
+        incomingAccounts.set(line.code, { debit: money(line.debit ?? 0), credit: money(line.credit ?? 0), branchId: line.branchId ?? entryBranchId });
         if (!existing.lines.some((existingLine) => existingLine.accountId === account.id)) {
           throw new Error('Accounting source collision: an entry already exists with different journal accounts');
         }
@@ -248,7 +248,7 @@ export class AccountingService {
           create: input.lines.map((line) => ({
             id: randomUUID(),
             accountId: accounts.get(line.code)!.id,
-            branchId: line.branchId ?? input.branchId ?? null,
+            branchId: line.branchId ?? entryBranchId,
             debit: money(line.debit ?? 0).toFixed(2),
             credit: money(line.credit ?? 0).toFixed(2),
             memo: line.memo ?? null,
