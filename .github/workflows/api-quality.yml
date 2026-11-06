@@ -52,6 +52,21 @@ jobs:
         working-directory: services/api
         run: pnpm exec prisma migrate deploy --schema ../../prisma/schema.prisma
 
+      - name: Verify first-run local bootstrap against PostgreSQL
+        working-directory: services/api
+        env:
+          BOOTSTRAP_TENANT_NAME: CI Bootstrap Tenant
+          BOOTSTRAP_TENANT_SLUG: ci-bootstrap-tenant
+          BOOTSTRAP_BRANCH_NAME: CI Main Branch
+          BOOTSTRAP_BRANCH_CODE: CI01
+          BOOTSTRAP_OWNER_USERNAME: ci-bootstrap-owner
+          BOOTSTRAP_OWNER_DISPLAY_NAME: CI Bootstrap Owner
+          BOOTSTRAP_OWNER_PASSWORD: CI-only-Password-2026!
+          BOOTSTRAP_DEVICE_CODE: CI-POS-01
+        run: |
+          node scripts/bootstrap-local.mjs
+          test -f ../../apps/pos-desktop/.env.local
+
       - name: Grant RLS test role
         run: |
           psql "$RLS_ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
