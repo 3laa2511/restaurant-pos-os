@@ -1,9 +1,8 @@
 import { KitchenDisplay } from './KitchenDisplay.js';
 import { RealPosApp } from './RealPosApp.js';
-import { getAccessToken, getDesktopSession } from './pos/auth-client.js';
+import { getDesktopSession, logoutDesktop } from './pos/auth-client.js';
+import { API_BASE_URL, apiGet, apiPost } from './pos/workspace-api.js';
 import { useEffect, useState, type ReactNode } from 'react';
-
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
 
 const labels: Record<string, string> = {
   POS: 'الكاشير / POS',
@@ -17,34 +16,6 @@ const labels: Record<string, string> = {
   SETTINGS: 'الإعدادات',
 };
 
-
-async function apiPost<T>(path: string, payload: unknown): Promise<T> {
-  const token = getAccessToken();
-  if (!token) throw new Error('انتهت جلسة الدخول، سجّل الدخول مرة أخرى.');
-  const response = await fetch(API_BASE_URL.replace(/\/$/, '') + '/api/' + path.replace(/^\//, ''), {
-    method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify(payload),
-  });
-  const body = await response.json().catch(() => null) as T | { message?: string } | null;
-  if (!response.ok) {
-    const message = body && typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string' ? body.message : 'تعذر تنفيذ العملية (' + response.status + ')';
-    throw new Error(message);
-  }
-  return body as T;
-}
-
-async function apiGet<T>(path: string): Promise<T> {
-  const token = getAccessToken();
-  if (!token) throw new Error('انتهت جلسة الدخول، سجّل الدخول مرة أخرى.');
-  const response = await fetch(API_BASE_URL.replace(/\/$/, '') + '/api/' + path.replace(/^\//, ''), { headers: { Accept: 'application/json', Authorization: 'Bearer ' + token } });
-  const body = await response.json().catch(() => null) as T | { message?: string } | null;
-  if (!response.ok) {
-    const message = body && typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string' ? body.message : 'تعذر تحميل البيانات (' + response.status + ')';
-    throw new Error(message);
-  }
-  return body as T;
-}
 
 type EmployeeRow = { employeeCode: string; jobTitle: string; baseSalary: string | number; user: { displayName: string; status: string; branchId: string | null } };
 type AccountingRow = { code: string; name: string; nameAr: string | null; type: string; debit: number; credit: number; balance: number };
@@ -162,14 +133,35 @@ function OperationalWorkspace({ workspace }: { workspace: 'CALL_CENTER' | 'DISPA
   </WorkspaceShell>;
 }
 
+function SessionControls() {
+  const [working, setWorking] = useState(false);
+  async function changeWorkspace() {
+    if (working || !window.confirm('سيتم تسجيل الخروج والعودة لاختيار مساحة عمل أخرى. هل تريد المتابعة؟')) return;
+    setWorking(true);
+    try { await logoutDesktop(API_BASE_URL); }
+    catch { /* The local session is cleared by logoutDesktop even if the server is unreachable. */ }
+    finally { window.location.reload(); }
+  }
+  return <button
+    type="button"
+    onClick={() => void changeWorkspace()}
+    disabled={working}
+    title="تسجيل الخروج وتغيير مساحة العمل"
+    style={{ position: 'fixed', zIndex: 10000, top: 12, left: 12, border: '1px solid #334150', borderRadius: 9, padding: '9px 13px', background: '#111820', color: '#e8edf5', cursor: working ? 'wait' : 'pointer', boxShadow: '0 8px 24px #0006' }}
+  >{working ? 'جاري الخروج…' : 'تغيير مساحة العمل'}</button>;
+}
+
 export function WorkspaceRouter() {
   const session = getDesktopSession();
   if (!session) return null;
 
-  if (session.workspace === 'POS') return <RealPosApp />;
-  if (session.workspace === 'KITCHEN') return <KitchenDisplay />;
-  if (session.workspace === 'HR' || session.workspace === 'ACCOUNTING' || session.workspace === 'INVENTORY') return <ReadWorkspace workspace={session.workspace} />;
-  if (session.workspace === 'CALL_CENTER' || session.workspace === 'DISPATCH' || session.workspace === 'MANAGEMENT') return <OperationalWorkspace workspace={session.workspace} />;
-  if (session.workspace === 'SETTINGS') return <SettingsWorkspace />;
-  return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#090d12', color: '#e8edf5', padding: 24, direction: 'rtl' }}><section><h1>{labels[session.workspace] ?? session.workspace}</h1><p>مساحة العمل غير مفعّلة تشغيليًا.</p></section></main>;
+  let content: ReactNode;
+  if (session.workspace === 'POS') content = <RealPosApp />;
+  else if (session.workspace === 'KITCHEN') content = <KitchenDisplay />;
+  else if (session.workspace === 'HR' || session.workspace === 'ACCOUNTING' || session.workspace === 'INVENTORY') content = <ReadWorkspace workspace={session.workspace} />;
+  else if (session.workspace === 'CALL_CENTER' || session.workspace === 'DISPATCH' || session.workspace === 'MANAGEMENT') content = <OperationalWorkspace workspace={session.workspace} />;
+  else if (session.workspace === 'SETTINGS') content = <SettingsWorkspace />;
+  else content = <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#090d12', color: '#e8edf5', padding: 24, direction: 'rtl' }}><section><h1>{labels[session.workspace] ?? session.workspace}</h1><p>مساحة العمل غير مفعّلة تشغيليًا.</p></section></main>;
+
+  return <>{content}<SessionControls /></>;
 }
