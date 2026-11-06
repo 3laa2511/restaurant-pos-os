@@ -197,10 +197,7 @@ export class InventoryService {
       where: context.branchId
         ? { tenantId, active: true, OR: [{ branchId: context.branchId }, { type: 'CENTRAL' }] }
         : { tenantId, active: true },
-      include: {
-        branch: { select: { id: true, code: true, name: true } },
-        stockBalances: { include: { ingredient: { select: { id: true, sku: true, name: true, baseUnit: true } } } },
-      },
+      include: { branch: { select: { id: true, code: true, name: true } } },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     }));
   }
