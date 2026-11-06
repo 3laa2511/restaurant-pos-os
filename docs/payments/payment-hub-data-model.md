@@ -89,6 +89,14 @@ This bootstrap path needs integration tests for unknown/disabled account keys, i
 
 ## Implemented foundation in PR #10
 
+The branch also adds the webhook inbox foundation in `0030_payment_provider_webhook_inbox`:
+
+- `PaymentProviderAccount.webhookKeyHash` stores only a SHA-256 digest of a high-entropy endpoint key; the plaintext key is generated once and must be shown only at creation/rotation time.
+- `PaymentProviderEvent` stores provider-account-scoped event IDs, SHA-256 payload hashes, signature-verification outcome, processing state, and timestamps. Raw payloads and provider secrets are not stored.
+- A unique constraint on `providerAccountId + providerEventId` makes duplicate delivery idempotently detectable.
+- Two transaction-local RLS contexts are available: endpoint-hash bootstrap (one active provider-account lookup) and resolved provider-account scope (event inbox access for that account only).
+- PostgreSQL integration coverage checks endpoint-hash lookup isolation, provider-account-scoped inbox reads, and duplicate event rejection.
+
 The branch now adds the first database foundation in `0029_payment_hub_intents`:
 
 - `PaymentProviderAccount`: tenant-owned receiving/provider account metadata, optional branch restriction, masked account reference, and a secret-manager reference. No provider secret is stored in this table.
@@ -101,4 +109,4 @@ The existing `Payment` model is intentionally unchanged. A successful external i
 
 ## Not implemented yet
 
-This foundation does not yet expose intent APIs, receive provider webhooks, perform trusted bank-feed imports, reconcile transactions, create the final booked `Payment`, or integrate a live provider. The provider event inbox and reconciliation tables remain deferred until the unauthenticated webhook bootstrap context and its PostgreSQL integration tests are implemented. No production migration or live provider credentials are included in this phase.
+This foundation does not yet expose an HTTP webhook route, verify any provider-specific signature, fetch provider secrets, process inbox events into payment intents, perform trusted bank-feed imports, reconcile transactions, create the final booked `Payment`, or integrate a live provider. The database inbox and RLS contexts are groundwork only: the eventual controller must hash the opaque endpoint key, resolve exactly one active account, verify the provider signature over the exact raw request bytes, then enter the resolved provider-account context before inserting an event. It must never use tenant/branch values from the provider payload. No production migration or live provider credentials are included in this phase.
