@@ -52,6 +52,23 @@ enum PaymentStatus {
   VOIDED
 }
 
+enum PaymentIntentStatus {
+  CREATED
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+  CANCELLED
+  REVIEW_REQUIRED
+}
+
+enum PaymentIntentChannel {
+  DIRECT_TRANSFER
+  CHECKOUT_LINK
+  QR
+}
+
 enum PaymentAdjustmentType {
   REFUND
   VOID
@@ -216,6 +233,8 @@ model Tenant {
   journalEntries JournalEntry[]
   fiscalPeriods FiscalPeriod[]
   riskPolicies RiskPolicy[]
+  paymentProviderAccounts PaymentProviderAccount[]
+  paymentIntents PaymentIntent[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([active])
@@ -249,9 +268,12 @@ model Branch {
   journalLines JournalLine[]
   warehouses Warehouse[]
   departments Department[]
+  paymentProviderAccounts PaymentProviderAccount[]
+  paymentIntents PaymentIntent[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([tenantId, code])
+  @@unique([id, tenantId])
   @@index([tenantId, active])
 }
 
@@ -852,6 +874,7 @@ model Order {
   customer Customer? @relation(fields: [customerId], references: [id])
   items OrderItem[]
   payments Payment[]
+  paymentIntents PaymentIntent[]
   paymentAdjustments PaymentAdjustment[]
   events OrderEvent[]
   kitchenTickets KitchenTicket[]
@@ -859,6 +882,7 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([branchId, orderNumber])
+  @@unique([id, branchId])
 }
 
 model OrderItem {
@@ -949,6 +973,95 @@ model CustomerAddress {
   address String
   area String?
   notes String?
+}
+
+model PaymentProviderAccount {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId String?
+  branch Branch? @relation(fields: [branchId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  providerCode String
+  displayName String
+  accountReferenceMasked String?
+  credentialSecretRef String?
+  currency String @default("EGP")
+  active Boolean @default(true)
+  webhookKeyHash String? @unique
+  paymentIntents PaymentIntent[]
+  providerEvents PaymentProviderEvent[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([id, tenantId])
+  @@unique([tenantId, providerCode, displayName])
+  @@index([tenantId, branchId, active])
+}
+
+model PaymentIntent {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId String
+  branch Branch @relation(fields: [branchId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  orderId String
+  order Order @relation(fields: [orderId, branchId], references: [id, branchId], onDelete: Restrict)
+  providerAccountId String
+  providerAccount PaymentProviderAccount @relation(fields: [providerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  channel PaymentIntentChannel
+  amountMinor BigInt
+  currency String @default("EGP")
+  status PaymentIntentStatus @default(CREATED)
+  merchantReference String
+  checkoutUrl String?
+  expiresAt DateTime?
+  succeededAt DateTime?
+  idempotencyKey String
+  attempts PaymentAttempt[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([id, tenantId])
+  @@unique([tenantId, merchantReference])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, branchId, status, createdAt])
+  @@index([orderId, createdAt])
+  @@index([providerAccountId, status, createdAt])
+}
+
+model PaymentProviderEvent {
+  id String @id @default(cuid())
+  tenantId String
+  providerAccountId String
+  providerAccount PaymentProviderAccount @relation(fields: [providerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  providerEventId String
+  payloadHash String
+  signatureValid Boolean
+  status String @default("RECEIVED")
+  processedAt DateTime?
+  errorCode String?
+  receivedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([providerAccountId, providerEventId])
+  @@index([tenantId, status, receivedAt])
+  @@index([providerAccountId, receivedAt])
+}
+
+model PaymentAttempt {
+  id String @id @default(cuid())
+  tenantId String
+  intentId String
+  intent PaymentIntent @relation(fields: [intentId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  attemptNumber Int
+  providerRequestId String?
+  providerTransactionId String?
+  status String
+  failureCode String?
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([intentId, attemptNumber])
+  @@unique([tenantId, providerTransactionId])
+  @@index([tenantId, createdAt])
 }
 
 model Payment {

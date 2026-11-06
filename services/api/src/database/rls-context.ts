@@ -5,6 +5,8 @@ export const RLS_TENANT_SETTING = 'app.tenant_id';
 export const RLS_BRANCH_SETTING = 'app.branch_id';
 export const RLS_USER_SETTING = 'app.user_id';
 export const RLS_SESSION_SETTING = 'app.session_id';
+export const RLS_PROVIDER_ENDPOINT_HASH_SETTING = 'app.provider_endpoint_hash';
+export const RLS_PROVIDER_ACCOUNT_ID_SETTING = 'app.provider_account_id';
 
 export type RlsTransaction = Prisma.TransactionClient;
 
@@ -70,6 +72,46 @@ export async function withLoginRlsContext<T>(
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
     await setLoginRlsContext(tx, username);
+    return work(tx);
+  });
+}
+
+/**
+ * Allows one lookup of an active provider account by the SHA-256 hash of its
+ * high-entropy webhook endpoint key. Call only before signature verification;
+ * this context does not grant access to payment intents or event rows.
+ */
+export async function withProviderEndpointBootstrapRlsContext<T>(
+  prisma: PrismaServiceLike,
+  endpointKeyHash: string,
+  work: (tx: RlsTransaction) => Promise<T>,
+): Promise<T> {
+  if (!/^[a-f0-9]{64}$/.test(endpointKeyHash)) {
+    throw new Error('RLS provider endpoint hash must be a SHA-256 hex digest');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      SELECT set_config(${RLS_PROVIDER_ENDPOINT_HASH_SETTING}, ${endpointKeyHash}, true)
+    `;
+    return work(tx);
+  });
+}
+
+/**
+ * Restricts provider webhook processing to one previously resolved provider
+ * account. Never derive this ID from the untrusted provider event body.
+ */
+export async function withProviderAccountRlsContext<T>(
+  prisma: PrismaServiceLike,
+  providerAccountId: string,
+  work: (tx: RlsTransaction) => Promise<T>,
+): Promise<T> {
+  const scopedAccountId = requireScopeValue(providerAccountId, 'providerAccountId');
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      SELECT set_config(${RLS_PROVIDER_ACCOUNT_ID_SETTING}, ${scopedAccountId}, true)
+    `;
     return work(tx);
   });
 }
