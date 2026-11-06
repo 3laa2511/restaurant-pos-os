@@ -180,9 +180,8 @@ export function InventoryWorkspace() {
 
   useEffect(() => { void load(); }, [session?.user.branchId, session?.workspace]);
 
-  const branchOptions = Array.from(new Map(warehouses.filter(w => w.branchId && w.branch).map(w => [w.branchId as string, w.branch as BranchOption])).values());
+  const branchOptions = Array.from(new Map<string, BranchOption>(warehouses.filter(w => w.branchId && w.branch).map(w => [w.branchId as string, w.branch as BranchOption] as const)).values());
   const tenantWide = !session?.user.branchId;
-  const branchWarehouses = warehouses.filter(w => w.type !== 'CENTRAL');
   return <WorkspaceShell title="المخزون" description="المواد الخام والأرصدة والاستلام والتسويات والتحويلات بين مخازن الفروع والمخزن المركزي. كل حركة لها مرجع وصلاحيات وعزل على مستوى الشركة والفرع.">
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
       <span style={{ fontSize: 11, color: '#7b8896' }}>الفرع: {session?.user.branchId ?? 'نطاق الشركة'} · المواد: {ingredients.length} · المخازن: {warehouses.length}</span>
@@ -232,6 +231,13 @@ export function InventoryWorkspace() {
       <input value={transferForm.notes} onChange={e => setTransferForm(v => ({ ...v, notes: e.target.value }))} placeholder="ملاحظات" style={fieldStyle} />
       <button type="submit" disabled={working === 'transfer' || !transferForm.fromWarehouseId || !transferForm.toWarehouseId} style={actionStyle}>{working === 'transfer' ? 'جاري إنشاء الطلب…' : 'إنشاء طلب النقل'}</button>
     </form>}
+
+    <section style={{ marginBottom: 18 }}>
+      <h2 style={{ fontSize: 17 }}>دليل المواد ({ingredients.length})</h2>
+      <DataTable headers={['SKU','المادة','الوحدة الأساسية','وحدة الشراء','معامل التحويل','الحالة']} rows={ingredients.map(item => [
+        item.sku, item.nameAr || item.name, item.baseUnit, item.purchaseUnit, Number(item.purchaseUnitFactor).toLocaleString('ar-EG'), item.active ? 'نشطة' : 'موقوفة',
+      ])} />
+    </section>
 
     <section style={{ marginBottom: 18 }}>
       <h2 style={{ fontSize: 17 }}>أرصدة الفروع ({stock.length})</h2>
