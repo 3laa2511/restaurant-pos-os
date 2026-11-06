@@ -5,7 +5,7 @@ import { AuthGuard } from '../auth/auth.guard.js';
 import { PermissionGuard } from '../auth/permission.guard.js';
 import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
-import type { AuthContext } from '../auth/authorization.types.js';
+import { resolveBranchScope, type AuthContext } from '../auth/authorization.types.js';
 import { AccountingService } from './accounting.service.js';
 import {
   CreateAccountingAccountDto,
@@ -85,42 +85,43 @@ export class AccountingController {
   @Get('journal')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   journal(@CurrentAuth() context: AuthContext, @Query() query: OptionalBranchQueryDto) {
-    return this.accounting.journal(context, query.branchId);
+    return this.accounting.journal(context, resolveBranchScope(context, query.branchId));
   }
 
   @Get('trial-balance')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   trialBalance(@CurrentAuth() context: AuthContext, @Query() query: OptionalBranchQueryDto) {
-    return this.accounting.trialBalance(context, query.branchId);
+    return this.accounting.trialBalance(context, resolveBranchScope(context, query.branchId));
   }
 
   @Get('reports/general-ledger')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   generalLedger(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto & { accountCode?: string }) {
-    return this.accounting.generalLedger(context, query);
+    return this.accounting.generalLedger(context, { ...query, ...(resolveBranchScope(context, query.branchId) ? { branchId: resolveBranchScope(context, query.branchId) } : {}) });
   }
 
   @Get('reports/profit-and-loss')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   profitAndLoss(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) {
-    return this.accounting.profitAndLoss(context, query);
+    return this.accounting.profitAndLoss(context, { ...query, ...(resolveBranchScope(context, query.branchId) ? { branchId: resolveBranchScope(context, query.branchId) } : {}) });
   }
 
   @Get('reports/balance-sheet')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   balanceSheet(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string, @Query('asOf') asOf?: string) {
-    return this.accounting.balanceSheet(context, { ...(branchId ? { branchId } : {}), ...(asOf ? { asOf } : {}) });
+    const scopedBranchId = resolveBranchScope(context, branchId);
+    return this.accounting.balanceSheet(context, { ...(scopedBranchId ? { branchId: scopedBranchId } : {}), ...(asOf ? { asOf } : {}) });
   }
 
   @Get('reports/reconciliation')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   reconciliation(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) {
-    return this.accounting.reconciliation(context, query);
+    return this.accounting.reconciliation(context, { ...query, ...(resolveBranchScope(context, query.branchId) ? { branchId: resolveBranchScope(context, query.branchId) } : {}) });
   }
 
   @Get('reports/cash-bank')
   @RequirePermission(PERMISSIONS.ACCOUNTING_VIEW)
   cashBankMovement(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) {
-    return this.accounting.cashBankMovement(context, query);
+    return this.accounting.cashBankMovement(context, { ...query, ...(resolveBranchScope(context, query.branchId) ? { branchId: resolveBranchScope(context, query.branchId) } : {}) });
   }
 }
