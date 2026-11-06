@@ -69,6 +69,9 @@ jobs:
       - name: Build API
         run: pnpm --filter @restaurant-pos/api build
 
+      - name: Validate local bootstrap script syntax
+        run: node --check services/api/scripts/bootstrap-local.mjs
+
       - name: Test shared payment policy
         run: pnpm --filter @restaurant-pos/payment-policy test
 
