@@ -118,7 +118,7 @@ function OperationalWorkspace({ workspace }: { workspace: 'CALL_CENTER' | 'DISPA
         </select>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 9, color: '#8e9baa', fontSize: 11 }}>
-        <span>الطلبات المعروضة: {operationalOrders.length} من {data.length}</span>
+        <span>الطلبات المعروضة: {operationalOrders.length} من {Array.isArray(data) ? data.length : 0}</span>
         <span>{workspace === 'DISPATCH' ? 'مرتبة حسب آخر تحديث من الأقدم للأحدث' : 'مرتبة بالأحدث أولاً'}</span>
       </div>
       {operationalOrders.length ? <DataTable headers={['رقم الطلب','العميل / الهاتف','العنوان','الحالة','الفرع','وقت الطلب','عدد الأصناف','الإجمالي']} rows={operationalOrders.map(order => {
