@@ -6,7 +6,7 @@ import { DataTable, WorkspaceShell } from './workspaces/shared.js';
 import { AccountingWorkspace } from './workspaces/AccountingWorkspace.js';
 import { InventoryWorkspace } from './workspaces/InventoryWorkspace.js';
 import { HrWorkspace } from './workspaces/HrWorkspace.js';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 const labels: Record<string, string> = {
   POS: 'الكاشير / POS',
@@ -20,7 +20,7 @@ const labels: Record<string, string> = {
   SETTINGS: 'الإعدادات',
 };
 
-type OperationalOrder = { id: string; orderNumber: string; status: string; type: string; source: string; total: string | number; createdAt: string; updatedAt: string; customer: { name: string | null; phone: string; addresses: Array<{ address: string; area: string | null }> } | null; branch: { code: string; name: string } };
+type OperationalOrder = { id: string; orderNumber: string; status: string; type: string; source: string; total: string | number; createdAt: string; updatedAt: string; customer: { name: string | null; phone: string; addresses: Array<{ address: string; area: string | null }> } | null; items: Array<{ id: string; quantity: number; productName?: string }>; branch: { code: string; name: string } };
 type ManagementOverview = { orders: Array<{ status: string; count: number; total: number }>; customers: number; branches: number };
 
 function SettingsWorkspace() {
@@ -77,6 +77,8 @@ function OperationalWorkspace({ workspace }: { workspace: 'CALL_CENTER' | 'DISPA
   const [data, setData] = useState<OperationalOrder[] | ManagementOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   async function load() {
     setLoading(true); setError('');
     try {
@@ -88,12 +90,49 @@ function OperationalWorkspace({ workspace }: { workspace: 'CALL_CENTER' | 'DISPA
   }
   useEffect(() => { void load(); }, [workspace]);
   const session = getDesktopSession();
+  const operationalOrders = useMemo(() => {
+    if (!Array.isArray(data)) return [];
+    const term = search.trim().toLocaleLowerCase();
+    return data.filter(order => {
+      const matchesStatus = statusFilter === 'ALL' || order.status === statusFilter;
+      const customer = order.customer?.name ?? '';
+      const phone = order.customer?.phone ?? '';
+      const address = order.customer?.addresses?.map(item => [item.area, item.address].filter(Boolean).join(' ')).join(' ') ?? '';
+      const matchesSearch = !term || [order.orderNumber, customer, phone, address, order.branch.name, order.branch.code]
+        .some(value => value.toLocaleLowerCase().includes(term));
+      return matchesStatus && matchesSearch;
+    });
+  }, [data, search, statusFilter]);
+  const availableStatuses = Array.isArray(data) ? [...new Set(data.map(order => order.status))].sort() : [];
   return <WorkspaceShell title={labels[workspace]} description="مساحة تشغيلية مرتبطة مباشرة ببيانات الطلبات والصلاحيات المركزية.">
 
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ fontSize: 11, color: '#7b8896' }}>Branch: {session?.user.branchId ?? 'ALL'}</span><button type="button" onClick={() => void load()} disabled={loading} style={{ border: '1px solid #334150', borderRadius: 9, padding: '9px 14px', background: '#111820', color: '#e8edf5' }}>{loading ? 'جاري التحميل…' : 'تحديث'}</button></div>
     {error && <div style={{ marginBottom: 14, padding: 12, borderRadius: 10, border: '1px solid #63373a', color: '#f0a7a7', background: '#211214' }}>{error}</div>}
     {loading && !data && <div style={{ padding: 30, textAlign: 'center', color: '#7b8896' }}>جاري تحميل بيانات المساحة…</div>}
-    {workspace !== 'MANAGEMENT' && data && <DataTable headers={['رقم الطلب','العميل','الهاتف','الحالة','الفرع','الإجمالي']} rows={(data as OperationalOrder[]).map(o => [o.orderNumber,o.customer?.name || 'بدون اسم',o.customer?.phone || '—',o.status,o.branch.name || o.branch.code,Number(o.total).toFixed(2)+' ج.م'])} />}
+    {workspace !== 'MANAGEMENT' && data && <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px,2fr) minmax(160px,1fr)', gap: 10, marginBottom: 14 }}>
+        <input value={search} onChange={event => setSearch(event.target.value)} placeholder="ابحث برقم الطلب أو العميل أو الهاتف أو العنوان…" style={{ border: '1px solid #334150', borderRadius: 9, padding: '10px 12px', background: '#111820', color: '#e8edf5', minWidth: 0 }} />
+        <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} style={{ border: '1px solid #334150', borderRadius: 9, padding: '10px 12px', background: '#111820', color: '#e8edf5' }}>
+          <option value="ALL">كل الحالات</option>
+          {availableStatuses.map(status => <option key={status} value={status}>{status}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 9, color: '#8e9baa', fontSize: 11 }}>
+        <span>الطلبات المعروضة: {operationalOrders.length} من {data.length}</span>
+        <span>{workspace === 'DISPATCH' ? 'مرتبة حسب آخر تحديث من الأقدم للأحدث' : 'مرتبة بالأحدث أولاً'}</span>
+      </div>
+      {operationalOrders.length ? <DataTable headers={['رقم الطلب','العميل / الهاتف','العنوان','الحالة','الفرع','وقت الطلب','عدد الأصناف','الإجمالي']} rows={operationalOrders.map(order => {
+        const address = order.customer?.addresses?.[0];
+        return [
+          order.orderNumber,
+          <span>{order.customer?.name || 'بدون اسم'}<small style={{ display: 'block', color: '#8e9baa', marginTop: 4, direction: 'ltr', textAlign: 'right' }}>{order.customer?.phone || '—'}</small></span>,
+          address ? [address.area, address.address].filter(Boolean).join(' — ') : 'لا يوجد عنوان مسجل',
+          order.status, order.branch.name || order.branch.code,
+          new Date(order.createdAt).toLocaleString('ar-EG'),
+          order.items?.length ?? 0, Number(order.total).toFixed(2) + ' ج.م',
+        ];
+      })} /> : <div style={{ padding: 24, border: '1px dashed #334150', borderRadius: 12, textAlign: 'center', color: '#8e9baa' }}>لا توجد طلبات تطابق البحث والحالة المحددة.</div>}
+    </>}
     {workspace === 'MANAGEMENT' && data && <div style={{ display: 'grid', gap: 14 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 12 }}>
         <div style={{ padding: 18, border: '1px solid #26313d', borderRadius: 14, background: '#0e141b' }}><div style={{ color:'#7b8896', fontSize:11 }}>الفروع</div><strong style={{ fontSize:26 }}>{(data as ManagementOverview).branches}</strong></div>
