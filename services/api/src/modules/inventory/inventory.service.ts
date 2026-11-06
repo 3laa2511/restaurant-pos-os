@@ -358,6 +358,19 @@ export class InventoryService {
     });
   }
 
+  async listRecipe(context: AuthContext, productId: string) {
+    const tenantId = assertTenantScope(context);
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const product = await tx.product.findFirst({ where: { id: productId, tenantId }, select: { id: true } });
+      if (!product) throw new Error('Product not found');
+      return tx.recipeIngredient.findMany({
+        where: { tenantId, productId },
+        include: { ingredient: { select: { id: true, sku: true, name: true, nameAr: true, baseUnit: true } } },
+        orderBy: { ingredient: { name: 'asc' } },
+      });
+    });
+  }
+
   async setRecipe(context:AuthContext,productId:string,input:{items:Array<{ingredientId:string;quantityBaseUnit:number;wastePercent?:number}>}){
     const tenantId=assertTenantScope(context);
     if (new Set((input.items ?? []).map((item) => item.ingredientId)).size !== (input.items ?? []).length) {
