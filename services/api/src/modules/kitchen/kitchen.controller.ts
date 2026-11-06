@@ -7,7 +7,7 @@ import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 import type { SyncResult } from '../sync/sync-contract.js';
 import { KitchenService } from './kitchen.service.js';
-import { OptionalBranchQueryDto, OrderIdParamDto, TicketIdParamDto } from '../security/request.dto.js';
+import { OptionalBranchQueryDto } from '../security/request.dto.js';
 import { KitchenTicketStatusDto } from './kitchen.dto.js';
 import { SyncEnvelopeDto } from '../sync/sync.dto.js';
 import { KitchenSyncService } from './kitchen-sync.service.js';
@@ -28,18 +28,18 @@ export class KitchenController {
 
   @Post('orders/:orderId/tickets/materialize')
   @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
-  materialize(@CurrentAuth() context: AuthContext, @Param() params: OrderIdParamDto) {
-    return this.kitchen.materializeTickets(context, params.id);
+  materialize(@CurrentAuth() context: AuthContext, @Param('orderId') orderId: string) {
+    return this.kitchen.materializeTickets(context, orderId);
   }
 
   @Patch('ticket/:ticketId/status')
   @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
   transitionTicket(
     @CurrentAuth() context: AuthContext,
-    @Param() params: TicketIdParamDto,
+    @Param('ticketId') ticketId: string,
     @Body() body: KitchenTicketStatusDto,
   ) {
-    return this.kitchen.transitionTicket(context, params.id, body.target, body.reason, body.expectedVersion);
+    return this.kitchen.transitionTicket(context, ticketId, body.target, body.reason, body.expectedVersion);
   }
 
   @Post('tickets/sync')
@@ -56,9 +56,9 @@ export class KitchenController {
   @RequirePermission(PERMISSIONS.KITCHEN_TICKET_MANAGE)
   transition(
     @CurrentAuth() context: AuthContext,
-    @Param() params: OrderIdParamDto,
+    @Param('orderId') orderId: string,
     @Body() body: KitchenTicketStatusDto,
   ) {
-    return this.kitchen.transition(context, params.id, body.target, body.reason);
+    return this.kitchen.transition(context, orderId, body.target, body.reason);
   }
 }
