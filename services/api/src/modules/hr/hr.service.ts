@@ -63,7 +63,6 @@ export class HrService {
         const branch = await tx.branch.findFirst({ where: { id: branchId, tenantId, active: true }, select: { id: true } });
         if (!branch) throw new Error('Branch not found or inactive');
       }
-          await setRlsContext(tx, context);
       const role = await tx.role.findUnique({ where: { code: roleCode }, select: { id: true, code: true } });
       if (!role) throw new Error('Employee role is not seeded');
       const user = await tx.user.create({
