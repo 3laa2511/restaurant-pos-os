@@ -81,10 +81,14 @@ describe('InventoryService branch warehouse transfer stock routing', () => {
     };
     const mocks = setup(transfer);
 
-    await mocks.service.approveTransfer(context, 'transfer-approve-once');
+    await expect(mocks.service.approveTransfer(context, 'transfer-approve-once'))
+      .rejects.toThrow('Central warehouse transfer approval requires tenant-wide access');
+
+    const tenantWideContext = { ...context, branchId: null };
+    await mocks.service.approveTransfer(tenantWideContext, 'transfer-approve-once');
     expect(transfer.status).toBe('APPROVED');
 
-    await expect(mocks.service.approveTransfer(context, 'transfer-approve-once'))
+    await expect(mocks.service.approveTransfer(tenantWideContext, 'transfer-approve-once'))
       .rejects.toThrow('Transfer cannot be approved in its current state');
     expect(mocks.prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(mocks.updateTransfer).toHaveBeenCalledTimes(1);
