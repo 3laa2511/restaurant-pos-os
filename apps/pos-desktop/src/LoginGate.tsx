@@ -59,8 +59,8 @@ export function LoginGate({ children }: { children: ReactNode }) {
   return (
     <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#090d12', color: '#e8edf5', fontFamily: 'Inter, system-ui, sans-serif', padding: 24, direction: 'rtl' }}>
       <form onSubmit={submit} style={{ width: '100%', maxWidth: 760, padding: 30, border: '1px solid #26313d', borderRadius: 18, background: '#0e141b', boxShadow: '0 24px 80px #0008' }}>
-        <div style={{ width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: 13, background: '#eef2f6', color: '#10151b', fontWeight: 900, fontSize: 12, marginBottom: 18 }}>BO'SH</div>
-        <h1 style={{ margin: 0, fontSize: 24 }}>الدخول إلى BO'SH SYSTEM</h1>
+        <div style={{ width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: 13, background: '#eef2f6', color: '#10151b', fontWeight: 900, fontSize: 12, marginBottom: 18 }}>RPOS</div>
+        <h1 style={{ margin: 0, fontSize: 24 }}>الدخول إلى Restaurant POS OS</h1>
         <p style={{ margin: '8px 0 22px', color: '#7b8896', fontSize: 12, lineHeight: 1.7 }}>اختار مساحة العمل أولًا، ثم سجّل دخولك. الصلاحيات الحقيقية يحددها الـBackend بعد التحقق من الحساب.</p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginBottom: 22 }}>

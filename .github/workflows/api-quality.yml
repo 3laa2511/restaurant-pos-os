@@ -2,9 +2,9 @@ name: API Quality Gate
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main, 'feat/**', 'fix/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'feat/**']
 
 jobs:
   api:
@@ -28,14 +28,18 @@ jobs:
 
       - name: Start PostgreSQL
         run: |
-          docker run -d --name restaurant-pos-postgres             -e POSTGRES_USER=postgres             -e POSTGRES_PASSWORD=postgres             -e POSTGRES_DB=restaurant_pos_test             -p 5432:5432 postgres:17
+          docker run -d --name restaurant-pos-postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=restaurant_pos_test \
+            -p 5432:5432 postgres:17
           for i in {1..30}; do
             docker exec restaurant-pos-postgres pg_isready -U postgres -d restaurant_pos_test && break
             sleep 2
           done
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Prepare RLS test role
         run: |
@@ -61,6 +65,9 @@ jobs:
 
       - name: Typecheck
         run: pnpm --filter @restaurant-pos/api typecheck
+
+      - name: Test shared payment policy
+        run: pnpm --filter @restaurant-pos/payment-policy test
 
       - name: Unit and integration tests
         run: pnpm --filter @restaurant-pos/api test --runInBand

@@ -9,6 +9,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@restaurant-pos/payment-policy": "workspace:*",
     "@nestjs/common": "^11.1.6",
     "@nestjs/core": "^11.1.6",
     "@nestjs/platform-express": "^11.1.6",
