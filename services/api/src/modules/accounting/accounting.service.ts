@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
-import { assertBranchAccess, assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
+import { assertBranchAccess, assertPermission, assertTenantScope, resolveBranchScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 
 type Db = Prisma.TransactionClient;
@@ -145,16 +145,31 @@ export class AccountingService {
   ) {
     const tenantId = assertTenantScope(context);
     if (!input.lines.length) throw new Error('Journal entry requires lines');
-    if (input.branchId) assertBranchAccess(context, input.branchId);
+    const entryBranchId = resolveBranchScope(context, input.branchId ?? undefined) ?? null;
+    const lineBranchIds = input.lines.map((line) => line.branchId ?? entryBranchId).filter((id): id is string => Boolean(id));
+    const requestedBranchIds = [...new Set([...(entryBranchId ? [entryBranchId] : []), ...lineBranchIds])];
 
     for (const line of input.lines) {
       if (!line.code.trim() || !line.name.trim()) throw new Error('Journal line account code and name are required');
       const debit = positiveMoney(line.debit ?? 0, 'Journal debit');
       const credit = positiveMoney(line.credit ?? 0, 'Journal credit');
       if (debit > 0 && credit > 0) throw new Error('A journal line cannot contain both debit and credit');
-      if (line.branchId) {
-        assertBranchAccess(context, line.branchId);
-        if (input.branchId && line.branchId !== input.branchId) throw new Error('Journal line branch must match the journal branch');
+      const lineBranchId = line.branchId ?? entryBranchId;
+      if (context.branchId !== null && lineBranchId !== context.branchId) {
+        throw new Error('Journal line branch must match the authenticated branch');
+      }
+      if (entryBranchId !== null && lineBranchId !== entryBranchId) {
+        throw new Error('Journal line branch must match the journal branch');
+      }
+    }
+
+    if (requestedBranchIds.length) {
+      const branches = await tx.branch.findMany({
+        where: { tenantId, id: { in: requestedBranchIds } },
+        select: { id: true },
+      });
+      if (branches.length !== requestedBranchIds.length) {
+        throw new Error('Journal branch must belong to the authenticated tenant');
       }
     }
 
@@ -187,11 +202,11 @@ export class AccountingService {
       const existingCredit = money(existing.lines.reduce((sum, line) => sum + Number(line.credit), 0));
       const incomingLines = input.lines.map((line) => ({
         code: line.code.trim(),
-        branchId: line.branchId ?? input.branchId ?? null,
+        branchId: line.branchId ?? entryBranchId,
         debit: money(line.debit ?? 0),
         credit: money(line.credit ?? 0),
       })).sort((a, b) => (a.code + '|' + (a.branchId ?? '')).localeCompare(b.code + '|' + (b.branchId ?? '')));
-      if (existingDebit !== totalDebit || existingCredit !== totalCredit || existing.description !== input.description || existing.branchId !== (input.branchId ?? null) || existing.lines.length !== incomingLines.length) {
+      if (existingDebit !== totalDebit || existingCredit !== totalCredit || existing.description !== input.description || existing.branchId !== entryBranchId || existing.lines.length !== incomingLines.length) {
         throw new Error('Accounting source collision: an entry already exists with different journal data');
       }
       const incomingAccounts = new Map<string, { debit: number; credit: number; branchId: string | null }>();
@@ -224,7 +239,7 @@ export class AccountingService {
         description: input.description,
         sourceType: input.sourceType,
         sourceId: input.sourceId,
-        branchId: input.branchId ?? null,
+        branchId: entryBranchId,
         entryDate,
         fiscalPeriodId: fiscalPeriod.id,
         postedById: context.userId,
