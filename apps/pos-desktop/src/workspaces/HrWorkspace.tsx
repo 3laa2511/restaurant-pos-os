@@ -42,7 +42,10 @@ export function HrWorkspace() {
     try {
       const [employeeRows, attendanceRows, payrollRows] = await Promise.all([
         canEmployees || canAttendance ? apiGet<Employee[]>('hr/employees') : Promise.resolve([]),
-        canAttendance ? apiGet<Attendance[]>(`hr/attendance?from=${encodeURIComponent(attendanceFilter.from)}&to=${encodeURIComponent(attendanceFilter.to)}`) : Promise.resolve([]),
+        canAttendance ? Promise.all([
+          apiGet<Attendance[]>(`hr/attendance?from=${encodeURIComponent(attendanceFilter.from)}&to=${encodeURIComponent(attendanceFilter.to)}`),
+          apiGet<Attendance[]>(`hr/attendance?from=${encodeURIComponent(today)}&to=${encodeURIComponent(today)}`),
+        ]).then(([rangeRows, todayRows]) => Array.from(new Map([...rangeRows, ...todayRows].map(row => [row.id, row])).values())) : Promise.resolve([]),
         canPayrollView || canPayrollManage ? apiGet<PayrollPeriod[]>('hr/payroll/periods') : Promise.resolve([]),
       ]);
       setEmployees(employeeRows);
