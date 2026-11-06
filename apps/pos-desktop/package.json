@@ -12,6 +12,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@restaurant-pos/payment-policy": "workspace:*",
     "@tauri-apps/api": "^2.8.1",
     "@vitejs/plugin-react": "^5.0.2",
     "react": "^19.1.1",
