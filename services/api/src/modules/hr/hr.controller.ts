@@ -35,6 +35,10 @@ export class HrController {
   @RequirePermission(PERMISSIONS.HR_ATTENDANCE_MANAGE)
   checkOut(@CurrentAuth() context: AuthContext, @Body() input: AttendanceDto) { return this.hr.checkOut(context, input); }
 
+  @Get('payroll/periods')
+  @RequirePermission(PERMISSIONS.HR_PAYROLL_VIEW)
+  listPayrollPeriods(@CurrentAuth() context: AuthContext) { return this.hr.listPayrollPeriods(context); }
+
   @Post('payroll/periods')
   @RequirePermission(PERMISSIONS.HR_PAYROLL_MANAGE)
   createPayrollPeriod(@CurrentAuth() context: AuthContext, @Body() input: CreatePayrollPeriodDto) { return this.hr.createPayrollPeriod(context, input); }
