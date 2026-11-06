@@ -228,3 +228,52 @@ describe('InventoryService.receive idempotency', () => {
   });
 });
 
+describe('InventoryService supplier directory', () => {
+  const context = {
+    tenantId: 'tenant-1',
+    branchId: null,
+    userId: 'user-1',
+    sessionId: 'session-1',
+    deviceId: 'device-1',
+    workspace: 'INVENTORY' as const,
+    roles: [],
+    permissions: [],
+  };
+
+  it('lists only active suppliers belonging to the authenticated tenant', async () => {
+    const findMany = jest.fn(async () => [{ id: 'supplier-1', name: 'Local Foods', phone: null, active: true }]);
+    const tx = { $executeRaw: jest.fn(async () => 1), supplier: { findMany } };
+    const prisma = { $transaction: jest.fn(async (work: (transaction: typeof tx) => Promise<unknown>) => work(tx)) };
+    const service = new InventoryService(prisma as never, {} as never);
+
+    await expect(service.listSuppliers(context)).resolves.toEqual([
+      { id: 'supplier-1', name: 'Local Foods', phone: null, active: true },
+    ]);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { tenantId: 'tenant-1', active: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, phone: true, active: true },
+    });
+  });
+
+  it('trims supplier identity and phone before creating a tenant-owned supplier', async () => {
+    const create = jest.fn(async (args: unknown) => args);
+    const tx = { $executeRaw: jest.fn(async () => 1), supplier: { create } };
+    const prisma = { $transaction: jest.fn(async (work: (transaction: typeof tx) => Promise<unknown>) => work(tx)) };
+    const service = new InventoryService(prisma as never, {} as never);
+
+    await service.createSupplier(context, { name: '  Local Foods  ', phone: ' 01000000000 ' });
+
+    expect(create).toHaveBeenCalledWith({
+      data: { id: expect.any(String), tenantId: 'tenant-1', name: 'Local Foods', phone: '01000000000' },
+      select: { id: true, name: true, phone: true, active: true },
+    });
+  });
+
+  it('rejects a blank supplier name before opening a database transaction', async () => {
+    const transaction = jest.fn();
+    const service = new InventoryService({ $transaction: transaction } as never, {} as never);
+    await expect(service.createSupplier(context, { name: '   ' })).rejects.toThrow('Supplier name is required');
+    expect(transaction).not.toHaveBeenCalled();
+  });
+});
