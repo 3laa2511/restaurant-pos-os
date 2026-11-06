@@ -23,6 +23,10 @@ export class HrController {
   @RequirePermission(PERMISSIONS.HR_EMPLOYEE_MANAGE)
   listEmployees(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) { return this.hr.listEmployees(context, query.branchId); }
 
+  @Get('attendance/employees')
+  @RequirePermission(PERMISSIONS.HR_ATTENDANCE_MANAGE)
+  attendanceEmployees(@CurrentAuth() context: AuthContext, @Query() query: DateRangeBranchQueryDto) { return this.hr.listEmployees(context, query.branchId); }
+
   @Post('employees')
   @RequirePermission(PERMISSIONS.HR_EMPLOYEE_MANAGE)
   createEmployee(@CurrentAuth() context: AuthContext, @Body() input: CreateEmployeeDto) { return this.hr.createEmployee(context, input); }
