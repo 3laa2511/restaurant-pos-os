@@ -672,8 +672,8 @@ export class AccountingService {
   async profitAndLoss(context: AuthContext, input: { branchId?: string; from?: string; to?: string }) {
     const tenantId = assertTenantScope(context);
     if (input.branchId) assertBranchAccess(context, input.branchId);
-    const from = input.from ? new Date(input.from) : new Date('1970-01-01T00:00:00.000Z');
-    const to = input.to ? new Date(input.to) : new Date();
+    const from = input.from ? reportDate(input.from) : new Date('1970-01-01T00:00:00.000Z');
+    const to = input.to ? reportDate(input.to, true) : new Date();
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from > to) throw new Error('Report date range is invalid');
 
     return withRlsContext(this.prisma, context, async (tx) => {
@@ -756,26 +756,48 @@ export class AccountingService {
   }
 
   async cashBankMovement(context: AuthContext, input: { branchId?: string; from?: string; to?: string }) {
-    const ledger = await this.generalLedger(context, {
-      ...(input.branchId ? { branchId: input.branchId } : {}),
-      ...(input.from ? { from: input.from } : {}),
-      ...(input.to ? { to: input.to } : {}),
-      accountCode: '1000',
-    });
-    const bank = await this.generalLedger(context, {
-      ...(input.branchId ? { branchId: input.branchId } : {}),
-      ...(input.from ? { from: input.from } : {}),
-      ...(input.to ? { to: input.to } : {}),
-      accountCode: '1030',
-    });
-    const summarize = (lines: Awaited<ReturnType<AccountingService['generalLedger']>>) => ({
-      openingBalance: lines[0]?.openingBalance ?? 0,
-      totalDebit: money(lines.reduce((sum, line) => sum + line.debit, 0)),
-      totalCredit: money(lines.reduce((sum, line) => sum + line.credit, 0)),
-      closingBalance: lines.length ? lines[lines.length - 1]!.balance : (lines[0]?.openingBalance ?? 0),
-      lines,
-    });
-    return { cash: summarize(ledger), bank: summarize(bank) };
+    const tenantId = assertTenantScope(context);
+    const scopedBranchId = resolveBranchScope(context, input.branchId);
+    const from = input.from ? reportDate(input.from) : new Date('1970-01-01T00:00:00.000Z');
+    const [ledger, bank, openingLines] = await Promise.all([
+      this.generalLedger(context, {
+        ...(scopedBranchId ? { branchId: scopedBranchId } : {}),
+        ...(input.from ? { from: input.from } : {}),
+        ...(input.to ? { to: input.to } : {}),
+        accountCode: '1000',
+      }),
+      this.generalLedger(context, {
+        ...(scopedBranchId ? { branchId: scopedBranchId } : {}),
+        ...(input.from ? { from: input.from } : {}),
+        ...(input.to ? { to: input.to } : {}),
+        accountCode: '1030',
+      }),
+      withRlsContext(this.prisma, context, (tx) => tx.journalLine.findMany({
+        where: {
+          account: { is: { tenantId, code: { in: ['1000', '1030'] } } },
+          entry: { tenantId, status: 'POSTED', entryDate: { lt: from }, ...(scopedBranchId ? { branchId: scopedBranchId } : {}) },
+        },
+        select: { debit: true, credit: true, account: { select: { code: true } } },
+      })),
+    ]);
+    const opening = new Map<string, number>([['1000', 0], ['1030', 0]]);
+    for (const line of openingLines) {
+      const code = line.account.code;
+      opening.set(code, money((opening.get(code) ?? 0) + Number(line.debit) - Number(line.credit)));
+    }
+    const summarize = (code: '1000' | '1030', lines: Awaited<ReturnType<AccountingService['generalLedger']>>) => {
+      const openingBalance = money(opening.get(code) ?? 0);
+      const totalDebit = money(lines.reduce((sum, line) => sum + line.debit, 0));
+      const totalCredit = money(lines.reduce((sum, line) => sum + line.credit, 0));
+      return {
+        openingBalance,
+        totalDebit,
+        totalCredit,
+        closingBalance: lines.length ? lines[lines.length - 1]!.balance : money(openingBalance + totalDebit - totalCredit),
+        lines,
+      };
+    };
+    return { cash: summarize('1000', ledger), bank: summarize('1030', bank) };
   }
 
   async reconciliation(
