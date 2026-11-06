@@ -987,7 +987,9 @@ model PaymentProviderAccount {
   credentialSecretRef String?
   currency String @default("EGP")
   active Boolean @default(true)
+  webhookKeyHash String? @unique
   paymentIntents PaymentIntent[]
+  providerEvents PaymentProviderEvent[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([id, tenantId])
@@ -1023,6 +1025,25 @@ model PaymentIntent {
   @@index([tenantId, branchId, status, createdAt])
   @@index([orderId, createdAt])
   @@index([providerAccountId, status, createdAt])
+}
+
+model PaymentProviderEvent {
+  id String @id @default(cuid())
+  tenantId String
+  providerAccountId String
+  providerAccount PaymentProviderAccount @relation(fields: [providerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  providerEventId String
+  payloadHash String
+  signatureValid Boolean
+  status String @default("RECEIVED")
+  processedAt DateTime?
+  errorCode String?
+  receivedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([providerAccountId, providerEventId])
+  @@index([tenantId, status, receivedAt])
+  @@index([providerAccountId, receivedAt])
 }
 
 model PaymentAttempt {
