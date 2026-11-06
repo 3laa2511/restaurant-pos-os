@@ -4,6 +4,7 @@ import { getDesktopSession, logoutDesktop } from './pos/auth-client.js';
 import { API_BASE_URL, apiGet, apiPost } from './pos/workspace-api.js';
 import { actionStyle, DataTable, fieldStyle, WorkspaceShell } from './workspaces/shared.js';
 import { AccountingWorkspace } from './workspaces/AccountingWorkspace.js';
+import { InventoryWorkspace } from './workspaces/InventoryWorkspace.js';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
 const labels: Record<string, string> = {
@@ -360,7 +361,7 @@ export function WorkspaceRouter() {
   else if (session.workspace === 'KITCHEN') content = <KitchenDisplay />;
   else if (session.workspace === 'HR') content = <HrWorkspace />;
   else if (session.workspace === 'ACCOUNTING') content = <AccountingWorkspace />;
-  else if (session.workspace === 'INVENTORY') content = <ReadWorkspace workspace="INVENTORY" />;
+  else if (session.workspace === 'INVENTORY') content = <InventoryWorkspace />;
   else if (session.workspace === 'CALL_CENTER' || session.workspace === 'DISPATCH' || session.workspace === 'MANAGEMENT') content = <OperationalWorkspace workspace={session.workspace} />;
   else if (session.workspace === 'SETTINGS') content = <SettingsWorkspace />;
   else content = <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#090d12', color: '#e8edf5', padding: 24, direction: 'rtl' }}><section><h1>{labels[session.workspace] ?? session.workspace}</h1><p>مساحة العمل غير مفعّلة تشغيليًا.</p></section></main>;
