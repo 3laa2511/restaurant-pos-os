@@ -23,8 +23,13 @@ export class InventoryService {
   }
 
   async listStock(context:AuthContext,branchId?:string){
-    const tenantId=assertTenantScope(context); if(branchId)assertBranchAccess(context,branchId);
-    return withRlsContext(this.prisma, context, (tx) => tx.inventoryStockBalance.findMany({where:{tenantId,...(branchId?{branchId}: {})},include:{ingredient:true,branch:{select:{id:true,code:true,name:true}}},orderBy:{ingredient:{name:'asc'}}}));
+    const tenantId=assertTenantScope(context);
+    const scopedBranchId = resolveBranchScope(context, branchId);
+    return withRlsContext(this.prisma, context, (tx) => tx.inventoryStockBalance.findMany({
+      where:{tenantId,...(scopedBranchId?{branchId:scopedBranchId}: {})},
+      include:{ingredient:true,branch:{select:{id:true,code:true,name:true}}},
+      orderBy:{ingredient:{name:'asc'}},
+    }));
   }
 
   async receive(context:AuthContext,input:{branchId:string;supplierId?:string;reference?:string;idempotencyKey:string;items:Array<{ingredientId:string;quantityPurchaseUnit:number;unitCost:number}>;}) {
@@ -192,7 +197,10 @@ export class InventoryService {
       where: context.branchId
         ? { tenantId, active: true, OR: [{ branchId: context.branchId }, { type: 'CENTRAL' }] }
         : { tenantId, active: true },
-      include: { branch: { select: { id: true, code: true, name: true } } },
+      include: {
+        branch: { select: { id: true, code: true, name: true } },
+        stockBalances: { include: { ingredient: { select: { id: true, sku: true, name: true, baseUnit: true } } } },
+      },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     }));
   }
@@ -245,6 +253,9 @@ export class InventoryService {
       await setRlsContext(tx, context);
       const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true } });
       if (!transfer) throw new Error('Transfer not found');
+      if (context.branchId !== null && (transfer.fromWarehouse.type === 'CENTRAL' || transfer.toWarehouse.type === 'CENTRAL')) {
+        throw new Error('Central warehouse transfer approval requires tenant-wide access');
+      }
       if (transfer.fromWarehouse.branchId) assertBranchAccess(context, transfer.fromWarehouse.branchId);
       if (transfer.toWarehouse.branchId) assertBranchAccess(context, transfer.toWarehouse.branchId);
       if (transfer.status !== 'REQUESTED' && transfer.status !== 'DRAFT') throw new Error('Transfer cannot be approved in its current state');
@@ -277,6 +288,9 @@ export class InventoryService {
       await setRlsContext(tx, context);
       const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
       if (!transfer) throw new Error('Transfer not found');
+      if (transfer.fromWarehouse.type === 'CENTRAL' && context.branchId !== null) {
+        throw new Error('Central warehouse dispatch requires tenant-wide access');
+      }
       if (transfer.fromWarehouse.branchId) assertBranchAccess(context, transfer.fromWarehouse.branchId);
       if (transfer.status !== 'APPROVED') throw new Error('Only approved transfers can be dispatched');
       let transferAmount = 0;
@@ -312,6 +326,9 @@ export class InventoryService {
       let transferAmount = 0;
       const transfer = await tx.inventoryTransfer.findFirst({ where: { id: transferId, tenantId }, include: { fromWarehouse: true, toWarehouse: true, items: true } });
       if (!transfer) throw new Error('Transfer not found');
+      if (transfer.toWarehouse.type === 'CENTRAL' && context.branchId !== null) {
+        throw new Error('Receiving into a central warehouse requires tenant-wide access');
+      }
       if (transfer.toWarehouse.branchId) assertBranchAccess(context, transfer.toWarehouse.branchId);
       if (transfer.status !== 'IN_TRANSIT') throw new Error('Only in-transit transfers can be received');
       for (const item of transfer.items) {
