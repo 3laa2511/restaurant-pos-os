@@ -60,4 +60,8 @@ For the initial rollout of 2–10 branches with two cashiers per branch, the tar
 
 ## Documentation
 
+- [Windows local development and first-run setup](docs/engineering/LOCAL_DEVELOPMENT.md)
+- [Workspace capability matrix](docs/engineering/workspace-capability-matrix.md)
+- [Engineering workflow](docs/engineering/WORKFLOW.md)
+- [Quality gates](docs/engineering/QUALITY_GATES.md)
 - Architecture and product decisions are recorded here until the detailed master blueprint is restored or added.
