@@ -1,4 +1,4 @@
-import { SyncAuthenticationRequiredError, type SyncTransport } from './sync-contract.js';
+import type { SyncTransport } from './sync-contract.js';
 import type { SyncRepository } from './sync-repository.js';
 
 export interface SyncOrchestratorOptions {
@@ -70,7 +70,7 @@ export class SyncOrchestrator {
         synced += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (error instanceof SyncAuthenticationRequiredError) {
+        if (error instanceof Error && error.name === 'SyncAuthenticationRequiredError') {
           await this.repository.releaseForAuthentication(item.id, this.workerId, message);
           authenticationRequired = true;
           break;
