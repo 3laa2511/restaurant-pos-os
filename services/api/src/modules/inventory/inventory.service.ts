@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma, InventoryUnit } from '../../generated/prisma/client.js';
 import { AccountingService } from '../accounting/accounting.service.js';
 import { PrismaService } from '../../database/prisma.service.js';
-import { assertBranchAccess, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
+import { assertBranchAccess, assertTenantScope, resolveBranchScope, type AuthContext } from '../auth/authorization.types.js';
 
 const n=(v:unknown,f:string)=>{const x=Number(v);if(!Number.isFinite(x)||x<0)throw new Error(f+' must be non-negative');return x;};
 @Injectable()
