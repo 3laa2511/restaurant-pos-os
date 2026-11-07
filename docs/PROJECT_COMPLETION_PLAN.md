@@ -28,6 +28,7 @@
 - [x] API and POS Desktop Quality Gates passed on exact integration SHA `136aa42f078eb8cfc4edf4aa24cf4f1db7a58030` (PostgreSQL migrations/bootstrap, API build and tests, desktop lint/typecheck/sync tests/frontend build and Tauri native check).
 - [x] API and POS Desktop Quality Gates passed on exact integration SHA `7897d84d93803ba53bbdc80276dc83cd945f7864` after supplier directory/receipt UI integration (PostgreSQL migrations/bootstrap, API build/tests, desktop lint/typecheck/sync tests/frontend build and Tauri native check).
 - [x] API and POS Desktop Quality Gates passed on exact integration SHA `ab05f25b121cffab0858b0f4c5b919bfa5bfca73` (API tests, desktop lint/typecheck/sync tests/frontend build and Tauri native check).
+- [x] API Quality Gate and POS Desktop Quality Gate passed on exact integration SHA `84072f2fe6fbe6a535b49266afe5a2f39af8f11e` (GitHub Actions runs `42188897258` and `42188897095`): PostgreSQL startup, all Prisma migrations, first-run bootstrap, RLS test-role grants, Prisma generation, API typecheck/build/smoke login/session/unit+integration tests, desktop lint/typecheck/sync tests/frontend build, Linux Tauri native check and Rust compilation.
 - [ ] Execute the Windows local bootstrap against a clean Docker PostgreSQL instance and verify sign-in in the actual Vite/Tauri runtime.
 - [ ] Restore the FlutterFlow source and 32-page UI Directions PDF, then verify visual/interaction parity.
 - [ ] Complete menu variants/modifiers as a tenant-safe end-to-end feature; the old backup branch is not safe to cherry-pick.
