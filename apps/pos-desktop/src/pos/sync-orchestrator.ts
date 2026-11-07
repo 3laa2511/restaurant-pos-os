@@ -13,11 +13,13 @@ export interface SyncRunResult {
   synced: number;
   failed: number;
   failedAttempts: number | null;
+  authenticationRequired: boolean;
 }
 
 export class SyncOrchestrator {
   private readonly workerId: string;
   private readonly leaseMs: number;
+  private running = false;
 
   constructor(
     private readonly repository: SyncRepository,
@@ -29,21 +31,50 @@ export class SyncOrchestrator {
   }
 
   async runOnce(): Promise<SyncRunResult> {
+    // Do not let overlapping timer/manual triggers run the same worker concurrently.
+    if (this.running) {
+      return { attempted: 0, synced: 0, failed: 0, failedAttempts: null, authenticationRequired: false };
+    }
+
+    this.running = true;
+    try {
+      return await this.runBatch();
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async runBatch(): Promise<SyncRunResult> {
     const batchSize = this.options.batchSize ?? 25;
     const maxRetries = this.options.maxRetries ?? 8;
     const items = await this.repository.getPending(batchSize, maxRetries, this.workerId, this.leaseMs);
 
+    let attempted = 0;
     let synced = 0;
     let failed = 0;
     let failedAttempts: number | null = null;
+    let authenticationRequired = false;
 
     for (const item of items) {
+      attempted += 1;
       try {
         await this.transport.push(item);
-        await this.repository.markSynced(item.id, this.workerId);
+        const acknowledged = await this.repository.markSynced(item.id, this.workerId);
+        if (acknowledged === false) {
+          // The lease was reclaimed while the request was in flight. The server may
+          // already have accepted the idempotent push, so leave retry/recovery to the
+          // current lease owner rather than overwriting its state.
+          failed += 1;
+          break;
+        }
         synced += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        if (error instanceof Error && error.name === 'SyncAuthenticationRequiredError') {
+          await this.repository.releaseForAuthentication(item.id, this.workerId, message);
+          authenticationRequired = true;
+          break;
+        }
         await this.repository.markFailed(item.id, this.workerId, message);
         failed += 1;
         failedAttempts = item.attempts + 1;
@@ -51,6 +82,6 @@ export class SyncOrchestrator {
       }
     }
 
-    return { attempted: items.length, synced, failed, failedAttempts };
+    return { attempted, synced, failed, failedAttempts, authenticationRequired };
   }
 }

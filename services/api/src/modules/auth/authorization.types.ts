@@ -1,10 +1,17 @@
 import type { KitchenStation } from '../../generated/prisma/enums.js';
 import type { PermissionCode, RoleCode } from './rbac.constants.js';
+import type { WorkspaceCode } from './workspace.constants.js';
 
 export interface AuthContext {
   userId: string;
+  /** Tenant resolved from the authenticated session's branch. Null means the
+   * session has no tenant scope and tenant-scoped resources must be denied. */
+  tenantId: string | null;
   branchId: string | null;
   deviceId: string | null;
+  /** Session resolved by authentication; required for transaction-local RLS context. */
+  sessionId: string;
+  workspace: WorkspaceCode;
   roles: readonly RoleCode[];
   permissions: readonly PermissionCode[];
   /**
@@ -25,10 +32,33 @@ export function assertPermission(context: AuthContext, permission: PermissionCod
   }
 }
 
+export function assertTenantScope(context: AuthContext): string {
+  if (context.tenantId === null) {
+    throw new Error('Forbidden: tenant scope is required');
+  }
+  return context.tenantId;
+}
+
 export function assertBranchAccess(context: AuthContext, branchId: string): void {
   if (context.branchId !== null && context.branchId !== branchId) {
     throw new Error('Forbidden: branch access denied');
   }
+}
+
+/**
+ * Resolve a branch filter from the authenticated session first. A branch-scoped
+ * caller cannot widen a query by omitting branchId or override it with another
+ * branch supplied by the client. Tenant-wide sessions may optionally narrow
+ * their query to one branch; the service must still verify that branch belongs
+ * to the authenticated tenant.
+ */
+export function resolveBranchScope(context: AuthContext, requestedBranchId?: string): string | undefined {
+  const requested = requestedBranchId?.trim() || undefined;
+  if (context.branchId !== null) {
+    if (requested) assertBranchAccess(context, requested);
+    return context.branchId;
+  }
+  return requested;
 }
 
 export function assertKitchenStationAccess(

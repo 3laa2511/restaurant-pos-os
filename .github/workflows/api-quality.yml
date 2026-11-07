@@ -1,0 +1,119 @@
+name: API Quality Gate
+
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+  pull_request:
+    branches: [main, 'feat/**']
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_pos_test
+      RLS_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_pos_test
+      RLS_APP_DATABASE_URL: postgresql://rls_app:rls_app@localhost:5432/restaurant_pos_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Start PostgreSQL
+        run: |
+          docker run -d --name restaurant-pos-postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=restaurant_pos_test \
+            -p 5432:5432 postgres:17
+          for i in {1..30}; do
+            docker exec restaurant-pos-postgres pg_isready -U postgres -d restaurant_pos_test && break
+            sleep 2
+          done
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare RLS test role
+        run: |
+          psql "$RLS_ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE rls_app LOGIN PASSWORD 'rls_app' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+          GRANT CONNECT ON DATABASE restaurant_pos_test TO rls_app;
+          SQL
+
+      - name: Apply migrations
+        working-directory: services/api
+        run: pnpm exec prisma migrate deploy --schema ../../prisma/schema.prisma
+
+      - name: Verify first-run local bootstrap against PostgreSQL
+        working-directory: services/api
+        env:
+          BOOTSTRAP_TENANT_NAME: CI Bootstrap Tenant
+          BOOTSTRAP_TENANT_SLUG: ci-bootstrap-tenant
+          BOOTSTRAP_BRANCH_NAME: CI Main Branch
+          BOOTSTRAP_BRANCH_CODE: CI01
+          BOOTSTRAP_OWNER_USERNAME: ci-bootstrap-owner
+          BOOTSTRAP_OWNER_DISPLAY_NAME: CI Bootstrap Owner
+          BOOTSTRAP_OWNER_PASSWORD: CI-only-Password-2026!
+          BOOTSTRAP_DEVICE_CODE: CI-POS-01
+        run: |
+          node scripts/bootstrap-local.mjs
+          test -f ../../apps/pos-desktop/.env.local
+
+      - name: Grant RLS test role
+        run: |
+          psql "$RLS_ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          GRANT USAGE ON SCHEMA public, app TO rls_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO rls_app;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO rls_app;
+          SQL
+
+      - name: Generate Prisma client
+        run: pnpm --filter @restaurant-pos/api generate
+
+      - name: Typecheck
+        run: pnpm --filter @restaurant-pos/api typecheck
+
+      - name: Build API
+        run: pnpm --filter @restaurant-pos/api build
+
+      - name: Smoke-test first-run owner login and session
+        env:
+          BOOTSTRAP_OWNER_PASSWORD: CI-only-Password-2026!
+        run: |
+          set -euo pipefail
+          BRANCH_ID="$(sed -n 's/^VITE_BRANCH_ID=//p' apps/pos-desktop/.env.local)"
+          test -n "$BRANCH_ID"
+          node services/api/dist/main.js > /tmp/restaurant-pos-api.log 2>&1 &
+          API_PID=$!
+          trap 'kill "$API_PID" 2>/dev/null || true' EXIT
+          READY=0
+          for i in {1..30}; do
+            STATUS="$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000/api/auth/me || true)"
+            if [ "$STATUS" = "401" ]; then READY=1; break; fi
+            sleep 1
+          done
+          test "$READY" = "1" || { cat /tmp/restaurant-pos-api.log; exit 1; }
+          LOGIN_RESPONSE="$(curl -fsS -X POST http://localhost:3000/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"ci-bootstrap-owner\",\"password\":\"$BOOTSTRAP_OWNER_PASSWORD\",\"workspace\":\"POS\",\"branchId\":\"$BRANCH_ID\",\"deviceCode\":\"CI-POS-01\"}")"
+          ACCESS_TOKEN="$(printf '%s' "$LOGIN_RESPONSE" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).accessToken ?? ""))')"
+          test -n "$ACCESS_TOKEN"
+          curl -fsS http://localhost:3000/api/auth/me -H "Authorization: Bearer $ACCESS_TOKEN" > /tmp/restaurant-pos-auth-context.json
+          node -e 'const x=JSON.parse(require("fs").readFileSync("/tmp/restaurant-pos-auth-context.json","utf8")); if (!x.userId || !x.tenantId || !x.branchId || !x.sessionId) process.exit(1);'
+
+      - name: Validate local bootstrap script syntax
+        run: node --check services/api/scripts/bootstrap-local.mjs
+
+      - name: Test shared payment policy
+        run: pnpm --filter @restaurant-pos/payment-policy test
+
+      - name: Unit and integration tests
+        run: pnpm --filter @restaurant-pos/api test --runInBand

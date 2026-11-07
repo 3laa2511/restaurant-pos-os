@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../database/database.module.js';
+import { AuthModule } from '../auth/auth.module.js';
 import { AntiTheftController } from './anti-theft.controller.js';
 import { AntiTheftService } from './anti-theft.service.js';
 import { AuditController } from './audit.controller.js';
@@ -9,7 +10,7 @@ import { RiskPolicyController } from './risk-policy.controller.js';
 import { RiskPolicyService } from './risk-policy.service.js';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, AuthModule],
   controllers: [AuditController, RiskPolicyController, AntiTheftController],
   providers: [RiskPolicyService, RiskPolicyAdminService, AuditService, AntiTheftService],
   exports: [AuditService, RiskPolicyService, RiskPolicyAdminService, AntiTheftService],
