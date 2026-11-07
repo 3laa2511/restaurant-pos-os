@@ -31,12 +31,12 @@ This document records the active recovery integration branch. Refresh GitHub and
 
 ## Latest validation state
 
-GitHub Actions validation for exact integration SHA `f87d01dfed9c0655ccccfed4eb59ef46dd972963`:
+GitHub Actions validation for exact integration SHA `84072f2fe6fbe6a535b49266afe5a2f39af8f11e` (runs `42188897258` and `42188897095`):
 
 - API Quality Gate: **success**. PostgreSQL startup, all migrations including payroll branch scope, first-run bootstrap, RLS test-role grants, Prisma generation, typecheck, NestJS build, live owner login/session smoke test, shared payment-policy tests, and API unit/integration tests passed.
 - POS Desktop Quality Gate: **success**. API lint/typecheck/tests, desktop lint/typecheck, sync queue tests, frontend build, Linux Tauri native check and Rust compilation passed.
 
-A later code commit requires fresh CI. Do not carry this green result forward to later SHAs.
+Both quality-gate runs completed successfully on this exact SHA. Any subsequent code commit requires fresh CI; do not carry this green result forward to later SHAs.
 
 ## Known product gaps — not declared complete
 
