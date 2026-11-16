@@ -31,7 +31,7 @@ export class MenuService {
             products: {
               where: { tenantId, active: true },
               orderBy: { name: 'asc' },
-              select: { id: true, sku: true, name: true, nameAr: true, price: true },
+              select: { id: true, sku: true, name: true, nameAr: true, price: true, modifierGroups: { where: { tenantId, active: true }, orderBy: { sortOrder: 'asc' }, include: { options: { where: { tenantId, active: true }, orderBy: { sortOrder: 'asc' }, select: { id: true, name: true, nameAr: true, priceDelta: true, sortOrder: true } } } } },
             },
           },
         }),
