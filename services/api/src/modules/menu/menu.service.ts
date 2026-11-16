@@ -87,6 +87,7 @@ export class MenuService {
       const minSelections = input.minSelections ?? (input.required ? 1 : 0);
       const maxSelections = input.maxSelections ?? 1;
       if (minSelections > maxSelections) throw new Error('Minimum selections cannot exceed maximum selections');
+      if ((input.required ?? false) && minSelections < 1) throw new Error('Required modifier groups must require at least one selection');
       return tx.productModifierGroup.create({
         data: {
           id: randomUUID(),
