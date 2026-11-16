@@ -1,4 +1,4 @@
-# Recovery Status — 2026-11-06
+# Recovery Status — 2026-11-16
 
 This document records the active recovery integration branch. Refresh GitHub and the exact commit SHA before relying on this status.
 
@@ -7,6 +7,7 @@ This document records the active recovery integration branch. Refresh GitHub and
 - Repository: `3laa2511/restaurant-pos-os`
 - Integration branch: `feat/recovery-integration`
 - Last fully validated code SHA before the current modifier work: `84072f2fe6fbe6a535b49266afe5a2f39af8f11e`
+- Latest branch head after CI test correction: `070fff52bffe185b27612cd705905d9c2f39e601`
 - Target: `main` at `4a81d8dbf6c480cdc5aef27f466de20c93b87985`
 - Umbrella PR: #13 (draft, open)
 - No changes have been merged into `main` by this recovery work.
@@ -38,6 +39,14 @@ GitHub Actions validation for exact integration SHA `84072f2fe6fbe6a535b49266afe
 
 Both quality-gate runs completed successfully on this exact SHA. Any subsequent code commit requires fresh CI; do not carry this green result forward to later SHAs.
 
+### Latest modifier CI failure and correction (2026-11-16)
+
+- CI ran on `68f76220d12e7c976f4fd180f958d487fbd4aed0`. Both workflows failed only at the API Jest test step; API lint, typecheck, build, PostgreSQL migrations, Prisma generation, bootstrap and owner login/session smoke test all passed.
+- The sole failing assertion was in `menu.service.tenant.spec.ts`: it expected the product modifier relation under Prisma `include`, while the implementation correctly selected the product fields and modifier relation under `select`.
+- Corrected the test fixture and assertion to match the actual Prisma selection shape in commit `070fff52bffe185b27612cd705905d9c2f39e601`.
+- Fresh workflow runs/statuses were not yet visible for the correction commit at the time of this update. Therefore the correction is **not yet CI-verified** and the branch is not release-ready.
+
+
 
 ## Current in-progress implementation — product modifiers
 
@@ -46,7 +55,7 @@ Both quality-gate runs completed successfully on this exact SHA. Any subsequent 
 - Added permission-gated `POST /api/menu/modifier-groups` and `POST /api/menu/modifier-options` endpoints with tenant-scoped product/group lookups and selection/price validation.
 - Extended `GET /api/menu` to include active modifier groups and options.
 - Added unit coverage for tenant isolation, required-group defaults, selection bounds, and option creation.
-- **Not complete:** desktop selection UX, checkout selection/price validation, order-line snapshot persistence, kitchen ticket snapshot propagation, modifier edit/deactivate workflows, and end-to-end acceptance. CI has not yet reported results for this implementation SHA.
+- **Not complete:** desktop selection UX, checkout selection/price validation, order-line snapshot persistence, kitchen ticket snapshot propagation, modifier edit/deactivate workflows, and end-to-end acceptance. CI has not yet reported results for the modifier implementation SHA; the initial run failed on the test assertion documented above, and the correction is awaiting fresh CI.
 
 ## Known product gaps — not declared complete
 
