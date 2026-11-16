@@ -217,6 +217,8 @@ model Tenant {
   branchProducts BranchProduct[]
   categories Category[]
   products Product[]
+  productModifierGroups ProductModifierGroup[]
+  productModifierOptions ProductModifierOption[]
   customers Customer[]
   employeeProfiles EmployeeProfile[]
   workSchedules WorkSchedule[]
@@ -812,11 +814,47 @@ model Product {
   orderItems OrderItem[]
   recipeIngredients RecipeIngredient[]
   branchProducts BranchProduct[]
+  modifierGroups ProductModifierGroup[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([tenantId, sku])
   @@index([tenantId, active])
   @@index([categoryId, active])
+}
+
+model ProductModifierGroup {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name String
+  nameAr String?
+  required Boolean @default(false)
+  minSelections Int @default(0)
+  maxSelections Int @default(1)
+  sortOrder Int @default(0)
+  active Boolean @default(true)
+  options ProductModifierOption[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([id, tenantId])
+  @@index([tenantId, productId, active, sortOrder])
+}
+
+model ProductModifierOption {
+  id String @id @default(cuid())
+  tenantId String
+  groupId String
+  group ProductModifierGroup @relation(fields: [groupId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  name String
+  nameAr String?
+  priceDelta Decimal @default(0) @db.Decimal(12, 2)
+  sortOrder Int @default(0)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([tenantId, groupId, active, sortOrder])
 }
 
 model BranchProduct {
@@ -898,6 +936,7 @@ model OrderItem {
   unitPrice Decimal @db.Decimal(12, 2)
   lineTotal Decimal @db.Decimal(12, 2)
   notes String?
+  modifierSnapshot Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
