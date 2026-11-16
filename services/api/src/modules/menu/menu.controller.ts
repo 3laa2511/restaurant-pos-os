@@ -28,6 +28,20 @@ export class MenuController {
         name: product.name,
         nameAr: product.nameAr,
         price: Number(product.price),
+        modifierGroups: product.modifierGroups.map((group) => ({
+          id: group.id,
+          name: group.name,
+          nameAr: group.nameAr,
+          required: group.required,
+          minSelections: group.minSelections,
+          maxSelections: group.maxSelections,
+          options: group.options.map((option) => ({
+            id: option.id,
+            name: option.name,
+            nameAr: option.nameAr,
+            priceDelta: Number(option.priceDelta),
+          })),
+        })),
       })),
     }));
   }
