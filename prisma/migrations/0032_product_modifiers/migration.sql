@@ -39,6 +39,8 @@ CREATE TABLE "ProductModifierOption" (
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "ProductModifierOption_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "ProductModifierOption_tenantId_fkey"
+    FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT "ProductModifierOption_group_tenant_fkey"
     FOREIGN KEY ("groupId", "tenantId")
     REFERENCES "ProductModifierGroup"("id", "tenantId")
