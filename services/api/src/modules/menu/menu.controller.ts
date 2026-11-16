@@ -5,9 +5,9 @@ import { PermissionGuard } from '../auth/permission.guard.js';
 import { RequirePermission } from '../auth/permission.decorator.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { AuthContext } from '../auth/authorization.types.js';
-import { MenuService, type BranchProductConfigInput } from './menu.service.js';
+import { MenuService, type BranchProductConfigInput, type CreateModifierGroupInput, type CreateModifierOptionInput } from './menu.service.js';
 import { OptionalBranchQueryDto } from '../security/request.dto.js';
-import { BranchProductConfigDto } from './menu.dto.js';
+import { BranchProductConfigDto, CreateModifierGroupDto, CreateModifierOptionDto } from './menu.dto.js';
 
 @Controller('menu')
 @UseGuards(AuthGuard)
@@ -44,6 +44,20 @@ export class MenuController {
         })),
       })),
     }));
+  }
+
+  @Post('modifier-groups')
+  @UseGuards(PermissionGuard)
+  @RequirePermission(PERMISSIONS.MENU_MANAGE)
+  createModifierGroup(@CurrentAuth() context: AuthContext, @Body() body: CreateModifierGroupDto) {
+    return this.menuService.createModifierGroup(context, body as CreateModifierGroupInput);
+  }
+
+  @Post('modifier-options')
+  @UseGuards(PermissionGuard)
+  @RequirePermission(PERMISSIONS.MENU_MANAGE)
+  createModifierOption(@CurrentAuth() context: AuthContext, @Body() body: CreateModifierOptionDto) {
+    return this.menuService.createModifierOption(context, body as CreateModifierOptionInput);
   }
 
   @Post('branch-products')
