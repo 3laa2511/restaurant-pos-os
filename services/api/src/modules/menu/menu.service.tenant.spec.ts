@@ -84,3 +84,91 @@ describe('MenuService tenant and branch isolation', () => {
     expect(categoryFindMany).not.toHaveBeenCalled();
   });
 });
+
+
+describe('MenuService product modifiers', () => {
+  const context: AuthContext = {
+    userId: 'user-1',
+    tenantId: 'tenant-a',
+    branchId: 'branch-a',
+    deviceId: 'device-a',
+    sessionId: 'session-a',
+    workspace: WORKSPACES.POS,
+    roles: [],
+    permissions: [],
+    kitchenStation: null,
+  };
+
+  it('creates a modifier group only for an active product in the authenticated tenant', async () => {
+    const create = jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ id: 'group-1' });
+    const tx = {
+      $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(1),
+      product: { findFirst: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ id: 'product-1' }) },
+      productModifierGroup: { create },
+    };
+    const prisma = { $transaction: jest.fn(async (work: (transaction: typeof tx) => Promise<any>) => work(tx)) };
+    const service = new MenuService(prisma as never);
+
+    await service.createModifierGroup(context, { productId: 'product-1', name: 'Size', required: true });
+
+    expect(tx.product.findFirst).toHaveBeenCalledWith({
+      where: { id: 'product-1', tenantId: 'tenant-a', active: true },
+      select: { id: true },
+    });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ tenantId: 'tenant-a', productId: 'product-1', minSelections: 1, maxSelections: 1 }),
+    }));
+  });
+
+  it('rejects modifier groups whose product is outside the authenticated tenant', async () => {
+    const create = jest.fn<(...args: any[]) => Promise<any>>();
+    const tx = {
+      $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(1),
+      product: { findFirst: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue(null) },
+      productModifierGroup: { create },
+    };
+    const prisma = { $transaction: jest.fn(async (work: (transaction: typeof tx) => Promise<any>) => work(tx)) };
+    const service = new MenuService(prisma as never);
+
+    await expect(service.createModifierGroup(context, { productId: 'foreign-product', name: 'Size' }))
+      .rejects.toThrow('Product not found in the current tenant');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid selection bounds before persisting a group', async () => {
+    const create = jest.fn<(...args: any[]) => Promise<any>>();
+    const tx = {
+      $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(1),
+      product: { findFirst: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ id: 'product-1' }) },
+      productModifierGroup: { create },
+    };
+    const prisma = { $transaction: jest.fn(async (work: (transaction: typeof tx) => Promise<any>) => work(tx)) };
+    const service = new MenuService(prisma as never);
+
+    await expect(service.createModifierGroup(context, {
+      productId: 'product-1', name: 'Size', minSelections: 2, maxSelections: 1,
+    })).rejects.toThrow('Minimum selections cannot exceed maximum selections');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('creates options only within an active modifier group in the authenticated tenant', async () => {
+    const create = jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ id: 'option-1' });
+    const tx = {
+      $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(1),
+      productModifierGroup: { findFirst: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ id: 'group-1' }) },
+      productModifierOption: { create },
+    };
+    const prisma = { $transaction: jest.fn(async (work: (transaction: typeof tx) => Promise<any>) => work(tx)) };
+    const service = new MenuService(prisma as never);
+
+    await service.createModifierOption(context, { groupId: 'group-1', name: 'Large', priceDelta: 12.5 });
+
+    expect(tx.productModifierGroup.findFirst).toHaveBeenCalledWith({
+      where: { id: 'group-1', tenantId: 'tenant-a', active: true },
+      select: { id: true },
+    });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ tenantId: 'tenant-a', groupId: 'group-1', priceDelta: '12.50' }),
+    }));
+  });
+});
