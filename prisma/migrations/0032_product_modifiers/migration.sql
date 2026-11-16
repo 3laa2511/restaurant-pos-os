@@ -18,7 +18,7 @@ CREATE TABLE "ProductModifierGroup" (
   CONSTRAINT "ProductModifierGroup_productId_fkey"
     FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "ProductModifierGroup_selection_bounds_check"
-    CHECK ("minSelections" >= 0 AND "maxSelections" >= 1 AND "minSelections" <= "maxSelections"),
+    CHECK ("minSelections" >= 0 AND "maxSelections" >= 1 AND "minSelections" <= "maxSelections" AND (NOT "required" OR "minSelections" >= 1)),
   CONSTRAINT "ProductModifierGroup_name_check"
     CHECK (length(btrim("name")) > 0)
 );
