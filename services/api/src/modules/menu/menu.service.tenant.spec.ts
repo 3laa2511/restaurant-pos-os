@@ -56,6 +56,18 @@ describe('MenuService tenant and branch isolation', () => {
     });
     expect(categoryFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { tenantId: 'tenant-a', active: true },
+      include: expect.objectContaining({
+        products: expect.objectContaining({
+          include: expect.objectContaining({
+            modifierGroups: expect.objectContaining({
+              where: { tenantId: 'tenant-a', active: true },
+              include: expect.objectContaining({
+                options: expect.objectContaining({ where: { tenantId: 'tenant-a', active: true } }),
+              }),
+            }),
+          }),
+        }),
+      }),
     }));
     expect(branchProductFindMany).toHaveBeenCalledWith({
       where: { tenantId: 'tenant-a', branchId: 'branch-a' },
