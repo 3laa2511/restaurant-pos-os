@@ -31,7 +31,7 @@
 - [x] API Quality Gate and POS Desktop Quality Gate passed on exact integration SHA `84072f2fe6fbe6a535b49266afe5a2f39af8f11e` (GitHub Actions runs `42188897258` and `42188897095`): PostgreSQL startup, all Prisma migrations, first-run bootstrap, RLS test-role grants, Prisma generation, API typecheck/build/smoke login/session/unit+integration tests, desktop lint/typecheck/sync tests/frontend build, Linux Tauri native check and Rust compilation.
 - [ ] Execute the Windows local bootstrap against a clean Docker PostgreSQL instance and verify sign-in in the actual Vite/Tauri runtime.
 - [ ] Restore the FlutterFlow source and 32-page UI Directions PDF, then verify visual/interaction parity.
-- [ ] Complete menu variants/modifiers as a tenant-safe end-to-end feature; the old backup branch is not safe to cherry-pick.
+- [ ] Complete menu variants/modifiers as a tenant-safe end-to-end feature. Partial foundation added: migration `0032_product_modifiers`, tenant-scoped modifier group/option models and RLS, permission-gated API creation endpoints, and active modifier projection in `GET /api/menu`. Still open: modifier edit/disable management, desktop selection UI, server-side checkout price/selection validation, immutable `OrderItem.modifierSnapshot` population, kitchen ticket snapshot propagation, and end-to-end tests.
 - [ ] Complete the branch-LAN coordination service for multi-cashier offline operation.
 - [ ] Finish typed Tauri IPC migration, workspace workflows, installer/updater, diagnostics and release operations.
 
