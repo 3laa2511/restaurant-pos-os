@@ -5,6 +5,24 @@ import { withRlsContext } from '../../database/rls-context.js';
 import { assertBranchAccess, assertTenantScope } from '../auth/authorization.types.js';
 import type { AuthContext } from '../auth/authorization.types.js';
 
+export interface CreateModifierGroupInput {
+  productId: string;
+  name: string;
+  nameAr?: string;
+  required?: boolean;
+  minSelections?: number;
+  maxSelections?: number;
+  sortOrder?: number;
+}
+
+export interface CreateModifierOptionInput {
+  groupId: string;
+  name: string;
+  nameAr?: string;
+  priceDelta?: number;
+  sortOrder?: number;
+}
+
 export interface BranchProductConfigInput {
   branchId: string;
   productId: string;
@@ -55,6 +73,59 @@ export class MenuService {
             .filter((product): product is NonNullable<typeof product> => product !== null),
         }))
         .filter((category) => category.products.length > 0);
+    });
+  }
+
+  async createModifierGroup(context: AuthContext, input: CreateModifierGroupInput) {
+    const tenantId = assertTenantScope(context);
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const product = await tx.product.findFirst({
+        where: { id: input.productId, tenantId, active: true },
+        select: { id: true },
+      });
+      if (!product) throw new Error('Product not found in the current tenant');
+      const minSelections = input.minSelections ?? (input.required ? 1 : 0);
+      const maxSelections = input.maxSelections ?? 1;
+      if (minSelections > maxSelections) throw new Error('Minimum selections cannot exceed maximum selections');
+      return tx.productModifierGroup.create({
+        data: {
+          id: randomUUID(),
+          tenantId,
+          productId: product.id,
+          name: input.name.trim(),
+          nameAr: input.nameAr?.trim() || null,
+          required: input.required ?? false,
+          minSelections,
+          maxSelections,
+          sortOrder: input.sortOrder ?? 0,
+        },
+      });
+    });
+  }
+
+  async createModifierOption(context: AuthContext, input: CreateModifierOptionInput) {
+    const tenantId = assertTenantScope(context);
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const group = await tx.productModifierGroup.findFirst({
+        where: { id: input.groupId, tenantId, active: true },
+        select: { id: true },
+      });
+      if (!group) throw new Error('Modifier group not found in the current tenant');
+      const priceDelta = input.priceDelta ?? 0;
+      if (!Number.isFinite(priceDelta) || Math.abs(priceDelta * 100 - Math.round(priceDelta * 100)) > Number.EPSILON) {
+        throw new Error('Modifier price must have at most 2 decimal places');
+      }
+      return tx.productModifierOption.create({
+        data: {
+          id: randomUUID(),
+          tenantId,
+          groupId: group.id,
+          name: input.name.trim(),
+          nameAr: input.nameAr?.trim() || null,
+          priceDelta: priceDelta.toFixed(2),
+          sortOrder: input.sortOrder ?? 0,
+        },
+      });
     });
   }
 
