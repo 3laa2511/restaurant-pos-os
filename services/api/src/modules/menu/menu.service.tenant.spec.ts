@@ -12,8 +12,8 @@ describe('MenuService tenant and branch isolation', () => {
         nameAr: null,
         sortOrder: 1,
         products: [
-          { id: 'prod-1', sku: 'P1', name: 'Meal', nameAr: null, price: 100 },
-          { id: 'prod-2', sku: 'P2', name: 'Drink', nameAr: null, price: 50 },
+          { id: 'prod-1', sku: 'P1', name: 'Meal', nameAr: null, price: 100, modifierGroups: [] },
+          { id: 'prod-2', sku: 'P2', name: 'Drink', nameAr: null, price: 50, modifierGroups: [] },
         ],
       },
     ]);
@@ -58,7 +58,7 @@ describe('MenuService tenant and branch isolation', () => {
       where: { tenantId: 'tenant-a', active: true },
       include: expect.objectContaining({
         products: expect.objectContaining({
-          include: expect.objectContaining({
+          select: expect.objectContaining({
             modifierGroups: expect.objectContaining({
               where: { tenantId: 'tenant-a', active: true },
               include: expect.objectContaining({
