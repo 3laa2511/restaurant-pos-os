@@ -845,6 +845,7 @@ model ProductModifierGroup {
 model ProductModifierOption {
   id String @id @default(cuid())
   tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   groupId String
   group ProductModifierGroup @relation(fields: [groupId, tenantId], references: [id, tenantId], onDelete: Cascade)
   name String
