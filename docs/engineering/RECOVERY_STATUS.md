@@ -6,7 +6,7 @@ This document records the active recovery integration branch. Refresh GitHub and
 
 - Repository: `3laa2511/restaurant-pos-os`
 - Integration branch: `feat/recovery-integration`
-- Last fully validated code SHA: `f87d01dfed9c0655ccccfed4eb59ef46dd972963`
+- Last fully validated code SHA before the current modifier work: `84072f2fe6fbe6a535b49266afe5a2f39af8f11e`
 - Target: `main` at `4a81d8dbf6c480cdc5aef27f466de20c93b87985`
 - Umbrella PR: #13 (draft, open)
 - No changes have been merged into `main` by this recovery work.
@@ -37,6 +37,16 @@ GitHub Actions validation for exact integration SHA `84072f2fe6fbe6a535b49266afe
 - POS Desktop Quality Gate: **success**. API lint/typecheck/tests, desktop lint/typecheck, sync queue tests, frontend build, Linux Tauri native check and Rust compilation passed.
 
 Both quality-gate runs completed successfully on this exact SHA. Any subsequent code commit requires fresh CI; do not carry this green result forward to later SHAs.
+
+
+## Current in-progress implementation — product modifiers
+
+- Added Prisma models for tenant-owned product modifier groups/options and an optional `OrderItem.modifierSnapshot` JSON field.
+- Added migration `0032_product_modifiers` with tenant foreign keys, selection-bound checks, indexes, and FORCE RLS policies for both modifier tables.
+- Added permission-gated `POST /api/menu/modifier-groups` and `POST /api/menu/modifier-options` endpoints with tenant-scoped product/group lookups and selection/price validation.
+- Extended `GET /api/menu` to include active modifier groups and options.
+- Added unit coverage for tenant isolation, required-group defaults, selection bounds, and option creation.
+- **Not complete:** desktop selection UX, checkout selection/price validation, order-line snapshot persistence, kitchen ticket snapshot propagation, modifier edit/deactivate workflows, and end-to-end acceptance. CI has not yet reported results for this implementation SHA.
 
 ## Known product gaps — not declared complete
 
