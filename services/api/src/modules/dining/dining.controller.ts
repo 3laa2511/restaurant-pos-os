@@ -36,7 +36,7 @@ export class DiningController {
   }
 
   @Post('tables/:tableId/orders/:orderId')
-  @RequirePermission(PERMISSIONS.ORDER_CREATE)
+  @RequirePermission(PERMISSIONS.DINING_TABLE_VIEW)
   assignOrder(
     @CurrentAuth() context: AuthContext,
     @Param('tableId') tableId: string,
