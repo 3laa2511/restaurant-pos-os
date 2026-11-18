@@ -203,9 +203,10 @@ export class AuthService {
   }
 
   async loginManagerApproval(input: LoginInput): Promise<LoginResult> {
-    if (!input.branchId?.trim()) throw new UnauthorizedException('A branch is required for manager approval');
+    const branchId = input.branchId?.trim();
+    if (!branchId) throw new UnauthorizedException('A branch is required for manager approval');
     return this.login(
-      { username: input.username, password: input.password, branchId: input.branchId, workspace: 'POS' },
+      { username: input.username, password: input.password, branchId, workspace: 'POS' },
       { sessionTtlMs: 60_000, requiredPermission: PERMISSIONS.DINING_TABLE_MANAGE },
     );
   }
