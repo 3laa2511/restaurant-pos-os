@@ -22,6 +22,31 @@ export class OperationsService {
     );
   }
 
+  async diningOrders(context: AuthContext, branchId?: string) {
+    const tenantId = assertTenantScope(context);
+    const effectiveBranchId = branchId ?? context.branchId ?? undefined;
+    if (effectiveBranchId) assertBranchAccess(context, effectiveBranchId);
+    return withRlsContext(this.prisma, context, async (tx) =>
+      tx.order.findMany({
+        where: {
+          branch: { tenantId, ...(effectiveBranchId ? { id: effectiveBranchId } : {}) },
+          type: 'DINE_IN',
+          status: { in: ['DRAFT', 'CONFIRMED', 'SENT_TO_KITCHEN', 'PREPARING', 'READY'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          total: true,
+          createdAt: true,
+          currentDiningTable: { select: { id: true, number: true } },
+        },
+      }),
+    );
+  }
+
   async dispatchOrders(context: AuthContext, branchId?: string) {
     const tenantId = assertTenantScope(context);
     const effectiveBranchId = branchId ?? context.branchId ?? undefined;
