@@ -8,6 +8,7 @@ import { AccountingService } from '../accounting/accounting.service.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { SyncEnvelope, SyncResult, validateSyncEnvelope } from './sync-contract.js';
 import { assertCheckoutPrices } from './checkout-price-policy.js';
+import { buildCheckoutKitchenTickets } from './checkout-kitchen-routing.js';
 
 interface CheckoutPayload {
   id: string; orderNumber: string; branchId: string; deviceId: string; cashierId: string;
@@ -91,6 +92,8 @@ export class SyncService {
           where: { id: { in: productIds }, tenantId, active: true },
           select: {
             id: true,
+            name: true,
+            kitchenStation: true,
             price: true,
             branchProducts: {
               where: { branchId: envelope.branchId },
@@ -108,6 +111,35 @@ export class SyncService {
 
         await tx.order.create({ data: { id: payload.id, orderNumber: payload.orderNumber, source: 'POS', type: payload.type, status: 'CLOSED', version: 2, branchId: envelope.branchId, cycleId: cycle.id, createdById: context.userId, total: payload.total.toFixed(2), createdAt: new Date(payload.createdAt) } });
         await tx.orderItem.createMany({ data: payload.items.map((item, index) => ({ id: `${payload.id}:item:${index}`, orderId: payload.id, productId: item.productId, quantity: item.quantity, unitPrice: item.unitPrice.toFixed(2), lineTotal: (item.unitPrice * item.quantity).toFixed(2), notes: item.note ?? null })) });
+
+        // A completed cashier checkout must atomically create immutable kitchen
+        // ticket snapshots from server-owned product routing, not client labels.
+        const kitchenDrafts = buildCheckoutKitchenTickets(payload.id, payload.items, products);
+        for (const draft of kitchenDrafts) {
+          await tx.kitchenTicket.create({
+            data: {
+              id: randomUUID(),
+              orderId: payload.id,
+              branchId: envelope.branchId,
+              station: draft.station,
+              status: 'SENT_TO_KITCHEN',
+              version: 1,
+              sequence: 1,
+              sentAt: new Date(envelope.occurredAt),
+              items: {
+                create: draft.items.map((item) => ({
+                  id: randomUUID(),
+                  orderItemId: item.orderItemId,
+                  nameSnapshot: item.name,
+                  quantity: item.quantity,
+                  note: item.note,
+                  modifiers: [],
+                })),
+              },
+            },
+          });
+        }
+
         await tx.payment.create({ data: { id: payload.payment.paymentId, orderId: payload.id, shiftId: payload.payment.shiftId, amount: payload.payment.amount.toFixed(2), method: payload.payment.method, reference: payload.payment.reference?.trim() || null, receivedAmount: payload.payment.method === 'CASH' ? payload.payment.amount.toFixed(2) : null, changeAmount: '0.00', status: 'PAID', idempotencyKey: `${envelope.idempotencyKey}:payment` } });
 
         if (payload.payment.method === 'CASH') {
@@ -118,9 +150,9 @@ export class SyncService {
 
         await this.accounting.postSale(tx, context, { orderId: payload.id, branchId: envelope.branchId, amount: payload.total, payments: [{ method: payload.payment.method, amount: payload.payment.amount }] });
 
-        const eventPayload = { operationId, source: 'OFFLINE_SYNC', paymentId: payload.payment.paymentId, total: payload.total };
+        const eventPayload = { operationId, source: 'OFFLINE_SYNC', paymentId: payload.payment.paymentId, total: payload.total, kitchenTicketCount: kitchenDrafts.length, kitchenStations: kitchenDrafts.map((ticket) => ticket.station) };
         await tx.orderEvent.create({ data: { id: randomUUID(), eventId: randomUUID(), orderId: payload.id, type: 'ORDER_SYNCED_AND_PAID', actorUserId: context.userId, deviceId: envelope.deviceId, payload: jsonValue(eventPayload), occurredAt: new Date(envelope.occurredAt) } });
-        await tx.auditLog.create({ data: { id: randomUUID(), actorUserId: context.userId, branchId: envelope.branchId, action: 'OFFLINE_CHECKOUT_APPLIED', entityType: 'ORDER', entityId: payload.id, metadata: jsonValue({ operationId, clientSequence: envelope.clientSequence, idempotencyKey: envelope.idempotencyKey }) } });
+        await tx.auditLog.create({ data: { id: randomUUID(), actorUserId: context.userId, branchId: envelope.branchId, action: 'OFFLINE_CHECKOUT_APPLIED', entityType: 'ORDER', entityId: payload.id, metadata: jsonValue({ operationId, clientSequence: envelope.clientSequence, idempotencyKey: envelope.idempotencyKey, kitchenTicketCount: kitchenDrafts.length, kitchenStations: kitchenDrafts.map((ticket) => ticket.station) }) } });
         const applied: SyncResult = { status: 'APPLIED', operationId };
         await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: envelope.deviceId, branchId: envelope.branchId, operation: envelope.operation, entityType: envelope.entityType, entityId: envelope.entityId, idempotencyKey: envelope.idempotencyKey, clientSequence: envelope.clientSequence, occurredAt: new Date(envelope.occurredAt), payload: jsonValue(envelope.payload), requestHash, status: 'APPLIED', result: jsonValue(applied), updatedAt: new Date() } });
         return applied;
