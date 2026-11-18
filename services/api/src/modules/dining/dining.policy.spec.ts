@@ -15,6 +15,14 @@ describe('dining table lifecycle policy', () => {
     expect(isTerminalDiningOrderStatus('PREPARING')).toBe(false);
   });
 
+  it('cancels unfinished kitchen tickets, preserves completed work, and blocks unresolved READY tickets', () => {
+    expect(diningClearKitchenAction('SENT_TO_KITCHEN')).toBe('CANCEL');
+    expect(diningClearKitchenAction('PREPARING')).toBe('CANCEL');
+    expect(diningClearKitchenAction('COMPLETED')).toBe('KEEP');
+    expect(diningClearKitchenAction('CANCELLED')).toBe('KEEP');
+    expect(diningClearKitchenAction('READY')).toBe('BLOCK');
+  });
+
   it('keeps occupied and cleaning transitions behind dedicated actions', () => {
     expect(canTransitionDiningTableStatus('AVAILABLE', 'RESERVED')).toBe(true);
     expect(canTransitionDiningTableStatus('CLEANING', 'AVAILABLE')).toBe(true);
