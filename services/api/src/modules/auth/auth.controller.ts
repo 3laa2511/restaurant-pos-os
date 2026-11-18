@@ -17,6 +17,12 @@ export class AuthController {
     return this.auth.login(input);
   }
 
+  @Post('manager-approval')
+  @Throttle({ default: { limit: 5, ttl: 60_000, blockDuration: 300_000 } })
+  managerApproval(@Body() input: LoginDto) {
+    return this.auth.loginManagerApproval(input);
+  }
+
   @UseGuards(AuthGuard)
   @Get('me')
   me(@CurrentAuth() context: AuthContext) {
