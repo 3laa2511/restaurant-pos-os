@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { apiGet, apiPatch, apiPost } from '../pos/workspace-api.js';
 import { getDesktopSession } from '../pos/auth-client.js';
 import { actionStyle, fieldStyle, WorkspaceShell } from './shared.js';
@@ -106,7 +106,7 @@ export function DiningWorkspace({ onClose }: { onClose: () => void }) {
     }
   }
 
-  async function createArea(event: React.FormEvent<HTMLFormElement>) {
+  async function createArea(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!areaName.trim() || !branchId) return;
     await runAction(async () => {
