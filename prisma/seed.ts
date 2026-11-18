@@ -39,6 +39,8 @@ const permissions = [
   ['inventory.purchase', 'Receive inventory purchases'],
   ['inventory.adjust', 'Adjust inventory'],
   ['inventory.recipe_manage', 'Manage recipes'],
+  ['dining_table.view', 'View dining areas and tables'],
+  ['dining_table.manage', 'Manage dining areas and tables'],
 ] as const;
 
 async function main() {
@@ -65,12 +67,12 @@ async function main() {
   }
 
   const fullAccess = permissions.map(([code]) => code);
-  const cashier = ['order.create', 'order.view', 'order.confirm', 'order.send_to_kitchen', 'payment.create', 'shift.open', 'shift.close', 'cash_drawer.view', 'report.view_operational', 'driver.assign'];
+  const cashier = ['order.create', 'order.view', 'order.confirm', 'order.send_to_kitchen', 'payment.create', 'shift.open', 'shift.close', 'cash_drawer.view', 'report.view_operational', 'driver.assign', 'dining_table.view'];
   const callCenter = ['order.create', 'order.view', 'order.confirm', 'order.send_to_kitchen'];
   const supervisor = [...callCenter, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_operational', 'report.view_financial', 'driver.assign', 'audit.view', 'cash_drawer.view'];
   const kitchen = ['order.view', 'kitchen.ticket_manage'];
   const dispatcher = ['order.view', 'driver.assign'];
-  const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'menu.manage', 'audit.view', 'cash_drawer.manage', 'kitchen.ticket_manage'];
+  const manager = [...cashier, 'order.modify_issued', 'order.cancel', 'order.void_item', 'payment.refund', 'report.view_financial', 'inventory.manage', 'menu.manage', 'audit.view', 'cash_drawer.manage', 'kitchen.ticket_manage', 'dining_table.view', 'dining_table.manage'];
   const hrManager = ['hr.employee_manage', 'hr.attendance_manage', 'hr.payroll_view', 'hr.payroll_manage', 'report.view_operational', 'audit.view'];
   const accountant = ['hr.payroll_view', 'hr.payroll_manage', 'report.view_financial', 'inventory.view', 'inventory.purchase', 'report.view_operational', 'accounting.view', 'accounting.post', 'accounting.manage'];
   const inventoryManager = ['inventory.view', 'inventory.purchase', 'inventory.adjust', 'inventory.recipe_manage', 'report.view_operational'];
