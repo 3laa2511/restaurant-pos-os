@@ -1,4 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
+import { getDesktopSession } from './pos/auth-client.js';
+import { DiningWorkspace } from './workspaces/DiningWorkspace.js';
 import { useEffect, useMemo, useState } from 'react';
 import { addProduct, calculateCart, emptyCart, removeProduct, setQuantity } from './pos/cart.js';
 import { confirmOrder, createOrder } from './pos/order.js';
@@ -85,6 +87,7 @@ export function RealPosApp() {
   const [showOpenShift, setShowOpenShift] = useState(false);
   const [openingCashInput, setOpeningCashInput] = useState('0.00');
   const [showCheckoutConfirmation, setShowCheckoutConfirmation] = useState(false);
+  const [showDiningWorkspace, setShowDiningWorkspace] = useState(false);
 
   const t = labels[language];
   const dir = language === 'ar' ? 'rtl' : 'ltr';
@@ -223,13 +226,14 @@ export function RealPosApp() {
   const nav = [
     ['grid', t.cashier], ['receipt', t.orders], ['clock', t.shifts], ['box', t.inventory], ['users', t.customers], ['settings', t.settings],
   ] as const;
+  const canViewDining = getDesktopSession()?.user.permissions.includes('dining_table.view') ?? false;
 
   return (
     <main className="real-pos" dir={dir} data-theme={theme}>
       <aside className="real-sidebar">
         <div className="real-brand"><div className="real-brand-mark">POS</div><div><strong>Restaurant POS</strong><span>OPERATING SYSTEM</span></div></div>
         <div className="real-branch"><span>{language === 'ar' ? 'الفرع' : 'Branch'}</span><strong>{runtimeIdentity?.branchId ?? '—'}</strong><small><i /> {runtimeIdentity?.deviceId ?? '—'} · {online ? t.online : t.offline}</small></div>
-        <nav>{nav.map(([icon, label], index) => <button key={label} className={index === 0 ? 'active' : ''} type="button"><Icon name={icon} /><span>{label}</span></button>)}</nav>
+        <nav>{nav.map(([icon, label], index) => <button key={label} className={index === 0 ? 'active' : ''} type="button"><Icon name={icon} /><span>{label}</span></button>)}{canViewDining && <button type="button" onClick={() => setShowDiningWorkspace(true)}><Icon name="grid" /><span>{language === 'ar' ? 'صالة الطعام' : 'Dining room'}</span></button>}</nav>
         <div className="real-sidebar-bottom"><div className="real-sync"><i className={online ? 'online' : 'offline'} /><div><strong>{online ? t.online : t.offline}</strong><span>{menu ? (menu.source === 'SERVER' ? t.server : menu.source === 'CACHE' ? t.cache : t.bootstrap) : t.loading}</span></div></div><div className="real-user"><div className="real-avatar">{runtimeIdentity?.displayName?.slice(0, 2).toUpperCase() ?? 'CA'}</div><div><strong>{runtimeIdentity?.displayName ?? t.cashier}</strong><span>{runtimeIdentity?.username ?? '—'}</span></div></div></div>
       </aside>
 
@@ -261,6 +265,8 @@ export function RealPosApp() {
           </aside>
         </div>
       </section>
+
+      {showDiningWorkspace && <DiningWorkspace onClose={() => setShowDiningWorkspace(false)} />}
 
       {showCheckoutConfirmation && (
         <div role="presentation" onClick={(event) => { if (event.currentTarget === event.target && checkoutState !== 'SAVING') setShowCheckoutConfirmation(false); }} className="real-modal-backdrop">
