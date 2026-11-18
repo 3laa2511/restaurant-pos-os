@@ -56,7 +56,7 @@ function syncBadgeStyle(state: KitchenSyncState): { background: string; border: 
   return { background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.18)' };
 }
 
-export function KitchenDisplay() {
+export function KitchenDisplay({ onClose }: { onClose?: () => void } = {}) {
   const identity = getPosRuntimeIdentity();
   const [tickets, setTickets] = useState<KitchenTicket[]>([]);
   const [syncMeta, setSyncMeta] = useState<Record<string, SyncMeta>>({});
@@ -249,6 +249,7 @@ export function KitchenDisplay() {
           <button type="button" onClick={() => void refresh()} disabled={loading} style={{ border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '10px 14px', background: 'rgba(255,255,255,.06)', color: 'inherit', cursor: 'pointer' }}>
             {loading ? 'جاري التحديث...' : 'تحديث الآن'}
           </button>
+          {onClose && <button type="button" onClick={onClose} style={{ border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '10px 14px', background: 'rgba(255,255,255,.06)', color: 'inherit', cursor: 'pointer' }}>رجوع للكاشير</button>}
         </div>
       </header>
 
