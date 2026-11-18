@@ -168,7 +168,7 @@ export function DiningWorkspace({ onClose }: { onClose: () => void }) {
           throw new Error('أدخل بيانات دخول المدير لاعتماد العملية.');
         }
         const base = API_BASE_URL.replace(/\/$/, '');
-        const loginResponse = await fetch(base + '/api/auth/login', {
+        const loginResponse = await fetch(base + '/api/auth/manager-approval', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ username: managerUsername.trim(), password: managerPassword, workspace: 'POS', branchId }),
