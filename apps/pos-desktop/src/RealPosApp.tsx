@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getDesktopSession } from './pos/auth-client.js';
 import { DiningWorkspace } from './workspaces/DiningWorkspace.js';
 import { RefundWorkspace } from './workspaces/RefundWorkspace.js';
-import { KitchenWorkspace } from './workspaces/KitchenWorkspace.js';
+import { KitchenDisplay } from './KitchenDisplay.js';
 import { useEffect, useMemo, useState } from 'react';
 import { addProduct, calculateCart, emptyCart, removeProduct, setQuantity } from './pos/cart.js';
 import { confirmOrder, createOrder } from './pos/order.js';
@@ -275,7 +275,7 @@ export function RealPosApp() {
 
       {showDiningWorkspace && <DiningWorkspace onClose={() => setShowDiningWorkspace(false)} />}
       {showRefundWorkspace && <RefundWorkspace onClose={() => setShowRefundWorkspace(false)} />}
-      {showKitchenWorkspace && <KitchenWorkspace onClose={() => setShowKitchenWorkspace(false)} />}
+      {showKitchenWorkspace && <div style={{ position: 'fixed', inset: 0, zIndex: 13000, overflowY: 'auto', background: 'var(--real-bg, #0b0d10)' }}><KitchenDisplay onClose={() => setShowKitchenWorkspace(false)} /></div>}
 
       {showCheckoutConfirmation && (
         <div role="presentation" onClick={(event) => { if (event.currentTarget === event.target && checkoutState !== 'SAVING') setShowCheckoutConfirmation(false); }} className="real-modal-backdrop">
