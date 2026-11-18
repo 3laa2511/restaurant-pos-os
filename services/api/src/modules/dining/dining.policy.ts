@@ -24,3 +24,17 @@ export function isTerminalDiningOrderStatus(status: OrderStatus): boolean {
 export function canTransitionDiningTableStatus(from: DiningTableStatus, to: DiningTableStatus): boolean {
   return TABLE_TRANSITIONS[from].includes(to);
 }
+
+export type DiningClearKitchenAction = 'CANCEL' | 'KEEP' | 'BLOCK';
+
+/**
+ * When an order is already terminal, unfinished kitchen work must not remain
+ * silently active. READY tickets require an explicit kitchen resolution because
+ * the kitchen lifecycle intentionally does not allow READY -> CANCELLED.
+ */
+export function diningClearKitchenAction(status: string): DiningClearKitchenAction {
+  if (status === 'SENT_TO_KITCHEN' || status === 'PREPARING') return 'CANCEL';
+  if (status === 'READY') return 'BLOCK';
+  if (status === 'COMPLETED' || status === 'CANCELLED') return 'KEEP';
+  return 'BLOCK';
+}
