@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { apiGet, apiPatch, apiPost } from '../pos/workspace-api.js';
+import { API_BASE_URL, apiGet, apiPatch, apiPost } from '../pos/workspace-api.js';
 import { getDesktopSession } from '../pos/auth-client.js';
 import { actionStyle, fieldStyle, WorkspaceShell } from './shared.js';
 
@@ -51,6 +51,7 @@ export function DiningWorkspace({ onClose }: { onClose: () => void }) {
   const branchId = session?.user.branchId ?? undefined;
   const permissions = session?.user.permissions ?? [];
   const canManage = permissions.includes('dining_table.manage');
+  const canRequestManagerApproval = permissions.includes('dining_table.view');
   const canAssign = permissions.includes('order.create');
   const [areas, setAreas] = useState<DiningArea[]>([]);
   const [orders, setOrders] = useState<DiningOrder[]>([]);
@@ -66,6 +67,8 @@ export function DiningWorkspace({ onClose }: { onClose: () => void }) {
   const [selectedOrders, setSelectedOrders] = useState<Record<string, string>>({});
   const [clearTarget, setClearTarget] = useState<DiningTable | null>(null);
   const [clearReason, setClearReason] = useState('');
+  const [managerUsername, setManagerUsername] = useState('');
+  const [managerPassword, setManagerPassword] = useState('');
 
   async function load() {
     if (!branchId) {
@@ -154,12 +157,50 @@ export function DiningWorkspace({ onClose }: { onClose: () => void }) {
     const target = clearTarget;
     const reason = clearReason.trim();
     await runAction(async () => {
-      await apiPost('dining/tables/' + encodeURIComponent(target.id) + '/clear', {
-        reason,
-        expectedVersion: target.version,
-      });
+      const clearPath = '/api/dining/tables/' + encodeURIComponent(target.id) + '/clear';
+      if (canManage) {
+        await apiPost('dining/tables/' + encodeURIComponent(target.id) + '/clear', {
+          reason,
+          expectedVersion: target.version,
+        });
+      } else {
+        if (!managerUsername.trim() || !managerPassword) {
+          throw new Error('أدخل بيانات دخول المدير لاعتماد العملية.');
+        }
+        const base = API_BASE_URL.replace(/\/$/, '');
+        const loginResponse = await fetch(base + '/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ username: managerUsername.trim(), password: managerPassword, workspace: 'POS', branchId }),
+        });
+        const managerSession = await loginResponse.json().catch(() => null) as {
+          accessToken?: string;
+          user?: { branchId?: string | null; permissions?: string[] };
+          message?: string;
+        } | null;
+        if (!loginResponse.ok || !managerSession?.accessToken || !managerSession.user) {
+          throw new Error(managerSession?.message || 'بيانات المدير غير صحيحة أو الحساب غير متاح.');
+        }
+        if (managerSession.user.branchId !== branchId || !managerSession.user.permissions?.includes('dining_table.manage')) {
+          await fetch(base + '/api/auth/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + managerSession.accessToken } }).catch(() => undefined);
+          throw new Error('حساب المدير لازم يكون مخوّلًا لإدارة صالة نفس الفرع.');
+        }
+        try {
+          const response = await fetch(base + clearPath, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + managerSession.accessToken },
+            body: JSON.stringify({ reason, expectedVersion: target.version }),
+          });
+          const result = await response.json().catch(() => null) as { message?: string } | null;
+          if (!response.ok) throw new Error(result?.message || 'المدير لم يتمكن من اعتماد إخلاء الطاولة.');
+        } finally {
+          await fetch(base + '/api/auth/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + managerSession.accessToken } }).catch(() => undefined);
+        }
+      }
       setClearTarget(null);
       setClearReason('');
+      setManagerUsername('');
+      setManagerPassword('');
     });
   }
 
@@ -240,7 +281,7 @@ export function DiningWorkspace({ onClose }: { onClose: () => void }) {
                         <button type="button" disabled={working} onClick={() => void changeStatus(table, 'OUT_OF_SERVICE')} style={actionStyle}>خارج الخدمة</button>
                       </div>}
                     </div> : null}
-                    {table.status === 'OCCUPIED' && canManage && <button type="button" disabled={working} onClick={() => { setClearTarget(table); setClearReason(''); }} style={{ ...actionStyle, width: '100%', marginTop: 12, color: '#f2c477' }}>طلب إخلاء الطاولة بموافقة المدير</button>}
+                    {table.status === 'OCCUPIED' && canRequestManagerApproval && <button type="button" disabled={working} onClick={() => { setClearTarget(table); setClearReason(''); }} style={{ ...actionStyle, width: '100%', marginTop: 12, color: '#f2c477' }}>طلب إخلاء الطاولة بموافقة المدير</button>}
                     {(table.status === 'CLEANING' || table.status === 'OUT_OF_SERVICE') && canManage && <button type="button" disabled={working} onClick={() => void changeStatus(table, 'AVAILABLE')} style={{ ...actionStyle, width: '100%', marginTop: 12 }}>إعادة الطاولة للخدمة</button>}
                   </article>;
                 })}
@@ -252,11 +293,19 @@ export function DiningWorkspace({ onClose }: { onClose: () => void }) {
         {clearTarget && <div role="presentation" onClick={event => { if (event.target === event.currentTarget && !working) setClearTarget(null); }} style={{ position: 'fixed', inset: 0, zIndex: 13000, display: 'grid', placeItems: 'center', padding: 18, background: '#000a' }}>
           <form onSubmit={clearTable} role="dialog" aria-modal="true" aria-labelledby="dining-clear-title" style={{ width: 'min(460px,100%)', padding: 22, border: '1px solid #334150', borderRadius: 14, background: '#111820', color: '#e8edf5' }}>
             <h2 id="dining-clear-title" style={{ marginTop: 0 }}>تأكيد إخلاء الطاولة {clearTarget.number}</h2>
-            <p style={{ color: '#9ca8b5', lineHeight: 1.8, fontSize: 12 }}>الإجراء متاح للمدير فقط، ولا يمكن إخلاء الطاولة قبل إغلاق الطلب المرتبط بها. بعد التأكيد ستتحول لحالة تحت التنظيف.</p>
+            <p style={{ color: '#9ca8b5', lineHeight: 1.8, fontSize: 12 }}>لا يمكن إخلاء الطاولة قبل إغلاق الطلب المرتبط بها. إذا كنت مسجلًا كمدير، ستُسجل العملية باسمك؛ وإذا كنت كاشيرًا، يلزم اعتماد المدير ببيانات دخوله، وتُسجل العملية باسم المدير.</p>
+            {!canManage && <>
+              <label style={{ display: 'grid', gap: 6, marginBottom: 10, fontSize: 12 }}>اسم مستخدم المدير
+                <input value={managerUsername} onChange={event => setManagerUsername(event.target.value)} autoComplete="username" required style={fieldStyle} />
+              </label>
+              <label style={{ display: 'grid', gap: 6, marginBottom: 10, fontSize: 12 }}>كلمة مرور المدير
+                <input type="password" value={managerPassword} onChange={event => setManagerPassword(event.target.value)} autoComplete="current-password" required style={fieldStyle} />
+              </label>
+            </>}
             <textarea value={clearReason} onChange={event => setClearReason(event.target.value)} required minLength={3} maxLength={500} placeholder="اكتب سبب الإخلاء أو ملاحظة المدير" style={{ ...fieldStyle, minHeight: 90, resize: 'vertical' }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-              <button type="button" disabled={working} onClick={() => setClearTarget(null)} style={actionStyle}>إلغاء</button>
-              <button type="submit" disabled={working || clearReason.trim().length < 3} style={{ ...actionStyle, background: '#d9e7f5', color: '#10161d' }}>{working ? 'جاري الحفظ…' : 'تأكيد الإخلاء'}</button>
+              <button type="button" disabled={working} onClick={() => { setClearTarget(null); setManagerPassword(''); }} style={actionStyle}>إلغاء</button>
+              <button type="submit" disabled={working || clearReason.trim().length < 3 || (!canManage && (!managerUsername.trim() || !managerPassword))} style={{ ...actionStyle, background: '#d9e7f5', color: '#10161d' }}>{working ? 'جاري الحفظ…' : 'تأكيد الإخلاء'}</button>
             </div>
           </form>
         </div>}
