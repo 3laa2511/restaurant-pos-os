@@ -49,6 +49,8 @@ export const PERMISSIONS = {
   INVENTORY_PURCHASE: 'inventory.purchase',
   INVENTORY_ADJUST: 'inventory.adjust',
   RECIPE_MANAGE: 'inventory.recipe_manage',
+  DINING_TABLE_VIEW: 'dining_table.view',
+  DINING_TABLE_MANAGE: 'dining_table.manage',
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
