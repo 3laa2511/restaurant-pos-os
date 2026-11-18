@@ -10,7 +10,7 @@ import type { WorkspaceCode } from './workspace.constants.js';
 import type { AuthContext } from './authorization.types.js';
 import type { KitchenStation } from '../../generated/prisma/enums.js';
 import { PERMISSIONS } from './rbac.constants.js';
-import type { RoleCode } from './rbac.constants.js';
+import type { PermissionCode, RoleCode } from './rbac.constants.js';
 
 const scrypt = promisify(scryptCallback);
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -76,7 +76,7 @@ export async function hashPassword(password: string): Promise<string> {
 export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async login(input: LoginInput, options: { sessionTtlMs?: number; requiredPermission?: string } = {}): Promise<LoginResult> {
+  async login(input: LoginInput, options: { sessionTtlMs?: number; requiredPermission?: PermissionCode } = {}): Promise<LoginResult> {
     const username = input.username.trim();
     if (!username || !input.password) throw new UnauthorizedException('Invalid credentials');
 
@@ -205,7 +205,7 @@ export class AuthService {
   async loginManagerApproval(input: LoginInput): Promise<LoginResult> {
     if (!input.branchId?.trim()) throw new UnauthorizedException('A branch is required for manager approval');
     return this.login(
-      { ...input, workspace: 'POS', deviceCode: undefined },
+      { username: input.username, password: input.password, branchId: input.branchId, workspace: 'POS' },
       { sessionTtlMs: 60_000, requiredPermission: PERMISSIONS.DINING_TABLE_MANAGE },
     );
   }
