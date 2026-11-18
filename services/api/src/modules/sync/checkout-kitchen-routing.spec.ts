@@ -18,11 +18,15 @@ describe('buildCheckoutKitchenTickets', () => {
     );
 
     expect(tickets.map((ticket) => ticket.station)).toEqual(['KITCHEN', 'BEVERAGE']);
-    expect(tickets[0].items).toEqual([
+    const kitchenTicket = tickets.find((ticket) => ticket.station === 'KITCHEN');
+    const beverageTicket = tickets.find((ticket) => ticket.station === 'BEVERAGE');
+    expect(kitchenTicket).toBeDefined();
+    expect(beverageTicket).toBeDefined();
+    expect(kitchenTicket?.items).toEqual([
       { orderItemId: 'order-1:item:0', quantity: 2, name: 'Burger', note: 'بدون بصل' },
       { orderItemId: 'order-1:item:2', quantity: 1, name: 'Steak', note: 'زيادة تسوية' },
     ]);
-    expect(tickets[1].items[0]).toEqual({
+    expect(beverageTicket?.items[0]).toEqual({
       orderItemId: 'order-1:item:1',
       quantity: 1,
       name: 'Cola',
