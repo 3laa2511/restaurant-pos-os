@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentAuth } from '../auth/auth.decorators.js';
 import { AuthGuard } from '../auth/auth.guard.js';
@@ -32,6 +32,12 @@ export class PaymentController {
     private readonly payments: PaymentService,
     private readonly refunds: RefundService,
   ) {}
+
+  @Get('refundable')
+  @RequirePermission(PERMISSIONS.PAYMENT_REFUND)
+  refundable(@CurrentAuth() context: AuthContext, @Query('branchId') branchId?: string) {
+    return this.refunds.listRefundablePayments(context, branchId);
+  }
 
   @Post('settle')
   @RequirePermission(PERMISSIONS.PAYMENT_CREATE)
