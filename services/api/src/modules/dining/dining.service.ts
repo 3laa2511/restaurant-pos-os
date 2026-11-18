@@ -117,6 +117,7 @@ export class DiningService {
 
   async assignOrder(context: AuthContext, tableId: string, orderId: string, expectedVersion?: number) {
     assertPermission(context, PERMISSIONS.ORDER_CREATE);
+    assertPermission(context, PERMISSIONS.DINING_TABLE_VIEW);
     const tenantId = assertTenantScope(context);
     const id = tableId.trim();
     const orderKey = orderId.trim();
