@@ -51,6 +51,55 @@ function setupPayment(tx: any, status: string = 'PAID') {
 }
 
 describe('RefundService', () => {
+  it('lists only cash payments on the authenticated device open shift with the remaining balance', async () => {
+    const { prisma, tx, audit, accounting } = prismaMock();
+    tx.payment.findMany.mockResolvedValue([{
+      id: 'payment-1',
+      orderId: 'order-1',
+      shiftId: 'shift-1',
+      amount: '100.00',
+      method: 'CASH',
+      status: 'PARTIALLY_REFUNDED',
+      createdAt: new Date('2026-11-18T10:00:00.000Z'),
+      adjustments: [{ amount: '40.00' }],
+      order: { orderNumber: 'B01-0001', status: 'CLOSED', type: 'DINE_IN', branchId: 'branch-1' },
+    }]);
+    const service = new RefundService(prisma as never, audit as never, accounting as never);
+
+    const rows = await service.listRefundablePayments(context(PERMISSIONS.PAYMENT_REFUND), 'branch-1');
+
+    expect(rows).toEqual([expect.objectContaining({
+      paymentId: 'payment-1',
+      orderNumber: 'B01-0001',
+      shiftId: 'shift-1',
+      amount: 100,
+      refundedAmount: 40,
+      remainingAmount: 60,
+      method: 'CASH',
+    })]);
+    expect(tx.payment.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        method: 'CASH',
+        shift: expect.objectContaining({ deviceId: 'device-1', status: 'OPEN', branchId: 'branch-1' }),
+      }),
+    }));
+  });
+
+  it('rejects non-cash refunds until a verified provider adjustment adapter exists', async () => {
+    const { prisma, tx, audit, accounting } = prismaMock();
+    setupPayment(tx);
+    tx.payment.findUnique.mockResolvedValue({
+      id: 'payment-1', orderId: 'order-1', shiftId: 'shift-1', amount: '100.00',
+      status: 'PAID', method: 'CARD', order: { id: 'order-1', branchId: 'branch-1', status: 'CLOSED' },
+    });
+    const service = new RefundService(prisma as never, audit as never, accounting as never);
+
+    await expect(service.refundPayment(context(PERMISSIONS.PAYMENT_REFUND), baseInput))
+      .rejects.toThrow('Non-cash refunds and voids are disabled');
+    expect(tx.paymentAdjustment.create).not.toHaveBeenCalled();
+    expect(accounting.postPaymentAdjustment).not.toHaveBeenCalled();
+  });
+
   it('persists a partial cash refund and records the immutable drawer movement', async () => {
     const { prisma, tx, audit, accounting } = prismaMock();
     setupPayment(tx);
