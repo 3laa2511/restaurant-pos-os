@@ -43,7 +43,7 @@ export function RefundWorkspace({ onClose }: { onClose: () => void }) {
     event.preventDefault();
     if (!target || !deviceId || working) return;
     const value = Number(amount);
-    if (!Number.isFinite(value) || value <= 0 || value > target.remainingAmount || Math.round(value * 100) !== value * 100) {
+    if (!Number.isFinite(value) || value <= 0 || value > target.remainingAmount || Math.abs(value * 100 - Math.round(value * 100)) > 1e-8) {
       setError('أدخل مبلغًا صحيحًا لا يتجاوز المتبقي.');
       return;
     }
