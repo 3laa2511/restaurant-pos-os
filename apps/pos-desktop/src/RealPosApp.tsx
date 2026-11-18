@@ -84,6 +84,7 @@ export function RealPosApp() {
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [showOpenShift, setShowOpenShift] = useState(false);
   const [openingCashInput, setOpeningCashInput] = useState('0.00');
+  const [showCheckoutConfirmation, setShowCheckoutConfirmation] = useState(false);
 
   const t = labels[language];
   const dir = language === 'ar' ? 'rtl' : 'ltr';
@@ -202,6 +203,7 @@ export function RealPosApp() {
       const payment: PaymentInput = { orderId: order.id, shiftId: shift.id, method: paymentMethod, amount: order.total, reference: null };
       await persistCompletedCheckout({ db, order, printJobs, payment, paymentId: `${order.id}:payment`, idempotencyKey: checkoutIdentity.idempotencyKey, clientSequence: checkoutIdentity.clientSequence });
       setCart(emptyCart());
+      setShowCheckoutConfirmation(false);
       setCheckoutState('SUCCESS');
       setMessage(t.success);
       await refreshRecentOrders();
@@ -252,13 +254,35 @@ export function RealPosApp() {
             <div className="real-cart-head"><div><span>{t.currentOrder}</span><h2>{orderType === 'DINE_IN' ? t.dine : orderType === 'DELIVERY' ? t.delivery : t.takeaway}</h2></div><span className="item-badge">{itemCount} {t.cartCount}</span></div>
             <div className="real-cart-items">{cart.items.length === 0 ? <div className="real-empty-cart"><Icon name="receipt" /><strong>{t.empty}</strong><span>{language === 'ar' ? 'اضغط على أي صنف لإضافته للطلب.' : 'Click a product to add it to the order.'}</span></div> : cart.items.map((item) => <div className="real-cart-item" key={item.product.id}><div><strong>{language === 'ar' ? item.product.nameAr : item.product.nameEn}</strong><span>{money(item.product.price)}</span></div><div className="real-qty"><button type="button" onClick={() => setCart((current) => setQuantity(current, item.product.id, item.quantity - 1))}>−</button><b>{item.quantity}</b><button type="button" onClick={() => setCart((current) => setQuantity(current, item.product.id, item.quantity + 1))}>+</button><button className="remove" type="button" onClick={() => setCart((current) => removeProduct(current, item.product.id))}><Icon name="trash" /></button></div></div>)}</div>
             <div className="real-totals"><div><span>{t.subtotal}</span><b>{money(totals.subtotal)}</b></div><div><span>{t.discount}</span><b>{money(totals.discount)}</b></div>{orderType === 'DELIVERY' && <div><span>{t.deliveryFee}</span><b>{money(totals.deliveryFee)}</b></div>}<div className="grand"><span>{t.total}</span><b>{money(totals.total)}</b></div></div>
-            <div className="real-payment"><span>{language === 'ar' ? 'طريقة الدفع' : 'Payment method'}</span><div><button type="button" className={paymentMethod === 'CASH' ? 'active' : ''} onClick={() => setPaymentMethod('CASH')}><Icon name="wallet" /> {t.cash}</button><button type="button" className={paymentMethod === 'CARD' ? 'active' : ''} onClick={() => setPaymentMethod('CARD')}><Icon name="receipt" /> {t.card}</button></div></div>
+            <div className="real-payment"><span>{language === 'ar' ? 'طريقة الدفع' : 'Payment method'}</span><div><button type="button" className={paymentMethod === 'CASH' ? 'active' : ''} onClick={() => setPaymentMethod('CASH')}><Icon name="wallet" /> {t.cash}</button><button type="button" className="payment-unavailable" disabled title={language === 'ar' ? 'ربط جهاز الدفع غير متاح بعد' : 'Payment terminal integration is not configured'}><Icon name="receipt" /> {t.card} · {language === 'ar' ? 'غير متاح' : 'Unavailable'}</button></div></div>
             {message && <div className={`real-message ${checkoutState === 'ERROR' ? 'error' : ''}`}>{message}</div>}
             {shiftError && <div className="real-message error">{shiftError}</div>}
-            <button className="real-checkout" type="button" disabled={!shift || !cart.items.length || checkoutState === 'SAVING'} onClick={() => void handleCheckout()}>{checkoutState === 'SAVING' ? t.loading : `${t.checkout} · ${money(totals.total)}`}</button>
+            <button className="real-checkout" type="button" disabled={!shift || !cart.items.length || checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(true)>{checkoutState === 'SAVING' ? t.loading : `${t.checkout} · ${money(totals.total)}`}</button>
           </aside>
         </div>
       </section>
+
+      {showCheckoutConfirmation && (
+        <div role="presentation" onClick={(event) => { if (event.currentTarget === event.target && checkoutState !== 'SAVING') setShowCheckoutConfirmation(false); }} className="real-modal-backdrop">
+          <section role="dialog" aria-modal="true" aria-labelledby="checkout-confirm-title" className="real-modal">
+            <div className="real-modal-head">
+              <div><span>{language === 'ar' ? 'مراجعة التحصيل' : 'Payment review'}</span><h2 id="checkout-confirm-title">{language === 'ar' ? 'تأكيد تحصيل الطلب' : 'Confirm order payment'}</h2><p>{language === 'ar' ? 'راجع تفاصيل الطلب قبل تسجيل الدفع النقدي.' : 'Review the order before recording the cash payment.'}</p></div>
+              <button type="button" disabled={checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(false)} aria-label={t.cancel}>×</button>
+            </div>
+            <div className="real-checkout-summary">
+              <div><span>{language === 'ar' ? 'نوع الطلب' : 'Order type'}</span><strong>{orderType === 'DINE_IN' ? t.dine : orderType === 'DELIVERY' ? t.delivery : t.takeaway}</strong></div>
+              <div><span>{language === 'ar' ? 'عدد الأصناف' : 'Items'}</span><strong>{itemCount}</strong></div>
+              <div><span>{t.subtotal}</span><strong>{money(totals.subtotal)}</strong></div>
+              <div><span>{t.discount}</span><strong>{money(totals.discount)}</strong></div>
+              {orderType === 'DELIVERY' && <div><span>{t.deliveryFee}</span><strong>{money(totals.deliveryFee)}</strong></div>}
+              <div className="checkout-grand"><span>{t.total}</span><strong>{money(totals.total)}</strong></div>
+            </div>
+            <div className="checkout-payment-note"><Icon name="wallet" /><span>{language === 'ar' ? 'سيتم تسجيل وسيلة الدفع نقدي. لا يتم تفعيل البطاقة قبل ربط جهاز دفع موثّق.' : 'Payment will be recorded as cash. Card payments remain unavailable until a verified terminal is connected.'}</span></div>
+            {message && checkoutState === 'ERROR' && <div className="real-message error">{message}</div>}
+            <div className="real-modal-actions"><button type="button" disabled={checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(false)}>{t.cancel}</button><button type="button" disabled={checkoutState === 'SAVING' || !shift || !cart.items.length} onClick={() => void handleCheckout()}>{checkoutState === 'SAVING' ? t.loading : language === 'ar' ? 'تأكيد التحصيل وحفظ الطلب' : 'Confirm payment & save order'}</button></div>
+          </section>
+        </div>
+      )}
 
       {showOpenShift && (
         <div role="presentation" onClick={(event) => { if (event.currentTarget === event.target) setShowOpenShift(false); }} className="real-modal-backdrop">
