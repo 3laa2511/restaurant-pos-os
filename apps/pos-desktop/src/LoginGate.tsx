@@ -100,7 +100,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
             {branchDeviceRequired && (
               <label className="login-field">
                 <span>كود الفرع</span>
-                <input value={branchId} onChange={(event) => setBranchId(event.target.value)} autoComplete="off" required placeholder="كود الفرع" />
+                <input value={branchId} onChange={(event) => setBranchId(event.target.value)} autoComplete="off" placeholder="كود الفرع" />
               </label>
             )}
             {branchDeviceRequired && (
