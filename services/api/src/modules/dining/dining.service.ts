@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
+import type { Prisma } from '../../generated/prisma/client.js';
 import { withRlsContext } from '../../database/rls-context.js';
 import { assertBranchAccess, assertPermission, assertTenantScope, resolveBranchScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
@@ -283,7 +284,7 @@ export class DiningService {
     return branchId;
   }
 
-  private async requireActiveBranch(tx: Parameters<Parameters<PrismaService['$transaction']>[0]>[0], tenantId: string, branchId: string) {
+  private async requireActiveBranch(tx: Prisma.TransactionClient, tenantId: string, branchId: string) {
     const branch = await tx.branch.findFirst({ where: { id: branchId, tenantId, active: true }, select: { id: true } });
     if (!branch) throw new NotFoundException('Branch not found or inactive');
   }
