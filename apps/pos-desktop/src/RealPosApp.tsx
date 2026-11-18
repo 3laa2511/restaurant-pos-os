@@ -257,7 +257,7 @@ export function RealPosApp() {
             <div className="real-payment"><span>{language === 'ar' ? 'طريقة الدفع' : 'Payment method'}</span><div><button type="button" className={paymentMethod === 'CASH' ? 'active' : ''} onClick={() => setPaymentMethod('CASH')}><Icon name="wallet" /> {t.cash}</button><button type="button" className="payment-unavailable" disabled title={language === 'ar' ? 'ربط جهاز الدفع غير متاح بعد' : 'Payment terminal integration is not configured'}><Icon name="receipt" /> {t.card} · {language === 'ar' ? 'غير متاح' : 'Unavailable'}</button></div></div>
             {message && <div className={`real-message ${checkoutState === 'ERROR' ? 'error' : ''}`}>{message}</div>}
             {shiftError && <div className="real-message error">{shiftError}</div>}
-            <button className="real-checkout" type="button" disabled={!shift || !cart.items.length || checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(true)>{checkoutState === 'SAVING' ? t.loading : `${t.checkout} · ${money(totals.total)}`}</button>
+            <button className="real-checkout" type="button" disabled={!shift || !cart.items.length || checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(true)}>{checkoutState === 'SAVING' ? t.loading : `${t.checkout} · ${money(totals.total)}`}</button>
           </aside>
         </div>
       </section>
