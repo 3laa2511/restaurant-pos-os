@@ -42,6 +42,7 @@ CREATE TABLE "DiningTable" (
   "nameAr" TEXT,
   "seats" INTEGER NOT NULL,
   "status" "DiningTableStatus" NOT NULL DEFAULT 'AVAILABLE',
+  "version" INTEGER NOT NULL DEFAULT 1,
   "currentOrderId" TEXT,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
