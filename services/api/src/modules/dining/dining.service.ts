@@ -7,7 +7,7 @@ import { assertBranchAccess, assertPermission, assertTenantScope, resolveBranchS
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { DiningTableStatus } from '../../generated/prisma/enums.js';
-import { canTransitionDiningTableStatus, isAssignableDiningOrderStatus, isTerminalDiningOrderStatus } from './dining.policy.js';
+import { canTransitionDiningTableStatus, diningClearKitchenAction, isAssignableDiningOrderStatus, isTerminalDiningOrderStatus } from './dining.policy.js';
 
 @Injectable()
 export class DiningService {
@@ -210,6 +210,69 @@ export class DiningService {
       }
       if (!isTerminalDiningOrderStatus(table.currentOrder.status)) {
         throw new ConflictException('The linked order must be closed or cancelled before clearing the table');
+      }
+
+      const kitchenTickets = await tx.kitchenTicket.findMany({
+        where: { orderId: table.currentOrder.id, branchId: table.branchId },
+        select: { id: true, status: true, version: true, station: true },
+      });
+      const ticketActions = kitchenTickets.map((ticket) => ({
+        ticket,
+        action: diningClearKitchenAction(ticket.status),
+      }));
+      const unresolvedReadyTicket = ticketActions.find(({ action }) => action === 'BLOCK');
+      if (unresolvedReadyTicket) {
+        throw new ConflictException(
+          `Kitchen ticket ${unresolvedReadyTicket.ticket.id} is ${unresolvedReadyTicket.ticket.status}; resolve it in Kitchen before clearing the table`,
+        );
+      }
+
+      const now = new Date();
+      for (const { ticket, action } of ticketActions) {
+        if (action !== 'CANCEL') continue;
+        const ticketReason = `Order ended; table clear: ${cleanReason}`;
+        const ticketChanged = await tx.kitchenTicket.updateMany({
+          where: {
+            id: ticket.id,
+            branchId: table.branchId,
+            version: ticket.version,
+            status: ticket.status,
+          },
+          data: {
+            status: 'CANCELLED',
+            version: { increment: 1 },
+            cancelledAt: now,
+            cancellationReason: ticketReason,
+          },
+        });
+        if (ticketChanged.count !== 1) {
+          throw new ConflictException('Kitchen ticket changed concurrently; refresh and retry');
+        }
+        await tx.orderEvent.create({
+          data: {
+            id: randomUUID(),
+            eventId: randomUUID(),
+            orderId: table.currentOrder.id,
+            type: 'KITCHEN_TICKET_CANCELLED_ON_TABLE_CLEAR',
+            actorUserId: context.userId,
+            deviceId: context.deviceId,
+            payload: {
+              ticketId: ticket.id,
+              station: ticket.station,
+              reason: ticketReason,
+              source: 'DINING_TABLE_CLEAR',
+            },
+            occurredAt: now,
+          },
+        });
+        await this.audit.recordWithClient(tx, context, {
+          action: 'KITCHEN_TICKET_CANCELLED_ON_TABLE_CLEAR',
+          entityType: 'KitchenTicket',
+          entityId: ticket.id,
+          branchId: table.branchId,
+          reason: ticketReason,
+          metadata: { orderId: table.currentOrder.id, tableId: table.id, station: ticket.station },
+        });
       }
 
       const changed = await tx.diningTable.updateMany({
