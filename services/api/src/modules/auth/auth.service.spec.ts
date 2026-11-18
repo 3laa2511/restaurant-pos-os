@@ -25,6 +25,59 @@ const mockPrisma = () => {
 };
 
 describe('auth service', () => {
+  it('issues a short-lived branch-scoped manager approval session', async () => {
+    const prisma = mockPrisma();
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'manager-1',
+      username: 'manager',
+      displayName: 'Branch Manager',
+      passwordHash: await hashPassword('manager-password'),
+      status: 'ACTIVE',
+      tenantId: 'tenant-1',
+      branchId: 'branch-1',
+      roleLinks: [{ role: { code: 'BRANCH_MANAGER' } }],
+    });
+    prisma.session.create.mockResolvedValue({ id: 'manager-approval-session' });
+    prisma.auditLog.create.mockResolvedValue({});
+    const before = Date.now();
+
+    const result = await new AuthService(prisma as never).loginManagerApproval({
+      username: 'manager',
+      password: 'manager-password',
+      branchId: 'branch-1',
+    });
+
+    expect(result.user.permissions).toContain('dining_table.manage');
+    expect(result.user.branchId).toBe('branch-1');
+    const sessionData = (prisma.session.create.mock.calls[0]?.[0] as { data: { expiresAt: Date } }).data;
+    expect(sessionData.expiresAt.getTime()).toBeGreaterThanOrEqual(before + 59_000);
+    expect(sessionData.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 60_000);
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: 'AUTH_MANAGER_APPROVAL_SESSION_CREATED', actorUserId: 'manager-1' }),
+    }));
+  });
+
+  it('rejects manager approval credentials without the dining manager permission', async () => {
+    const prisma = mockPrisma();
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'cashier-1',
+      username: 'cashier',
+      displayName: 'Cashier',
+      passwordHash: await hashPassword('cashier-password'),
+      status: 'ACTIVE',
+      tenantId: 'tenant-1',
+      branchId: 'branch-1',
+      roleLinks: [{ role: { code: 'CASHIER' } }],
+    });
+
+    await expect(new AuthService(prisma as never).loginManagerApproval({
+      username: 'cashier',
+      password: 'cashier-password',
+      branchId: 'branch-1',
+    })).rejects.toThrow('Manager approval credentials are not authorized');
+    expect(prisma.session.create).not.toHaveBeenCalled();
+  });
+
   it('hashes and verifies a password through the login flow', async () => {
     const prisma = mockPrisma();
     const passwordHash = await hashPassword('correct-horse');
