@@ -1255,6 +1255,7 @@ model DiningTable {
   nameAr String?
   seats Int
   status DiningTableStatus @default(AVAILABLE)
+  version Int @default(1)
   currentOrderId String?
   currentOrder Order? @relation("DiningTableCurrentOrder", fields: [currentOrderId, branchId], references: [id, branchId], onDelete: Restrict)
   createdAt DateTime @default(now())
