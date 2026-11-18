@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { canTransitionDiningTableStatus, isAssignableDiningOrderStatus, isTerminalDiningOrderStatus } from './dining.policy.js';
+import { canTransitionDiningTableStatus, diningClearKitchenAction, isAssignableDiningOrderStatus, isTerminalDiningOrderStatus } from './dining.policy.js';
 
 describe('dining table lifecycle policy', () => {
   it('allows only open dine-in order lifecycle states to be seated', () => {
