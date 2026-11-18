@@ -7,9 +7,7 @@ import { assertBranchAccess, assertPermission, assertTenantScope, resolveBranchS
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { DiningTableStatus } from '../../generated/prisma/enums.js';
-
-const ASSIGNABLE_ORDER_STATUSES = ['DRAFT', 'CONFIRMED', 'SENT_TO_KITCHEN', 'PREPARING', 'READY'] as const;
-const TERMINAL_ORDER_STATUSES = ['CLOSED', 'CANCELLED', 'VOIDED', 'REFUNDED'] as const;
+import { canTransitionDiningTableStatus, isAssignableDiningOrderStatus, isTerminalDiningOrderStatus } from './dining.policy.js';
 
 @Injectable()
 export class DiningService {
@@ -144,7 +142,7 @@ export class DiningService {
       });
       if (!order) throw new NotFoundException('Order not found in this branch');
       if (order.type !== 'DINE_IN') throw new BadRequestException('Only dine-in orders can be assigned to a dining table');
-      if (!ASSIGNABLE_ORDER_STATUSES.includes(order.status as (typeof ASSIGNABLE_ORDER_STATUSES)[number])) {
+      if (!isAssignableDiningOrderStatus(order.status)) {
         throw new ConflictException('Order is not in a state that can be seated');
       }
       if (order.currentDiningTable) throw new ConflictException('Order is already assigned to another table');
@@ -209,7 +207,7 @@ export class DiningService {
       if (table.status !== 'OCCUPIED' || !table.currentOrder) {
         throw new ConflictException('Only an occupied table with a linked order can be cleared');
       }
-      if (!TERMINAL_ORDER_STATUSES.includes(table.currentOrder.status as (typeof TERMINAL_ORDER_STATUSES)[number])) {
+      if (!isTerminalDiningOrderStatus(table.currentOrder.status)) {
         throw new ConflictException('The linked order must be closed or cancelled before clearing the table');
       }
 
@@ -249,14 +247,7 @@ export class DiningService {
       }
       if (table.currentOrderId) throw new ConflictException('A table with an active order cannot change status directly');
 
-      const transitions: Record<DiningTableStatus, readonly DiningTableStatus[]> = {
-        AVAILABLE: ['RESERVED', 'OUT_OF_SERVICE'],
-        RESERVED: ['AVAILABLE', 'OUT_OF_SERVICE'],
-        OCCUPIED: [],
-        CLEANING: ['AVAILABLE', 'OUT_OF_SERVICE'],
-        OUT_OF_SERVICE: ['AVAILABLE'],
-      };
-      if (!transitions[table.status].includes(target)) {
+      if (!canTransitionDiningTableStatus(table.status, target)) {
         throw new ConflictException(`Invalid dining table transition: ${table.status} → ${target}`);
       }
 
