@@ -64,6 +64,7 @@ async function createCheckoutIdentity(identity: PosRuntimeIdentity): Promise<Che
 
 export function RealPosApp() {
   const [language, setLanguage] = useState<Language>('ar');
+  const [theme, setTheme] = useState<'day' | 'night'>('day');
   const [runtimeIdentity, setRuntimeIdentity] = useState<PosRuntimeIdentity | null>(null);
   const [menu, setMenu] = useState<LocalMenu | null>(null);
   const [cart, setCart] = useState<CartState>(emptyCart());
@@ -208,7 +209,7 @@ export function RealPosApp() {
   ] as const;
 
   return (
-    <main className="real-pos" dir={dir}>
+    <main className="real-pos" dir={dir} data-theme={theme}>
       <aside className="real-sidebar">
         <div className="real-brand"><div className="real-brand-mark">POS</div><div><strong>Restaurant POS</strong><span>OPERATING SYSTEM</span></div></div>
         <div className="real-branch"><span>{language === 'ar' ? 'الفرع' : 'Branch'}</span><strong>{runtimeIdentity?.branchId ?? '—'}</strong><small><i /> {runtimeIdentity?.deviceId ?? '—'} · {online ? t.online : t.offline}</small></div>
@@ -219,7 +220,7 @@ export function RealPosApp() {
       <section className="real-main">
         <header className="real-topbar">
           <div><span className="real-eyebrow">{t.pos}</span><h1>{t.cashier}</h1></div>
-          <div className="real-top-actions"><button className="language-button" type="button" onClick={() => setLanguage((current) => current === 'ar' ? 'en' : 'ar')}><Icon name="globe" /> {t.language}</button><button className="notification-button" type="button"><Icon name="bell" /><i /></button>{shift ? <button className="shift-control open" type="button" disabled={Boolean(cart.items.length) || checkoutState === 'SAVING'} onClick={() => void handleCloseShiftRequest()}><i /> {t.closeShift}</button> : <button className="shift-control" type="button" onClick={() => void handleOpenShift()}>{t.openShift}</button>}</div>
+          <div className="real-top-actions"><button className="language-button" type="button" aria-pressed={theme === 'night'} onClick={() => setTheme((current) => current === 'day' ? 'night' : 'day')}>{theme === 'day' ? (language === 'ar' ? 'الوضع الليلي' : 'Night mode') : (language === 'ar' ? 'الوضع النهاري' : 'Day mode')}</button><button className="language-button" type="button" onClick={() => setLanguage((current) => current === 'ar' ? 'en' : 'ar')}><Icon name="globe" /> {t.language}</button><button className="notification-button" type="button"><Icon name="bell" /><i /></button>{shift ? <button className="shift-control open" type="button" disabled={Boolean(cart.items.length) || checkoutState === 'SAVING'} onClick={() => void handleCloseShiftRequest()}><i /> {t.closeShift}</button> : <button className="shift-control" type="button" onClick={() => void handleOpenShift()}>{t.openShift}</button>}</div>
         </header>
 
         <div className="real-workspace">
