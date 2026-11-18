@@ -33,7 +33,7 @@ function setup(tickets: Array<{ id: string; status: string; version: number; sta
     },
     kitchenTicket: {
       findMany: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue(tickets),
-      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      updateMany: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ count: 1 }),
     },
     orderEvent: { create: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({}) },
   } as any;
