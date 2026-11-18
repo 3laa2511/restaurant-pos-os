@@ -15,7 +15,7 @@ The supplied UI Directions reference includes a dining-room board, table configu
 3. An occupied table references one current order. A unique composite key prevents one order from occupying multiple tables at the same time; the order relation also enforces same-branch ownership.
 4. Table writes use an integer `version` and conditional updates to reject stale concurrent actions.
 5. Only eligible `DINE_IN` orders in open lifecycle states may be seated. Seating writes an order event and an audit event in the same transaction.
-6. Clearing is a manager-permission action with a required reason. It is rejected until the linked order is terminal (`CLOSED`, `CANCELLED`, `VOIDED`, or `REFUNDED`). A successful clear releases the order link and moves the table to `CLEANING`; a separate manager action returns it to `AVAILABLE`.
+6. Clearing is a manager-permission action with a required reason. Cashiers can request it by entering manager credentials; the desktop obtains a separate manager session, verifies branch scope and `DINING_TABLE_MANAGE`, performs the action under the manager identity, and immediately revokes that session. The cashier session is not replaced. A successful clear releases the order link and moves the table to `CLEANING`; a separate manager action returns it to `AVAILABLE`.
 7. `DINING_TABLE_VIEW` is granted to cashier and manager roles; `DINING_TABLE_MANAGE` is manager-only. Workspace allowlists also restrict the actions to POS/Management.
 8. Both tables have forced PostgreSQL RLS policies using tenant and branch visibility. API operations run inside the existing transaction-local RLS context.
 
@@ -23,7 +23,7 @@ The supplied UI Directions reference includes a dining-room board, table configu
 
 - This implementation does **not** claim multi-cashier LAN coordination during a total branch internet outage.
 - Table mutations currently require the API; there is no offline table queue or conflict-reconciliation protocol.
-- Clear-table does not yet cancel or reconcile kitchen tickets. It requires a terminal order and records the manager action.
+- Clear-table requires a terminal order. In the same transaction it cancels `SENT_TO_KITCHEN` and `PREPARING` tickets, records one order event and audit event per cancellation, then clears the table. `COMPLETED`/`CANCELLED` tickets are preserved. A `READY` ticket blocks clearing because the kitchen state machine intentionally has no implicit `READY -> CANCELLED` transition; it must be explicitly resolved in Kitchen first.
 - A cashier-initiated manager credential override / approval token is not implemented; the current action is available only to a user with manager permission.
 - The POS checkout path still persists locally first. A table is assigned only after its order is visible to the server through the existing order/sync path.
 - The current desktop board is functional but not yet pixel-perfect against the 32-page UI reference.
