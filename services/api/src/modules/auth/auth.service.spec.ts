@@ -27,6 +27,7 @@ const mockPrisma = () => {
 describe('auth service', () => {
   it('issues a short-lived branch-scoped manager approval session', async () => {
     const prisma = mockPrisma();
+    prisma.branch.findFirst.mockResolvedValue({ id: 'branch-1', active: true });
     prisma.user.findUnique.mockResolvedValue({
       id: 'manager-1',
       username: 'manager',
@@ -59,6 +60,7 @@ describe('auth service', () => {
 
   it('rejects manager approval credentials without the dining manager permission', async () => {
     const prisma = mockPrisma();
+    prisma.branch.findFirst.mockResolvedValue({ id: 'branch-1', active: true });
     prisma.user.findUnique.mockResolvedValue({
       id: 'cashier-1',
       username: 'cashier',
