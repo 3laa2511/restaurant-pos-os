@@ -44,6 +44,14 @@ enum OrderStatus {
   FAILED
 }
 
+enum DiningTableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  CLEANING
+  OUT_OF_SERVICE
+}
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -207,6 +215,8 @@ model Tenant {
   active Boolean @default(true)
   currency String @default("EGP")
   branches Branch[]
+  diningAreas DiningArea[]
+  diningTables DiningTable[]
   businessCycles BusinessCycle[]
   users User[]
   sessions Session[]
@@ -254,6 +264,8 @@ model Branch {
   journalEntries JournalEntry[]
   devices Device[]
   orders Order[]
+  diningAreas DiningArea[]
+  diningTables DiningTable[]
   businessCycles BusinessCycle[]
   shifts Shift[]
   sessions Session[]
@@ -918,6 +930,7 @@ model Order {
   payments Payment[]
   paymentIntents PaymentIntent[]
   paymentAdjustments PaymentAdjustment[]
+  currentDiningTable DiningTable? @relation("DiningTableCurrentOrder")
   events OrderEvent[]
   kitchenTickets KitchenTicket[]
   total Decimal @db.Decimal(12, 2)
@@ -1209,6 +1222,47 @@ model CashDrawerMovement {
   @@index([shiftId, occurredAt])
   @@index([branchId, occurredAt])
   @@index([userId, occurredAt])
+}
+
+model DiningArea {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId String
+  branch Branch @relation(fields: [branchId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  name String
+  nameAr String?
+  sortOrder Int @default(0)
+  active Boolean @default(true)
+  tables DiningTable[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([id, branchId, tenantId])
+  @@unique([branchId, name])
+  @@index([tenantId, branchId, active, sortOrder])
+}
+
+model DiningTable {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId String
+  branch Branch @relation(fields: [branchId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  areaId String
+  area DiningArea @relation(fields: [areaId, branchId, tenantId], references: [id, branchId, tenantId], onDelete: Restrict)
+  number String
+  name String?
+  nameAr String?
+  seats Int
+  status DiningTableStatus @default(AVAILABLE)
+  currentOrderId String?
+  currentOrder Order? @relation("DiningTableCurrentOrder", fields: [currentOrderId, branchId], references: [id, branchId], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([areaId, number])
+  @@unique([currentOrderId, branchId])
+  @@index([tenantId, branchId, status])
+  @@index([areaId, status])
 }
 
 model AuditLog {
