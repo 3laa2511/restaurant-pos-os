@@ -2,6 +2,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { clearDesktopSession, getDesktopSession, loginDesktop } from './pos/auth-client.js';
 import type { WorkspaceCode } from './pos/auth-client.js';
+import './login-gate.css';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
 const DEFAULT_BRANCH = (import.meta.env.VITE_BRANCH_ID as string | undefined) ?? 'branch-01';
@@ -57,34 +58,70 @@ export function LoginGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#090d12', color: '#e8edf5', fontFamily: 'Inter, system-ui, sans-serif', padding: 24, direction: 'rtl' }}>
-      <form onSubmit={submit} style={{ width: '100%', maxWidth: 760, padding: 30, border: '1px solid #26313d', borderRadius: 18, background: '#0e141b', boxShadow: '0 24px 80px #0008' }}>
-        <div style={{ width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: 13, background: '#eef2f6', color: '#10151b', fontWeight: 900, fontSize: 12, marginBottom: 18 }}>RPOS</div>
-        <h1 style={{ margin: 0, fontSize: 24 }}>الدخول إلى Restaurant POS OS</h1>
-        <p style={{ margin: '8px 0 22px', color: '#7b8896', fontSize: 12, lineHeight: 1.7 }}>اختار مساحة العمل أولًا، ثم سجّل دخولك. الصلاحيات الحقيقية يحددها الـBackend بعد التحقق من الحساب.</p>
+    <main className="login-gate" dir="rtl">
+      <section className="login-card" aria-labelledby="login-title">
+        <header className="login-brand">
+          <div className="login-brand-mark" aria-hidden="true">RPOS</div>
+          <div>
+            <span className="login-overline">RESTAURANT OPERATING SYSTEM</span>
+            <h1 id="login-title">أهلاً بيك في نظام المطعم</h1>
+            <p>سجّل دخولك واختر مساحة العمل المصرّح لك باستخدامها.</p>
+          </div>
+        </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginBottom: 22 }}>
-          {WORKSPACES.map((item) => (
-            <button key={item.code} type="button" onClick={() => setWorkspace(item.code)} style={{ minHeight: 82, textAlign: 'right', padding: 12, borderRadius: 11, border: workspace === item.code ? '1px solid #e8edf5' : '1px solid #293540', background: workspace === item.code ? '#18212a' : '#111820', color: '#e8edf5', cursor: 'pointer' }}>
-              <strong style={{ display: 'block', fontSize: 12 }}>{item.title}</strong>
-              <span style={{ display: 'block', marginTop: 6, color: '#7b8896', fontSize: 10, lineHeight: 1.5 }}>{item.description}</span>
-            </button>
-          ))}
-        </div>
+        <form onSubmit={submit} className="login-form">
+          <fieldset className="workspace-picker">
+            <legend>اختار مساحة العمل</legend>
+            <div className="workspace-grid">
+              {WORKSPACES.map((item) => (
+                <button
+                  key={item.code}
+                  type="button"
+                  className={workspace === item.code ? 'workspace-option selected' : 'workspace-option'}
+                  aria-pressed={workspace === item.code}
+                  onClick={() => setWorkspace(item.code)}
+                >
+                  <strong>{item.title}</strong>
+                  <span>{item.description}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <label style={labelStyle}>اسم المستخدم<input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required style={inputStyle} /></label>
-          <label style={labelStyle}>كلمة المرور<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required style={inputStyle} /></label>
-          {branchDeviceRequired && <label style={labelStyle}>الفرع<input value={branchId} onChange={(event) => setBranchId(event.target.value)} style={inputStyle} /></label>}
-          {branchDeviceRequired && <label style={labelStyle}>كود الجهاز<input value={deviceCode} onChange={(event) => setDeviceCode(event.target.value)} style={inputStyle} /></label>}
-        </div>
+          <div className="login-fields">
+            <label className="login-field">
+              <span>اسم المستخدم</span>
+              <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required placeholder="اكتب اسم المستخدم" />
+            </label>
+            <label className="login-field">
+              <span>كلمة المرور</span>
+              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required placeholder="اكتب كلمة المرور" />
+            </label>
+            {branchDeviceRequired && (
+              <label className="login-field">
+                <span>كود الفرع</span>
+                <input value={branchId} onChange={(event) => setBranchId(event.target.value)} autoComplete="off" required placeholder="كود الفرع" />
+              </label>
+            )}
+            {branchDeviceRequired && (
+              <label className="login-field">
+                <span>كود الجهاز</span>
+                <input value={deviceCode} onChange={(event) => setDeviceCode(event.target.value)} autoComplete="off" required={deviceRequired} placeholder="كود الجهاز" />
+              </label>
+            )}
+          </div>
 
-        {error && <div style={{ margin: '14px 0', padding: 10, borderRadius: 9, border: '1px solid #63373a', color: '#f0a7a7', background: '#211214', fontSize: 11 }}>{error}</div>}
-        <button disabled={busy} type="submit" style={{ width: '100%', height: 46, marginTop: 8, border: 0, borderRadius: 11, background: '#eef2f5', color: '#10151b', fontWeight: 900, cursor: busy ? 'wait' : 'pointer' }}>{busy ? 'جاري تسجيل الدخول…' : 'تسجيل الدخول'}</button>
-      </form>
+          <div className="login-security-note">
+            <span aria-hidden="true">✓</span>
+            <p>تأكيد الحساب والصلاحيات واختيار الفرع بيتم من خلال الخادم، مش من الواجهة.</p>
+          </div>
+          {error && <div className="login-error" role="alert">{error}</div>}
+          <button className="login-submit" disabled={busy || !username.trim() || !password} type="submit">
+            {busy ? <><span className="login-spinner" aria-hidden="true" /> جاري تسجيل الدخول…</> : 'تسجيل الدخول'}
+          </button>
+        </form>
+        <footer className="login-footer"><span>RPOS</span><span>نظام تشغيل المطعم</span></footer>
+      </section>
     </main>
   );
-}
 
-const labelStyle = { display: 'grid', gap: 7, marginBottom: 13, fontSize: 11, color: '#9ca8b5' };
-const inputStyle = { width: '100%', boxSizing: 'border-box' as const, height: 40, border: '1px solid #293540', borderRadius: 9, outline: 'none', padding: '0 11px', background: '#111820', color: '#e8edf5', fontSize: 12 };
