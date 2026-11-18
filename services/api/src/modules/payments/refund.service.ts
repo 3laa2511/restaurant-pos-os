@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
-import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
+import { assertBranchAccess, assertPermission, assertTenantScope, resolveBranchScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AccountingService } from '../accounting/accounting.service.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -48,6 +48,59 @@ function jsonValue(value: unknown): ReturnType<typeof JSON.parse> { return JSON.
 export class RefundService {
   constructor(private readonly prisma: PrismaService, private readonly audit: AuditService, private readonly accounting: AccountingService) {}
 
+  async listRefundablePayments(context: AuthContext, requestedBranchId?: string) {
+    assertPermission(context, PERMISSIONS.PAYMENT_REFUND);
+    const tenantId = assertTenantScope(context);
+    const deviceId = context.deviceId;
+    if (!deviceId) throw new Error('A device-bound session is required for refunds');
+    const branchId = resolveBranchScope(context, requestedBranchId);
+
+    const rows = await withRlsContext(this.prisma, context, (tx) => tx.payment.findMany({
+      where: {
+        method: 'CASH',
+        status: { in: ['PAID', 'PARTIALLY_REFUNDED'] },
+        shift: { deviceId, status: 'OPEN', ...(branchId ? { branchId } : {}) },
+        order: {
+          status: { notIn: ['CANCELLED', 'VOIDED', 'REFUNDED'] },
+          branch: { tenantId, ...(branchId ? { id: branchId } : {}) },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        orderId: true,
+        shiftId: true,
+        amount: true,
+        method: true,
+        status: true,
+        createdAt: true,
+        adjustments: { select: { amount: true } },
+        order: { select: { orderNumber: true, status: true, type: true, branchId: true } },
+      },
+    }));
+
+    return rows.map((payment) => {
+      const amount = money(Number(payment.amount.toString()));
+      const refundedAmount = money(payment.adjustments.reduce((sum, adjustment) => sum + Number(adjustment.amount.toString()), 0));
+      return {
+        paymentId: payment.id,
+        orderId: payment.orderId,
+        orderNumber: payment.order.orderNumber,
+        orderStatus: payment.order.status,
+        orderType: payment.order.type,
+        branchId: payment.order.branchId,
+        shiftId: payment.shiftId,
+        method: payment.method,
+        status: payment.status,
+        amount,
+        refundedAmount,
+        remainingAmount: money(Math.max(0, amount - refundedAmount)),
+        createdAt: payment.createdAt.toISOString(),
+      };
+    }).filter((payment) => payment.remainingAmount > 0);
+  }
+
   async adjustPayment(context: AuthContext, input: PaymentAdjustmentInput): Promise<PaymentAdjustmentResult> {
     assertPermission(context, input.type === 'VOID' ? PERMISSIONS.PAYMENT_VOID : PERMISSIONS.PAYMENT_REFUND);
     requireText(input.paymentId, 'Payment');
@@ -74,6 +127,7 @@ export class RefundService {
         assertBranchAccess(context, payment.order.branchId);
         if (payment.shiftId !== input.shiftId) throw new Error('Adjustment shift does not match the payment shift');
         if (payment.status !== 'PAID' && payment.status !== 'PARTIALLY_REFUNDED') throw new Error(`Payment cannot be adjusted from status ${payment.status}`);
+        if (payment.method !== 'CASH') throw new Error('Non-cash refunds and voids are disabled until a verified provider adjustment adapter is configured');
         if (input.type === 'VOID' && payment.status !== 'PAID') throw new Error('A partially refunded payment cannot be voided');
         if (payment.order.status === 'CANCELLED' || payment.order.status === 'VOIDED') throw new Error(`Order cannot be financially adjusted from status ${payment.order.status}`);
 
