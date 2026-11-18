@@ -281,7 +281,7 @@ export function DiningWorkspace({ onClose }: { onClose: () => void }) {
                         <button type="button" disabled={working} onClick={() => void changeStatus(table, 'OUT_OF_SERVICE')} style={actionStyle}>خارج الخدمة</button>
                       </div>}
                     </div> : null}
-                    {table.status === 'OCCUPIED' && canRequestManagerApproval && <button type="button" disabled={working} onClick={() => { setClearTarget(table); setClearReason(''); }} style={{ ...actionStyle, width: '100%', marginTop: 12, color: '#f2c477' }}>طلب إخلاء الطاولة بموافقة المدير</button>}
+                    {table.status === 'OCCUPIED' && canRequestManagerApproval && <button type="button" disabled={working} onClick={() => { setClearTarget(table); setClearReason(''); setManagerUsername(''); setManagerPassword(''); }} style={{ ...actionStyle, width: '100%', marginTop: 12, color: '#f2c477' }}>طلب إخلاء الطاولة بموافقة المدير</button>}
                     {(table.status === 'CLEANING' || table.status === 'OUT_OF_SERVICE') && canManage && <button type="button" disabled={working} onClick={() => void changeStatus(table, 'AVAILABLE')} style={{ ...actionStyle, width: '100%', marginTop: 12 }}>إعادة الطاولة للخدمة</button>}
                   </article>;
                 })}
@@ -290,16 +290,16 @@ export function DiningWorkspace({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        {clearTarget && <div role="presentation" onClick={event => { if (event.target === event.currentTarget && !working) setClearTarget(null); }} style={{ position: 'fixed', inset: 0, zIndex: 13000, display: 'grid', placeItems: 'center', padding: 18, background: '#000a' }}>
+        {clearTarget && <div role="presentation" onClick={event => { if (event.target === event.currentTarget && !working) { setClearTarget(null); setManagerPassword(''); } }} style={{ position: 'fixed', inset: 0, zIndex: 13000, display: 'grid', placeItems: 'center', padding: 18, background: '#000a' }}>
           <form onSubmit={clearTable} role="dialog" aria-modal="true" aria-labelledby="dining-clear-title" style={{ width: 'min(460px,100%)', padding: 22, border: '1px solid #334150', borderRadius: 14, background: '#111820', color: '#e8edf5' }}>
             <h2 id="dining-clear-title" style={{ marginTop: 0 }}>تأكيد إخلاء الطاولة {clearTarget.number}</h2>
             <p style={{ color: '#9ca8b5', lineHeight: 1.8, fontSize: 12 }}>لا يمكن إخلاء الطاولة قبل إغلاق الطلب المرتبط بها. إذا كنت مسجلًا كمدير، ستُسجل العملية باسمك؛ وإذا كنت كاشيرًا، يلزم اعتماد المدير ببيانات دخوله، وتُسجل العملية باسم المدير.</p>
             {!canManage && <>
               <label style={{ display: 'grid', gap: 6, marginBottom: 10, fontSize: 12 }}>اسم مستخدم المدير
-                <input value={managerUsername} onChange={event => setManagerUsername(event.target.value)} autoComplete="username" required style={fieldStyle} />
+                <input value={managerUsername} onChange={event => setManagerUsername(event.target.value)} autoComplete="off" required style={fieldStyle} />
               </label>
               <label style={{ display: 'grid', gap: 6, marginBottom: 10, fontSize: 12 }}>كلمة مرور المدير
-                <input type="password" value={managerPassword} onChange={event => setManagerPassword(event.target.value)} autoComplete="current-password" required style={fieldStyle} />
+                <input type="password" value={managerPassword} onChange={event => setManagerPassword(event.target.value)} autoComplete="off" required style={fieldStyle} />
               </label>
             </>}
             <textarea value={clearReason} onChange={event => setClearReason(event.target.value)} required minLength={3} maxLength={500} placeholder="اكتب سبب الإخلاء أو ملاحظة المدير" style={{ ...fieldStyle, minHeight: 90, resize: 'vertical' }} />
