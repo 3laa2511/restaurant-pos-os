@@ -9,6 +9,7 @@ import { workspacesForAccess } from './workspace.constants.js';
 import type { WorkspaceCode } from './workspace.constants.js';
 import type { AuthContext } from './authorization.types.js';
 import type { KitchenStation } from '../../generated/prisma/enums.js';
+import { PERMISSIONS } from './rbac.constants.js';
 import type { RoleCode } from './rbac.constants.js';
 
 const scrypt = promisify(scryptCallback);
@@ -75,7 +76,7 @@ export async function hashPassword(password: string): Promise<string> {
 export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async login(input: LoginInput): Promise<LoginResult> {
+  async login(input: LoginInput, options: { sessionTtlMs?: number; requiredPermission?: string } = {}): Promise<LoginResult> {
     const username = input.username.trim();
     if (!username || !input.password) throw new UnauthorizedException('Invalid credentials');
 
@@ -142,6 +143,12 @@ export class AuthService {
       }
 
       const permissions = [...new Set(roles.flatMap((role) => permissionsForRole(role)))];
+      if (options.requiredPermission && !permissions.includes(options.requiredPermission)) {
+        throw new UnauthorizedException('Manager approval credentials are not authorized for this action');
+      }
+      if (options.requiredPermission && (!input.branchId || selectedBranchId !== input.branchId)) {
+        throw new UnauthorizedException('Manager approval must be scoped to the same branch');
+      }
       const availableWorkspaces = workspacesForAccess(roles, permissions);
 
       if (availableWorkspaces.length === 0) throw new UnauthorizedException('User has no application workspace access');
@@ -151,7 +158,7 @@ export class AuthService {
 
       const workspace: WorkspaceCode = input.workspace ?? availableWorkspaces[0]!;
       const accessToken = randomBytes(32).toString('base64url');
-      const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+      const expiresAt = new Date(Date.now() + (options.sessionTtlMs ?? SESSION_TTL_MS));
 
       const session = await tx.session.create({
         data: { tokenHash: hashToken(accessToken), userId: user.id, tenantId: user.tenantId, branchId: selectedBranchId, deviceId, workspace: workspace as never, expiresAt },
@@ -169,7 +176,7 @@ export class AuthService {
         data: {
           actorUserId: user.id,
           branchId: selectedBranchId,
-          action: 'AUTH_LOGIN',
+          action: options.requiredPermission ? 'AUTH_MANAGER_APPROVAL_SESSION_CREATED' : 'AUTH_LOGIN',
           entityType: 'SESSION',
           entityId: session.id,
           metadata: { deviceId, kitchenStation: user.kitchenStation, workspace },
@@ -193,6 +200,14 @@ export class AuthService {
         deviceId,
       };
     });
+  }
+
+  async loginManagerApproval(input: LoginInput): Promise<LoginResult> {
+    if (!input.branchId?.trim()) throw new UnauthorizedException('A branch is required for manager approval');
+    return this.login(
+      { ...input, workspace: 'POS', deviceCode: undefined },
+      { sessionTtlMs: 60_000, requiredPermission: PERMISSIONS.DINING_TABLE_MANAGE },
+    );
   }
 
   async authenticate(accessToken: string): Promise<{ context: AuthContext; sessionId: string }> {
