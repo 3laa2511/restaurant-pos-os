@@ -35,3 +35,7 @@ export function apiGet<T>(path: string): Promise<T> {
 export function apiPost<T>(path: string, payload: unknown): Promise<T> {
   return request<T>(path, { method: 'POST', body: JSON.stringify(payload) }, 'تعذر تنفيذ العملية');
 }
+
+export function apiPatch<T>(path: string, payload: unknown): Promise<T> {
+  return request<T>(path, { method: 'PATCH', body: JSON.stringify(payload) }, 'تعذر تحديث البيانات');
+}
