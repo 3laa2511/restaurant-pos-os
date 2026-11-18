@@ -19,6 +19,12 @@ export class OperationsController {
     return this.operations.callCenterOrders(context, query.branchId);
   }
 
+  @Get('dining/orders')
+  @RequirePermission(PERMISSIONS.ORDER_VIEW)
+  diningOrders(@CurrentAuth() context: AuthContext, @Query() query: OptionalBranchQueryDto) {
+    return this.operations.diningOrders(context, query.branchId);
+  }
+
   @Get('dispatch/orders')
   @RequirePermission(PERMISSIONS.ORDER_VIEW)
   dispatchOrders(@CurrentAuth() context: AuthContext, @Query() query: OptionalBranchQueryDto) {
