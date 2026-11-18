@@ -30,4 +30,11 @@ describe('workspace permission boundaries', () => {
     expect(workspaceAllowsPermission(WORKSPACES.INVENTORY, PERMISSIONS.INVENTORY_ADJUST)).toBe(true);
     expect(workspaceAllowsPermission(WORKSPACES.POS, PERMISSIONS.INVENTORY_ADJUST)).toBe(false);
   });
+
+  it('allows table viewing and manager controls in POS and Management only', () => {
+    expect(workspaceAllowsPermission(WORKSPACES.POS, PERMISSIONS.DINING_TABLE_VIEW)).toBe(true);
+    expect(workspaceAllowsPermission(WORKSPACES.POS, PERMISSIONS.DINING_TABLE_MANAGE)).toBe(true);
+    expect(workspaceAllowsPermission(WORKSPACES.MANAGEMENT, PERMISSIONS.DINING_TABLE_MANAGE)).toBe(true);
+    expect(workspaceAllowsPermission(WORKSPACES.KITCHEN, PERMISSIONS.DINING_TABLE_MANAGE)).toBe(false);
+  });
 });
