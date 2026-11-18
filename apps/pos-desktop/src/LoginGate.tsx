@@ -124,4 +124,4 @@ export function LoginGate({ children }: { children: ReactNode }) {
       </section>
     </main>
   );
-
+}
