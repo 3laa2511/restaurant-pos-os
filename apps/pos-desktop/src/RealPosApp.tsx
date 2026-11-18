@@ -82,6 +82,8 @@ export function RealPosApp() {
   const [reconciliation, setReconciliation] = useState<CashDrawerReconciliation | null>(null);
   const [actualCashInput, setActualCashInput] = useState('');
   const [showCloseShift, setShowCloseShift] = useState(false);
+  const [showOpenShift, setShowOpenShift] = useState(false);
+  const [openingCashInput, setOpeningCashInput] = useState('0.00');
 
   const t = labels[language];
   const dir = language === 'ar' ? 'rtl' : 'ltr';
@@ -127,12 +129,24 @@ export function RealPosApp() {
     return () => { active = false; window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); printRuntime?.stop(); syncRuntime?.stop(); };
   }, [t.error]);
 
-  async function handleOpenShift() {
+  function handleOpenShiftRequest() {
+    setShiftError('');
+    setOpeningCashInput('0.00');
+    setShowOpenShift(true);
+  }
+
+  async function handleOpenShiftConfirm() {
+    const openingCash = Number(openingCashInput);
+    if (!openingCashInput.trim() || !Number.isFinite(openingCash) || openingCash < 0 || Math.abs(openingCash * 100 - Math.round(openingCash * 100)) > Number.EPSILON) {
+      setShiftError(language === 'ar' ? 'رصيد البداية لازم يكون مبلغ صحيح حتى منزلتين عشريتين.' : 'Opening cash must be a valid amount with at most 2 decimals.');
+      return;
+    }
     setShiftError('');
     try {
       const identity = runtimeIdentity ?? getPosRuntimeIdentity();
-      const opened = openShift({ id: `shift:${crypto.randomUUID()}`, branchId: identity.branchId, deviceId: identity.deviceId, cashierId: identity.cashierId });
+      const opened = openShift({ id: `shift:${crypto.randomUUID()}`, branchId: identity.branchId, deviceId: identity.deviceId, cashierId: identity.cashierId, openingCash });
       setShift(await openLocalShift(db, opened));
+      setShowOpenShift(false);
     } catch (error) { setShiftError(error instanceof Error ? error.message : t.error); }
   }
 
@@ -220,7 +234,7 @@ export function RealPosApp() {
       <section className="real-main">
         <header className="real-topbar">
           <div><span className="real-eyebrow">{t.pos}</span><h1>{t.cashier}</h1></div>
-          <div className="real-top-actions"><button className="language-button" type="button" aria-pressed={theme === 'night'} onClick={() => setTheme((current) => current === 'day' ? 'night' : 'day')}>{theme === 'day' ? (language === 'ar' ? 'الوضع الليلي' : 'Night mode') : (language === 'ar' ? 'الوضع النهاري' : 'Day mode')}</button><button className="language-button" type="button" onClick={() => setLanguage((current) => current === 'ar' ? 'en' : 'ar')}><Icon name="globe" /> {t.language}</button><button className="notification-button" type="button"><Icon name="bell" /><i /></button>{shift ? <button className="shift-control open" type="button" disabled={Boolean(cart.items.length) || checkoutState === 'SAVING'} onClick={() => void handleCloseShiftRequest()}><i /> {t.closeShift}</button> : <button className="shift-control" type="button" onClick={() => void handleOpenShift()}>{t.openShift}</button>}</div>
+          <div className="real-top-actions"><button className="language-button" type="button" aria-pressed={theme === 'night'} onClick={() => setTheme((current) => current === 'day' ? 'night' : 'day')}>{theme === 'day' ? (language === 'ar' ? 'الوضع الليلي' : 'Night mode') : (language === 'ar' ? 'الوضع النهاري' : 'Day mode')}</button><button className="language-button" type="button" onClick={() => setLanguage((current) => current === 'ar' ? 'en' : 'ar')}><Icon name="globe" /> {t.language}</button><button className="notification-button" type="button"><Icon name="bell" /><i /></button>{shift ? <button className="shift-control open" type="button" disabled={Boolean(cart.items.length) || checkoutState === 'SAVING'} onClick={() => void handleCloseShiftRequest()}><i /> {t.closeShift}</button> : <button className="shift-control" type="button" onClick={handleOpenShiftRequest}>{t.openShift}</button>}</div>
         </header>
 
         <div className="real-workspace">
@@ -245,6 +259,25 @@ export function RealPosApp() {
           </aside>
         </div>
       </section>
+
+      {showOpenShift && (
+        <div role="presentation" onClick={(event) => { if (event.currentTarget === event.target) setShowOpenShift(false); }} className="real-modal-backdrop">
+          <section role="dialog" aria-modal="true" aria-labelledby="shift-open-title" className="real-modal">
+            <div className="real-modal-head">
+              <div><span>{t.shifts}</span><h2 id="shift-open-title">{language === 'ar' ? 'فتح وردية جديدة' : 'Open a new shift'}</h2><p>{language === 'ar' ? 'راجع بيانات الجهاز وأدخل النقدية الموجودة في الدرج عند بداية الوردية.' : 'Confirm the workstation and enter the cash physically in the drawer.'}</p></div>
+              <button type="button" onClick={() => setShowOpenShift(false)} aria-label={t.cancel}>×</button>
+            </div>
+            <div className="real-shift-identity">
+              <div><span>{language === 'ar' ? 'الفرع' : 'Branch'}</span><strong>{runtimeIdentity?.branchId ?? '—'}</strong></div>
+              <div><span>{language === 'ar' ? 'الجهاز' : 'Device'}</span><strong>{runtimeIdentity?.deviceId ?? '—'}</strong></div>
+              <div><span>{language === 'ar' ? 'الكاشير' : 'Cashier'}</span><strong>{runtimeIdentity?.displayName ?? runtimeIdentity?.cashierId ?? '—'}</strong></div>
+            </div>
+            <label className="real-modal-field"><span>{language === 'ar' ? 'النقدية الافتتاحية (ج.م)' : 'Opening cash (EGP)'}</span><input autoFocus inputMode="decimal" value={openingCashInput} onChange={(event) => setOpeningCashInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void handleOpenShiftConfirm(); }} /></label>
+            {shiftError && <div className="real-message error">{shiftError}</div>}
+            <div className="real-modal-actions"><button type="button" onClick={() => setShowOpenShift(false)}>{t.cancel}</button><button type="button" onClick={() => void handleOpenShiftConfirm()}>{language === 'ar' ? 'تأكيد وفتح الوردية' : 'Confirm & open shift'}</button></div>
+          </section>
+        </div>
+      )}
 
       {showCloseShift && reconciliation && (
         <div role="presentation" onClick={(event) => { if (event.currentTarget === event.target) setShowCloseShift(false); }} style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(0,0,0,0.55)' }}>
