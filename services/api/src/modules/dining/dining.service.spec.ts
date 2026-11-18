@@ -21,7 +21,7 @@ function setup(tickets: Array<{ id: string; status: string; version: number; sta
   const tx = {
     $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(1),
     diningTable: {
-      findFirst: jest.fn().mockResolvedValue({
+      findFirst: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({
         id: 'table-1',
         branchId: 'branch-1',
         status: 'OCCUPIED',
@@ -29,13 +29,13 @@ function setup(tickets: Array<{ id: string; status: string; version: number; sta
         version: 3,
         currentOrder: { id: 'order-1', status: 'CANCELLED', orderNumber: 'B01-0001' },
       }),
-      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      updateMany: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ count: 1 }),
     },
     kitchenTicket: {
-      findMany: jest.fn().mockResolvedValue(tickets),
+      findMany: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue(tickets),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
-    orderEvent: { create: jest.fn().mockResolvedValue({}) },
+    orderEvent: { create: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({}) },
   } as any;
   const prisma = {
     $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
