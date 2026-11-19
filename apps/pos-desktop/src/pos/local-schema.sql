@@ -27,6 +27,12 @@ CREATE TABLE IF NOT EXISTS products (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS product_kitchen_routing (
+  product_id TEXT PRIMARY KEY,
+  kitchen_station TEXT NOT NULL CHECK(kitchen_station IN ('KITCHEN','BEVERAGE','PACKING')),
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY,
   order_number TEXT NOT NULL UNIQUE,
