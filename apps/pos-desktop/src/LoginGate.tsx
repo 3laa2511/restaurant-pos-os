@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { clearDesktopSession, getDesktopSession, loginDesktop } from './pos/auth-client.js';
 import type { WorkspaceCode } from './pos/auth-client.js';
 import './login-gate.css';
+import { BrowserPreview } from './BrowserPreview.js';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
 const DEFAULT_BRANCH = (import.meta.env.VITE_BRANCH_ID as string | undefined) ?? 'branch-01';
@@ -21,6 +22,7 @@ const WORKSPACES: readonly { code: WorkspaceCode; title: string; description: st
 ];
 
 export function LoginGate({ children }: { children: ReactNode }) {
+  const previewMode = new URLSearchParams(window.location.search).get('preview') === '1';
   const existing = useMemo(() => getDesktopSession(), []);
   const [session, setSession] = useState(existing);
   const [workspace, setWorkspace] = useState<WorkspaceCode>('POS');
@@ -33,6 +35,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
   const branchDeviceRequired = workspace === 'POS' || workspace === 'KITCHEN' || workspace === 'DISPATCH' || workspace === 'SETTINGS';
   const deviceRequired = workspace === 'POS' || workspace === 'KITCHEN' || workspace === 'DISPATCH';
 
+  if (previewMode) return <BrowserPreview />;
   if (session) return <>{children}</>;
 
   async function submit(event: FormEvent) {
