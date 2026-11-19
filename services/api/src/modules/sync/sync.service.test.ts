@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import type { AuthContext } from '../auth/authorization.types.js';
+import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { SyncService } from './sync.service.js';
 
 const envelope = {
@@ -51,7 +52,103 @@ function createPrismaMock() {
   };
 }
 
+function createShiftSyncMock(initialShift: any = null) {
+  const records = new Map<string, any>();
+  const created: Record<string, any[]> = { shifts: [], movements: [], audits: [] };
+  let shift = initialShift;
+  const tx: any = {
+    $executeRaw: async () => 1,
+    branch: { findFirst: async ({ where }: any) => where.id === 'BR01' && where.tenantId === 'tenant-1' ? { id: 'BR01' } : null },
+    device: { findFirst: async ({ where }: any) => where.id === 'POS01' ? { id: 'POS01', branchId: 'BR01', status: 'ACTIVE', name: 'POS 01' } : null },
+    shift: {
+      findFirst: async ({ where }: any) => {
+        if (where.id) return shift?.id === where.id ? shift : null;
+        return shift?.status === 'OPEN' ? shift : null;
+      },
+      create: async ({ data }: any) => { shift = data; created.shifts.push(data); return data; },
+      updateMany: async ({ where, data }: any) => {
+        if (shift?.id !== where.id || shift.status !== 'OPEN') return { count: 0 };
+        shift = { ...shift, ...data };
+        return { count: 1 };
+      },
+    },
+    cashDrawer: { upsert: async () => ({ id: 'drawer-1', branchId: 'BR01' }) },
+    cashDrawerMovement: {
+      create: async ({ data }: any) => { created.movements.push(data); return data; },
+      findMany: async () => [{ amount: '100.00', direction: 'IN' }, { amount: '20.00', direction: 'OUT' }],
+    },
+    auditLog: { create: async ({ data }: any) => { created.audits.push(data); return data; } },
+    syncOperation: {
+      findUnique: async ({ where }: any) => records.get(where.idempotencyKey) ?? null,
+      create: async ({ data }: any) => { records.set(data.idempotencyKey, data); return data; },
+      findMany: async () => [...records.values()].filter((record) => record.status === 'RECEIVED'),
+    },
+  };
+  return {
+    prisma: { $transaction: async (callback: (client: any) => Promise<unknown>) => callback(tx) },
+    tx,
+    created,
+    getShift: () => shift,
+    records,
+  };
+}
+
 describe('SyncService', () => {
+  it('applies an offline shift-open operation using the device-created shift id', async () => {
+    const { prisma, tx, created, records } = createShiftSyncMock();
+    const service = new SyncService(prisma as never, accountingMock as never);
+    const shiftEnvelope = {
+      ...envelope,
+      id: 'device-shift-open-1',
+      operation: 'SHIFT' as const,
+      entityType: 'SHIFT',
+      entityId: 'shift-1',
+      idempotencyKey: 'device-1:shift-open:shift-1',
+      payload: { action: 'OPEN', shiftId: 'shift-1', openingCash: 100, createdAt: envelope.occurredAt },
+    };
+    const result = await service.submit({ ...authContext, permissions: [PERMISSIONS.SHIFT_OPEN] }, shiftEnvelope);
+    expect(result.status).toBe('APPLIED');
+    expect(tx.shift.create).toBeDefined();
+    expect(created.shifts[0]).toMatchObject({ id: 'shift-1', branchId: 'BR01', userId: 'user-1', deviceId: 'POS01', openingCash: '100.00', status: 'OPEN' });
+    expect(created.movements[0]).toMatchObject({ shiftId: 'shift-1', type: 'OPENING_FLOAT', amount: '100.00' });
+    expect(created.audits[0].action).toBe('SHIFT_OPENED');
+    expect(records.get(shiftEnvelope.idempotencyKey)?.status).toBe('APPLIED');
+  });
+
+  it('applies an offline shift-close operation and records server-calculated variance', async () => {
+    const initialShift = { id: 'shift-1', branchId: 'BR01', userId: 'user-1', deviceId: 'POS01', status: 'OPEN', openingCash: '100.00' };
+    const { prisma, created, getShift } = createShiftSyncMock(initialShift);
+    const service = new SyncService(prisma as never, accountingMock as never);
+    const shiftEnvelope = {
+      ...envelope,
+      id: 'device-shift-close-1',
+      operation: 'SHIFT' as const,
+      entityType: 'SHIFT',
+      entityId: 'shift-1',
+      idempotencyKey: 'device-1:shift-close:shift-1',
+      clientSequence: 2,
+      payload: { action: 'CLOSE', shiftId: 'shift-1', closingCash: 90, createdAt: envelope.occurredAt },
+    };
+    const result = await service.submit({ ...authContext, permissions: [PERMISSIONS.SHIFT_CLOSE] }, shiftEnvelope);
+    expect(result.status).toBe('APPLIED');
+    expect(getShift()).toMatchObject({ status: 'CLOSED', closingCash: '90.00', closedAt: new Date(envelope.occurredAt) });
+    expect(created.audits.map((audit) => audit.action)).toEqual(['SHIFT_CLOSED', 'SHIFT_VARIANCE']);
+    expect(created.audits[0].metadata).toMatchObject({ expectedCash: 80, actualCash: 90, variance: 10 });
+  });
+
+  it('requires the matching shift permission for offline lifecycle operations', async () => {
+    const { prisma } = createShiftSyncMock();
+    const service = new SyncService(prisma as never, accountingMock as never);
+    const shiftEnvelope = {
+      ...envelope,
+      operation: 'SHIFT' as const,
+      entityType: 'SHIFT',
+      entityId: 'shift-1',
+      payload: { action: 'OPEN', shiftId: 'shift-1', openingCash: 100, createdAt: envelope.occurredAt },
+    };
+    await expect(service.submit(authContext, shiftEnvelope)).rejects.toThrow('permission');
+  });
+
   it('rejects legacy CREATE operations and persists a durable rejection', async () => {
     const prisma = createPrismaMock();
     const service = new SyncService(prisma as never, accountingMock as never);
