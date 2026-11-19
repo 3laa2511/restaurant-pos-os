@@ -248,6 +248,36 @@ describe('SyncService', () => {
       'Forbidden: device access denied',
     );
   });
+  it('rejects offline cash checkout when received cash is below the order total', async () => {
+    const prisma = createPrismaMock();
+    const service = new SyncService(prisma as never, accountingMock as never);
+    const checkout = {
+      ...envelope,
+      operation: 'CHECKOUT' as const,
+      entityType: 'ORDER',
+      entityId: 'order-cash-short-1',
+      payload: {
+        id: 'order-cash-short-1',
+        orderNumber: 'BR01-002',
+        branchId: 'BR01',
+        deviceId: 'POS01',
+        cashierId: 'user-1',
+        type: 'TAKEAWAY',
+        status: 'CONFIRMED',
+        items: [{ productId: 'product-1', nameAr: 'منتج', nameEn: 'Product', sku: 'P-1', unitPrice: 100, quantity: 1, note: null }],
+        subtotal: 100,
+        discount: 0,
+        tax: 0,
+        serviceFee: 0,
+        deliveryFee: 0,
+        total: 100,
+        createdAt: '2026-09-02T08:01:00.000Z',
+        payment: { paymentId: 'payment-cash-short-1', orderId: 'order-cash-short-1', shiftId: 'shift-1', method: 'CASH', amount: 100, receivedCash: 99 },
+      },
+    };
+    await expect(service.submit(authContext, checkout)).rejects.toThrow('Insufficient cash received');
+  });
+
   it('rejects offline card checkout until a verified payment processor is configured', async () => {
     const prisma = createPrismaMock();
     const service = new SyncService(prisma as never, accountingMock as never);
