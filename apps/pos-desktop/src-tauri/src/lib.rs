@@ -231,6 +231,8 @@ fn db_transaction(state: State<'_, DbState>, statements: Vec<SqlStatement>) -> R
 fn printer_name_for_station(station: &str) -> Option<String> {
     let key = match station {
         "KITCHEN" => "POS_PRINTER_KITCHEN",
+        "BEVERAGE" => "POS_PRINTER_BEVERAGE",
+        "PACKING" => "POS_PRINTER_PACKING",
         "BAR" => "POS_PRINTER_BAR",
         "CUSTOMER" => "POS_PRINTER_CUSTOMER",
         _ => "POS_PRINTER",
