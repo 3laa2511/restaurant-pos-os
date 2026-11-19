@@ -54,7 +54,7 @@ function createPrismaMock() {
 
 function createShiftSyncMock(initialShift: any = null) {
   const records = new Map<string, any>();
-  const created: Record<string, any[]> = { shifts: [], movements: [], audits: [] };
+  const created: { shifts: any[]; movements: any[]; audits: any[] } = { shifts: [], movements: [], audits: [] };
   let shift = initialShift;
   const tx: any = {
     $executeRaw: async () => 1,
