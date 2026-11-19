@@ -64,6 +64,8 @@ describe('KitchenSyncService.submit', () => {
     expect(result.status).toBe('APPLIED');
     expect(kitchen.transitionTicket).toHaveBeenCalledWith(context, 'ticket-1', 'READY', undefined, 3);
     expect(prisma.syncOperation.create).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+    expect(prisma.$transaction).toHaveBeenCalled();
     expect(prisma.syncOperation.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'APPLIED', result }) }));
   });
 
