@@ -34,10 +34,11 @@ test('existing local databases gain product kitchen routing without altering pro
     FROM products p LEFT JOIN product_kitchen_routing r ON r.product_id=p.id
     ORDER BY p.id
   `).all();
-  assert.deepEqual(rows, [
-    { id: 'burger', kitchen_station: 'KITCHEN' },
-    { id: 'cola', kitchen_station: 'BEVERAGE' },
-  ]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].id, 'burger');
+  assert.equal(rows[0].kitchen_station, 'KITCHEN');
+  assert.equal(rows[1].id, 'cola');
+  assert.equal(rows[1].kitchen_station, 'BEVERAGE');
   db.close();
 });
 
