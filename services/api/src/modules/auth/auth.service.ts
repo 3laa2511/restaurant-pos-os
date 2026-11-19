@@ -299,25 +299,20 @@ export class AuthService {
     });
   }
 
-  async logout(sessionId: string, actorUserId: string): Promise<void> {
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
-      select: { id: true, tenantId: true, branchId: true, userId: true, revokedAt: true },
-    });
-    if (!session || session.userId !== actorUserId || session.revokedAt !== null) return;
+  async logout(context: AuthContext): Promise<void> {
+    await withRlsContext(this.prisma, context, async (tx) => {
+      const session = await tx.session.findUnique({
+        where: { id: context.sessionId },
+        select: { id: true, tenantId: true, branchId: true, userId: true, revokedAt: true },
+      });
+      if (!session || session.userId !== context.userId || session.revokedAt !== null) return;
 
-    await withRlsContext(this.prisma, {
-      tenantId: session.tenantId,
-      branchId: session.branchId,
-      userId: actorUserId,
-      sessionId: session.id,
-    }, async (tx) => {
       await tx.session.updateMany({
-        where: { id: sessionId, userId: actorUserId, revokedAt: null },
+        where: { id: context.sessionId, userId: context.userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
       await tx.auditLog.create({
-        data: { actorUserId, branchId: session.branchId, action: 'AUTH_LOGOUT', entityType: 'SESSION', entityId: sessionId },
+        data: { actorUserId: context.userId, branchId: context.branchId, action: 'AUTH_LOGOUT', entityType: 'SESSION', entityId: context.sessionId },
       });
     });
   }
