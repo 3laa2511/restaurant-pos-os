@@ -6,6 +6,7 @@ export interface PaymentInput {
   shiftId: string;
   method: PaymentMethod;
   amount: number;
+  receivedCash?: number;
   reference?: string | null;
 }
 
