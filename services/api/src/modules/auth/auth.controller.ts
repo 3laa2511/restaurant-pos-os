@@ -32,8 +32,8 @@ export class AuthController {
   @UseGuards(AuthGuard)
   @Post('logout')
   async logout(@Req() request: AuthenticatedRequest, @CurrentAuth() context: AuthContext) {
-    if (!request.sessionId) throw new Error('Session context is missing');
-    await this.auth.logout(request.sessionId, context.userId);
+    if (!request.sessionId || request.sessionId !== context.sessionId) throw new Error('Session context is missing');
+    await this.auth.logout(context);
     return { success: true };
   }
 }
