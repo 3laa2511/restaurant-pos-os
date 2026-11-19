@@ -85,6 +85,38 @@ test('unsettled sync operations block shift close until every operation is synce
   database.close();
 });
 
+test('offline shift open and close are durable ordered outbox operations', () => {
+  const database = db();
+  insertShift(database, 'shift-1');
+  const insertOperation = database.prepare(`
+    INSERT INTO sync_queue (
+      id, entity_type, entity_id, operation, idempotency_key, client_sequence,
+      payload, status, attempts, created_at, updated_at
+    ) VALUES (?, 'SHIFT', 'shift-1', 'SHIFT', ?, ?, ?, 'PENDING', 0, ?, ?)
+  `);
+  insertOperation.run('shift-open-sync', 'shift:open:shift-1', 1, JSON.stringify({ action: 'OPEN', shiftId: 'shift-1', openingCash: 100, createdAt: '2026-01-01T10:00:00Z' }), '2026-01-01T10:00:00Z', '2026-01-01T10:00:00Z');
+  insertOperation.run('shift-close-sync', 'shift:close:shift-1', 3, JSON.stringify({ action: 'CLOSE', shiftId: 'shift-1', closingCash: 95, createdAt: '2026-01-01T18:00:00Z' }), '2026-01-01T18:00:00Z', '2026-01-01T18:00:00Z');
+  database.prepare(`
+    INSERT INTO sync_queue (
+      id, entity_type, entity_id, operation, idempotency_key, client_sequence,
+      payload, status, attempts, created_at, updated_at
+    ) VALUES ('checkout-sync', 'ORDER', 'order-1', 'CHECKOUT', 'checkout-idempotency-key', 2, '{}', 'PENDING', 0, '2026-01-01T12:00:00Z', '2026-01-01T12:00:00Z')
+  `).run();
+
+  const queued = database.prepare(`
+    SELECT operation, entity_type, client_sequence, payload
+    FROM sync_queue ORDER BY client_sequence ASC
+  `).all();
+  assert.deepEqual(queued.map((row) => [row.operation, row.entity_type, row.client_sequence]), [
+    ['SHIFT', 'SHIFT', 1],
+    ['CHECKOUT', 'ORDER', 2],
+    ['SHIFT', 'SHIFT', 3],
+  ]);
+  assert.equal(JSON.parse(queued[0].payload).action, 'OPEN');
+  assert.equal(JSON.parse(queued[2].payload).action, 'CLOSE');
+  database.close();
+});
+
 test('closing shift records actual, expected and variance consistently', () => {
   const database = db();
   insertShift(database, 'shift-1');
