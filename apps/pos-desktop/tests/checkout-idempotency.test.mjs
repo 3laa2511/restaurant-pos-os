@@ -19,6 +19,7 @@ const payment = {
   shiftId: 'shift-1',
   method: 'CASH',
   amount: 125,
+  receivedCash: 130,
   reference: null,
 };
 const stored = { ...order, payment };
@@ -44,6 +45,7 @@ test('rejects changed payment id, shift, method, amount, or reference on retry',
     { ...payment, shiftId: 'shift-2' },
     { ...payment, method: 'CARD' },
     { ...payment, amount: 124 },
+    { ...payment, receivedCash: 140 },
     { ...payment, reference: 'terminal-ref-1' },
   ];
   for (const changed of changedPayments) {
