@@ -13,8 +13,14 @@ export function validatePayment(input) {
     throw new Error('Order and shift are required');
   }
   assertMoney(input.amount, 'Payment amount');
-  if (input.method !== 'CASH' && !input.reference?.trim()) {
-    throw new Error('A reference is required for non-cash payments');
+  if (input.method === 'CASH') {
+    if (input.receivedCash !== undefined) {
+      assertMoney(input.receivedCash, 'Cash received', true);
+      if (input.receivedCash < input.amount) throw new Error('Insufficient cash received');
+    }
+  } else {
+    if (input.receivedCash !== undefined) throw new Error('Cash received is only valid for cash payments');
+    if (!input.reference?.trim()) throw new Error('A reference is required for non-cash payments');
   }
 }
 
