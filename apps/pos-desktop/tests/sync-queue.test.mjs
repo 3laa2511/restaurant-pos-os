@@ -32,11 +32,14 @@ function seedQueue(db, count = 2) {
 function claim(db, workerId, limit = 1, maxAttempts = 8, leaseSeconds = 30) {
   db.prepare(`
     UPDATE sync_queue
-    SET status = 'PENDING', locked_by = NULL, locked_until = NULL, updated_at = datetime('now')
+    SET status = CASE WHEN attempts + 1 >= ? THEN 'FAILED' ELSE 'PENDING' END,
+        attempts = attempts + 1,
+        last_error = 'Sync lease expired before completion',
+        locked_by = NULL, locked_until = NULL, updated_at = datetime('now')
     WHERE status = 'SYNCING'
       AND locked_until IS NOT NULL
       AND locked_until <= datetime('now')
-  `).run();
+  `).run(maxAttempts);
 
   db.prepare(`
     UPDATE sync_queue
@@ -98,6 +101,28 @@ test('expired lease is recovered by the next worker', () => {
   }
 });
 
+test('expired leases consume retry budget and exhausted leases become failed', () => {
+  const { db, path } = openDatabase('expired-attempts');
+  try {
+    seedQueue(db, 2);
+    claim(db, 'worker-a', 2, 3);
+    db.prepare(`UPDATE sync_queue SET locked_until = datetime('now', '-1 second') WHERE id IN ('item-1', 'item-2')`).run();
+    db.prepare(`UPDATE sync_queue SET attempts = 2 WHERE id = 'item-2'`).run();
+
+    const recovered = claim(db, 'worker-b', 2, 3);
+    assert.deepEqual(recovered.map((row) => row.id), ['item-1']);
+
+    const states = db.prepare(`SELECT id, status, attempts, last_error FROM sync_queue ORDER BY id`).all().map((row) => ({ ...row }));
+    assert.deepEqual(states, [
+      { id: 'item-1', status: 'SYNCING', attempts: 1, last_error: 'Sync lease expired before completion' },
+      { id: 'item-2', status: 'FAILED', attempts: 3, last_error: 'Sync lease expired before completion' },
+    ]);
+  } finally {
+    db.close();
+    rmSync(path, { force: true });
+  }
+});
+
 test('stale worker cannot complete a lease it no longer owns', () => {
   const { db, path } = openDatabase('fencing');
   try {
@@ -135,6 +160,41 @@ test('failed attempts remain bounded by maxAttempts', () => {
     seedQueue(db, 1);
     db.prepare(`UPDATE sync_queue SET status = 'FAILED', attempts = 8 WHERE id = 'item-1'`).run();
     assert.deepEqual(claim(db, 'worker-a', 1, 8), []);
+  } finally {
+    db.close();
+    rmSync(path, { force: true });
+  }
+});
+
+
+test('authentication pause releases a lease without consuming retry budget or changing order', () => {
+  const { db, path } = openDatabase('authentication');
+  try {
+    seedQueue(db, 2);
+    assert.deepEqual(claim(db, 'worker-a', 1).map((row) => row.id), ['item-1']);
+
+    const release = db.prepare(`
+      UPDATE sync_queue
+      SET status = 'PENDING', locked_by = NULL, locked_until = NULL,
+          last_error = ?, updated_at = datetime('now')
+      WHERE id = ? AND status = 'SYNCING' AND locked_by = ?
+    `).run('Sync session expired; sign in again to continue syncing', 'item-1', 'worker-a');
+
+    assert.equal(release.changes, 1);
+    const item = db.prepare(`
+      SELECT id, idempotency_key, client_sequence, status, attempts, locked_by
+      FROM sync_queue WHERE id = 'item-1'
+    `).get();
+    assert.deepEqual({ ...item }, {
+      id: 'item-1',
+      idempotency_key: 'key-1',
+      client_sequence: 1,
+      status: 'PENDING',
+      attempts: 0,
+      locked_by: null,
+    });
+
+    assert.deepEqual(claim(db, 'worker-b', 2).map((row) => row.id), ['item-1', 'item-2']);
   } finally {
     db.close();
     rmSync(path, { force: true });

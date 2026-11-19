@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
+import { withRlsContext } from '../../database/rls-context.js';
 import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS, type PermissionCode } from '../auth/rbac.constants.js';
 
@@ -101,21 +102,26 @@ export class RiskPolicyAdminService {
 
   async list(context: AuthContext, branchId?: string, action?: string, includeDisabled = true) {
     this.authorize(context, branchId);
-    return this.prisma.riskPolicy.findMany({
+    const tenantId = context.tenantId?.trim();
+    if (!tenantId) throw new Error('Risk policy tenant context is required');
+    return withRlsContext(this.prisma, context, (tx) => tx.riskPolicy.findMany({
       where: {
+        tenantId,
         ...(branchId ? { branchId } : context.branchId ? { branchId: context.branchId } : {}),
         ...(action?.trim() ? { action: action.trim() } : {}),
         ...(includeDisabled ? {} : { enabled: true }),
       },
       orderBy: [{ action: 'asc' }, { branchId: 'asc' }, { effectiveFrom: 'desc' }],
-    });
+    }));
   }
 
   async create(context: AuthContext, input: RiskPolicyWriteInput) {
     this.authorize(context, input.branchId);
     const data = this.normalize(input);
-    return this.prisma.$transaction(async (tx) => {
-      const created = await tx.riskPolicy.create({ data });
+    const tenantId = context.tenantId?.trim();
+    if (!tenantId) throw new Error('Risk policy tenant context is required');
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const created = await tx.riskPolicy.create({ data: { ...data, tenantId } });
       await tx.auditLog.create({
         data: {
           actorUserId: context.userId,
@@ -131,11 +137,14 @@ export class RiskPolicyAdminService {
   }
 
   async update(context: AuthContext, id: string, input: RiskPolicyWriteInput) {
-    const existing = await this.prisma.riskPolicy.findUnique({ where: { id } });
-    if (!existing) throw new Error('Risk policy not found');
-    this.authorize(context, input.branchId ?? existing.branchId);
-    const data = this.normalize(input, existing.effectiveFrom, existing.effectiveTo);
-    return this.prisma.$transaction(async (tx) => {
+    const tenantId = context.tenantId?.trim();
+    if (!tenantId) throw new Error('Risk policy tenant context is required');
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const existing = await tx.riskPolicy.findFirst({ where: { id, tenantId } });
+      if (!existing) throw new Error('Risk policy not found');
+      this.authorize(context, input.branchId ?? existing.branchId);
+      const data = this.normalize(input, existing.effectiveFrom, existing.effectiveTo);
+
       const updated = await tx.riskPolicy.update({ where: { id }, data });
       await tx.auditLog.create({
         data: {
@@ -155,10 +164,13 @@ export class RiskPolicyAdminService {
   }
 
   async setEnabled(context: AuthContext, id: string, enabled: boolean) {
-    const existing = await this.prisma.riskPolicy.findUnique({ where: { id } });
-    if (!existing) throw new Error('Risk policy not found');
-    this.authorize(context, existing.branchId);
-    return this.prisma.$transaction(async (tx) => {
+    const tenantId = context.tenantId?.trim();
+    if (!tenantId) throw new Error('Risk policy tenant context is required');
+    return withRlsContext(this.prisma, context, async (tx) => {
+      const existing = await tx.riskPolicy.findFirst({ where: { id, tenantId } });
+      if (!existing) throw new Error('Risk policy not found');
+      this.authorize(context, existing.branchId);
+
       const policy = await tx.riskPolicy.update({ where: { id }, data: { enabled } });
       await tx.auditLog.create({
         data: {

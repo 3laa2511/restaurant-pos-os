@@ -8,6 +8,7 @@ export interface Product {
   price: number;
   categoryId: string;
   active: boolean;
+  kitchenStation?: 'KITCHEN' | 'BEVERAGE' | 'PACKING';
 }
 
 export interface ModifierOption {

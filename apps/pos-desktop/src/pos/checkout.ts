@@ -1,6 +1,6 @@
 import type { Order } from './order.js';
-import type { PaymentInput, PaymentMethod } from '../../../../services/api/src/modules/payments/payment-policy.js';
-import { calculateCashChange, validatePayment } from '../../../../services/api/src/modules/payments/payment-policy.js';
+import type { PaymentInput, PaymentMethod } from '@restaurant-pos/payment-policy';
+import { calculateCashChange, validatePayment } from '@restaurant-pos/payment-policy';
 
 export interface CheckoutRequest {
   order: Order;

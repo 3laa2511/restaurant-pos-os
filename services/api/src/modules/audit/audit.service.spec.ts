@@ -8,8 +8,11 @@ type AsyncMock = jest.Mock<(...args: any[]) => Promise<unknown>>;
 
 const context: AuthContext = {
   userId: 'user-1',
+  tenantId: 'tenant-1',
   branchId: 'branch-1',
   deviceId: 'device-1',
+  sessionId: 'session-1',
+  workspace: 'MANAGEMENT',
   roles: [],
   permissions: [PERMISSIONS.AUDIT_VIEW],
 };
@@ -17,8 +20,12 @@ const context: AuthContext = {
 function buildPrisma() {
   const prisma = {
     auditLog: { findMany: jest.fn() as AsyncMock },
+    $transaction: jest.fn<(...args: any[]) => Promise<unknown>>(),
   };
   prisma.auditLog.findMany.mockResolvedValue([]);
+  prisma.$transaction.mockImplementation(async (callback) =>
+    callback({ $executeRaw: jest.fn<(...args: any[]) => Promise<number>>().mockResolvedValue(4), auditLog: prisma.auditLog } as any),
+  );
   return prisma;
 }
 

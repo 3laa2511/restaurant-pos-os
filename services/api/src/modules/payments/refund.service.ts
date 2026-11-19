@@ -1,8 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
-import { assertBranchAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
+import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
+import { assertBranchAccess, assertPermission, assertTenantScope, resolveBranchScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
+import { AccountingService } from '../accounting/accounting.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { paymentStatusAfterAdjustment, validateRefund, type PaymentAdjustmentType } from './payment-refund-policy.js';
 
@@ -32,13 +35,71 @@ function cents(value: number): number { return Math.round((value + Number.EPSILO
 function money(value: number): number { return cents(value) / 100; }
 function requireText(value: string, field: string): void { if (!value.trim()) throw new Error(`${field} is required`); }
 function isUniqueConstraintError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 'P2002';
+  return error instanceof Prisma.PrismaClientKnownRequestError
+    ? error.code === 'P2002'
+    : typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 'P2002';
+}
+function isSerializationConflict(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
 }
 function jsonValue(value: unknown): ReturnType<typeof JSON.parse> { return JSON.parse(JSON.stringify(value)); }
 
 @Injectable()
 export class RefundService {
-  constructor(private readonly prisma: PrismaService, private readonly audit: AuditService) {}
+  constructor(private readonly prisma: PrismaService, private readonly audit: AuditService, private readonly accounting: AccountingService) {}
+
+  async listRefundablePayments(context: AuthContext, requestedBranchId?: string) {
+    assertPermission(context, PERMISSIONS.PAYMENT_REFUND);
+    const tenantId = assertTenantScope(context);
+    const deviceId = context.deviceId;
+    if (!deviceId) throw new Error('A device-bound session is required for refunds');
+    const branchId = resolveBranchScope(context, requestedBranchId);
+
+    const rows = await withRlsContext(this.prisma, context, (tx) => tx.payment.findMany({
+      where: {
+        method: 'CASH',
+        status: { in: ['PAID', 'PARTIALLY_REFUNDED'] },
+        shift: { deviceId, status: 'OPEN', ...(branchId ? { branchId } : {}) },
+        order: {
+          status: { notIn: ['CANCELLED', 'VOIDED', 'REFUNDED'] },
+          branch: { tenantId, ...(branchId ? { id: branchId } : {}) },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        orderId: true,
+        shiftId: true,
+        amount: true,
+        method: true,
+        status: true,
+        createdAt: true,
+        adjustments: { select: { amount: true } },
+        order: { select: { orderNumber: true, status: true, type: true, branchId: true } },
+      },
+    }));
+
+    return rows.map((payment) => {
+      const amount = money(Number(payment.amount.toString()));
+      const refundedAmount = money(payment.adjustments.reduce((sum, adjustment) => sum + Number(adjustment.amount.toString()), 0));
+      return {
+        paymentId: payment.id,
+        orderId: payment.orderId,
+        orderNumber: payment.order.orderNumber,
+        orderStatus: payment.order.status,
+        orderType: payment.order.type,
+        branchId: payment.order.branchId,
+        shiftId: payment.shiftId,
+        method: payment.method,
+        status: payment.status,
+        amount,
+        refundedAmount,
+        remainingAmount: money(Math.max(0, amount - refundedAmount)),
+        createdAt: payment.createdAt.toISOString(),
+      };
+    }).filter((payment) => payment.remainingAmount > 0);
+  }
 
   async adjustPayment(context: AuthContext, input: PaymentAdjustmentInput): Promise<PaymentAdjustmentResult> {
     assertPermission(context, input.type === 'VOID' ? PERMISSIONS.PAYMENT_VOID : PERMISSIONS.PAYMENT_REFUND);
@@ -50,13 +111,15 @@ export class RefundService {
     if (!Number.isInteger(input.clientSequence) || input.clientSequence < 0) throw new Error('clientSequence must be a non-negative integer');
 
     const requestHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
-    const existing = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+    const existing = await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }));
     if (existing) return this.existingResult(existing.result, existing.requestHash, requestHash, existing.operationId);
 
-    const operationId = randomUUID();
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        const payment = await tx.payment.findUnique({
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const operationId = randomUUID();
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          await setRlsContext(tx, context);
+          const payment = await tx.payment.findUnique({
           where: { id: input.paymentId },
           select: { id: true, orderId: true, shiftId: true, amount: true, method: true, status: true, order: { select: { id: true, branchId: true, status: true } } },
         });
@@ -64,6 +127,7 @@ export class RefundService {
         assertBranchAccess(context, payment.order.branchId);
         if (payment.shiftId !== input.shiftId) throw new Error('Adjustment shift does not match the payment shift');
         if (payment.status !== 'PAID' && payment.status !== 'PARTIALLY_REFUNDED') throw new Error(`Payment cannot be adjusted from status ${payment.status}`);
+        if (payment.method !== 'CASH') throw new Error('Non-cash refunds and voids are disabled until a verified provider adjustment adapter is configured');
         if (input.type === 'VOID' && payment.status !== 'PAID') throw new Error('A partially refunded payment cannot be voided');
         if (payment.order.status === 'CANCELLED' || payment.order.status === 'VOIDED') throw new Error(`Order cannot be financially adjusted from status ${payment.order.status}`);
 
@@ -112,20 +176,23 @@ export class RefundService {
         const eventType = input.type === 'VOID' ? 'PAYMENT_VOIDED' : 'PAYMENT_REFUNDED';
         const eventPayload = { operationId, adjustmentId, paymentId: payment.id, type: input.type, amount: input.amount, reason: input.reason.trim(), reference: input.reference?.trim() || null, paymentStatus: nextPaymentStatus, orderStatus };
         await tx.orderEvent.create({ data: { id: randomUUID(), eventId: randomUUID(), orderId: payment.orderId, type: eventType, actorUserId: context.userId, deviceId: context.deviceId ?? input.deviceId, payload: jsonValue(eventPayload), occurredAt: new Date() } });
+        await this.accounting.postPaymentAdjustment(tx, context, { adjustmentId, branchId: payment.order.branchId, amount: input.amount, method: payment.method, type: input.type });
         const after = { payment: { id: payment.id, amount: money(Number(payment.amount.toString())), status: nextPaymentStatus }, order: { id: payment.orderId, status: orderStatus } };
         await this.audit.recordWithClient(tx, context, { action: eventType, entityType: 'PAYMENT', entityId: payment.id, branchId: payment.order.branchId, deviceId: context.deviceId ?? input.deviceId, reason: input.reason, before, after, metadata: { operationId, adjustmentId, type: input.type, amount: input.amount } });
 
         const result: PaymentAdjustmentResult = { operationId, paymentId: payment.id, orderId: payment.orderId, type: input.type, amount: input.amount, paymentStatus: nextPaymentStatus, orderStatus };
         await tx.syncOperation.create({ data: { id: randomUUID(), operationId, deviceId: input.deviceId, branchId: payment.order.branchId, operation: input.type === 'VOID' ? 'PAYMENT_VOIDED' : 'PAYMENT_REFUNDED', entityType: 'PAYMENT', entityId: payment.id, idempotencyKey: input.idempotencyKey, clientSequence: input.clientSequence, occurredAt: new Date(), payload: jsonValue(input), requestHash, status: 'APPLIED', result: jsonValue(result), updatedAt: new Date() } });
-        return result;
-      });
-    } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        const winner = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-        if (winner) return this.existingResult(winner.result, winner.requestHash, requestHash, winner.operationId);
+          return result;
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          const winner = await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.findUnique({ where: { idempotencyKey: input.idempotencyKey } }));
+          if (winner) return this.existingResult(winner.result, winner.requestHash, requestHash, winner.operationId);
+        }
+        if (!isSerializationConflict(error) || attempt === 2) throw error;
       }
-      throw error;
     }
+    throw new Error('Payment adjustment could not be committed safely');
   }
 
   async refundPayment(context: AuthContext, input: Omit<PaymentAdjustmentInput, 'type'>): Promise<PaymentAdjustmentResult> { return this.adjustPayment(context, { ...input, type: 'REFUND' }); }

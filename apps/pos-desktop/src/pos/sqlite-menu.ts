@@ -26,6 +26,7 @@ type RemoteCategory = {
     name: string;
     nameAr?: string | null;
     price: number;
+    kitchenStation?: 'KITCHEN' | 'BEVERAGE' | 'PACKING';
   }>;
 };
 
@@ -34,8 +35,8 @@ const bootstrap = [
   { id: 'burger-double', nameAr: 'دابل برجر', nameEn: 'Double Burger', sku: 'BRG-002', price: 165, categoryId: 'burger' },
   { id: 'meal-chicken', nameAr: 'وجبة تشيكن', nameEn: 'Chicken Meal', sku: 'ML-001', price: 190, categoryId: 'meals' },
   { id: 'fries', nameAr: 'بطاطس', nameEn: 'Fries', sku: 'ADD-001', price: 45, categoryId: 'addons' },
-  { id: 'cola', nameAr: 'كولا', nameEn: 'Cola', sku: 'DRK-001', price: 35, categoryId: 'drinks' },
-  { id: 'water', nameAr: 'مياه', nameEn: 'Water', sku: 'DRK-002', price: 15, categoryId: 'drinks' },
+  { id: 'cola', nameAr: 'كولا', nameEn: 'Cola', sku: 'DRK-001', price: 35, categoryId: 'drinks', kitchenStation: 'BEVERAGE' },
+  { id: 'water', nameAr: 'مياه', nameEn: 'Water', sku: 'DRK-002', price: 15, categoryId: 'drinks', kitchenStation: 'BEVERAGE' },
 ] satisfies Omit<Product, 'active'>[];
 
 const bootstrapCategories: MenuCategory[] = [
@@ -55,13 +56,14 @@ function mapRows(rows: Array<Record<string, unknown>>): Product[] {
     categoryId: String(row.category_id),
     price: Number(row.price),
     active: Number(row.active) === 1,
+    kitchenStation: row.kitchen_station === 'BEVERAGE' || row.kitchen_station === 'PACKING' ? row.kitchen_station : 'KITCHEN',
   }));
 }
 
 async function readLocal(db: LocalDatabaseBridge, source: LocalMenu['source']): Promise<LocalMenu> {
   const [categories, products] = await Promise.all([
     db.query<Record<string, unknown>>('SELECT id, name_ar, name_en, sort_order FROM menu_categories WHERE active = 1 ORDER BY sort_order ASC'),
-    db.query<Record<string, unknown>>('SELECT id, sku, name_ar, name_en, category_id, price, active FROM products WHERE active = 1 ORDER BY name_ar ASC'),
+    db.query<Record<string, unknown>>('SELECT p.id, p.sku, p.name_ar, p.name_en, p.category_id, p.price, p.active, COALESCE(r.kitchen_station, \'KITCHEN\') AS kitchen_station FROM products p LEFT JOIN product_kitchen_routing r ON r.product_id = p.id WHERE p.active = 1 ORDER BY p.name_ar ASC'),
   ]);
 
   const mappedCategories = categories.map((row) => ({ id: String(row.id), nameAr: String(row.name_ar), nameEn: String(row.name_en), sortOrder: Number(row.sort_order) }));
@@ -72,6 +74,7 @@ async function readLocal(db: LocalDatabaseBridge, source: LocalMenu['source']): 
 async function persistMenu(db: LocalDatabaseBridge, categories: MenuCategory[], products: Product[]): Promise<void> {
   const now = new Date().toISOString();
   const statements: Array<{ sql: string; params: unknown[] }> = [
+    { sql: 'DELETE FROM product_kitchen_routing', params: [] },
     { sql: 'DELETE FROM products', params: [] },
     { sql: 'DELETE FROM menu_categories', params: [] },
   ];
@@ -86,6 +89,10 @@ async function persistMenu(db: LocalDatabaseBridge, categories: MenuCategory[], 
     statements.push({
       sql: 'INSERT INTO products(id, sku, name_ar, name_en, category_id, price, active, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       params: [product.id, product.sku, product.nameAr, product.nameEn, product.categoryId, product.price, product.active ? 1 : 0, now],
+    });
+    statements.push({
+      sql: 'INSERT INTO product_kitchen_routing(product_id, kitchen_station, updated_at) VALUES (?, ?, ?)',
+      params: [product.id, product.kitchenStation ?? 'KITCHEN', now],
     });
   }
   await db.transaction(statements);
@@ -119,6 +126,7 @@ export async function loadMenu(db: LocalDatabaseBridge, apiBaseUrl: string): Pro
       categoryId: category.id,
       price: Number(product.price),
       active: true,
+      kitchenStation: product.kitchenStation ?? 'KITCHEN',
     })));
 
     if (products.length > 0) {

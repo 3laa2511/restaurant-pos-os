@@ -1,4 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
+import { getDesktopSession } from './pos/auth-client.js';
+import { DiningWorkspace } from './workspaces/DiningWorkspace.js';
+import { RefundWorkspace } from './workspaces/RefundWorkspace.js';
+import { KitchenDisplay } from './KitchenDisplay.js';
 import { useEffect, useMemo, useState } from 'react';
 import { addProduct, calculateCart, emptyCart, removeProduct, setQuantity } from './pos/cart.js';
 import { confirmOrder, createOrder } from './pos/order.js';
@@ -9,8 +13,9 @@ import { createSqliteSyncRepository } from './pos/sync-repository.js';
 import { createHttpSyncTransport, createSyncWorkerRuntime } from './pos/sync-worker.js';
 import { persistCompletedCheckout } from './pos/sqlite-checkout.js';
 import { nextDeviceSequence } from './pos/sqlite-sequence.js';
-import { closeLocalShift, getOpenShift, openLocalShift } from './pos/sqlite-shift.js';
+import { closeLocalShift, countUnsettledSyncOperations, getOpenShift, openLocalShift } from './pos/sqlite-shift.js';
 import { reconcileLocalCashDrawer } from './pos/sqlite-cash-drawer.js';
+import { listRecentLocalOrders } from './pos/sqlite-orders.js';
 import { loadMenu, type LocalMenu } from './pos/sqlite-menu.js';
 import { openShift, requestShiftClose } from './pos/shift.js';
 import { formatOrderNumber } from './pos/order-number.js';
@@ -63,6 +68,7 @@ async function createCheckoutIdentity(identity: PosRuntimeIdentity): Promise<Che
 
 export function RealPosApp() {
   const [language, setLanguage] = useState<Language>('ar');
+  const [theme, setTheme] = useState<'day' | 'night'>('day');
   const [runtimeIdentity, setRuntimeIdentity] = useState<PosRuntimeIdentity | null>(null);
   const [menu, setMenu] = useState<LocalMenu | null>(null);
   const [cart, setCart] = useState<CartState>(emptyCart());
@@ -80,6 +86,12 @@ export function RealPosApp() {
   const [reconciliation, setReconciliation] = useState<CashDrawerReconciliation | null>(null);
   const [actualCashInput, setActualCashInput] = useState('');
   const [showCloseShift, setShowCloseShift] = useState(false);
+  const [showOpenShift, setShowOpenShift] = useState(false);
+  const [openingCashInput, setOpeningCashInput] = useState('0.00');
+  const [showCheckoutConfirmation, setShowCheckoutConfirmation] = useState(false);
+  const [showDiningWorkspace, setShowDiningWorkspace] = useState(false);
+  const [showRefundWorkspace, setShowRefundWorkspace] = useState(false);
+  const [showKitchenWorkspace, setShowKitchenWorkspace] = useState(false);
 
   const t = labels[language];
   const dir = language === 'ar' ? 'rtl' : 'ltr';
@@ -94,8 +106,7 @@ export function RealPosApp() {
   const previewVariance = reconciliation && Number.isFinite(actualCash) ? Math.round((actualCash - reconciliation.expectedCash) * 100) / 100 : null;
 
   async function refreshRecentOrders() {
-    const rows = await db.query<RecentOrder>('SELECT order_number, type, total, status, created_at FROM orders ORDER BY created_at DESC LIMIT 8');
-    setRecentOrders(rows.map((row) => ({ ...row, total: Number(row.total) })));
+    setRecentOrders(await listRecentLocalOrders(db));
   }
 
   useEffect(() => {
@@ -126,12 +137,24 @@ export function RealPosApp() {
     return () => { active = false; window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); printRuntime?.stop(); syncRuntime?.stop(); };
   }, [t.error]);
 
-  async function handleOpenShift() {
+  function handleOpenShiftRequest() {
+    setShiftError('');
+    setOpeningCashInput('0.00');
+    setShowOpenShift(true);
+  }
+
+  async function handleOpenShiftConfirm() {
+    const openingCash = Number(openingCashInput);
+    if (!openingCashInput.trim() || !Number.isFinite(openingCash) || openingCash < 0 || Math.abs(openingCash * 100 - Math.round(openingCash * 100)) > Number.EPSILON) {
+      setShiftError(language === 'ar' ? 'رصيد البداية لازم يكون مبلغ صحيح حتى منزلتين عشريتين.' : 'Opening cash must be a valid amount with at most 2 decimals.');
+      return;
+    }
     setShiftError('');
     try {
       const identity = runtimeIdentity ?? getPosRuntimeIdentity();
-      const opened = openShift({ id: `shift:${crypto.randomUUID()}`, branchId: identity.branchId, deviceId: identity.deviceId, cashierId: identity.cashierId });
+      const opened = openShift({ id: `shift:${crypto.randomUUID()}`, branchId: identity.branchId, deviceId: identity.deviceId, cashierId: identity.cashierId, openingCash });
       setShift(await openLocalShift(db, opened));
+      setShowOpenShift(false);
     } catch (error) { setShiftError(error instanceof Error ? error.message : t.error); }
   }
 
@@ -139,6 +162,13 @@ export function RealPosApp() {
     if (!shift || cart.items.length || checkoutState === 'SAVING') return;
     setShiftError('');
     try {
+      const unsettledSyncCount = await countUnsettledSyncOperations(db);
+      if (unsettledSyncCount > 0) {
+        setShiftError(language === 'ar'
+          ? `لا يمكن إغلاق الوردية قبل اكتمال المزامنة أو مراجعة العمليات المرفوضة. العمليات غير المحسومة: ${unsettledSyncCount}.`
+          : `Shift close is blocked until sync completes or rejected operations are reviewed. Unsettled operations: ${unsettledSyncCount}.`);
+        return;
+      }
       const current = await reconcileLocalCashDrawer(db, shift.id);
       setReconciliation(current);
       setActualCashInput(current.expectedCash.toFixed(2));
@@ -167,19 +197,29 @@ export function RealPosApp() {
 
   async function handleCheckout() {
     if (!shift || !cart.items.length || checkoutState === 'SAVING') return;
+    if (paymentMethod === 'CARD') {
+      setCheckoutState('ERROR');
+      setMessage(language === 'ar'
+        ? 'تحصيل البطاقة غير مفعّل: لا يوجد ربط موثّق بجهاز الدفع. استخدم جهاز الدفع الخارجي وأكمل التحصيل من خلال مسار موثّق قبل تسجيل العملية.'
+        : 'Card collection is not enabled: no verified payment-terminal integration is configured. Do not mark a card payment as paid until a verified payment flow is available.');
+      return;
+    }
     setCheckoutState('SAVING');
     setMessage('');
     try {
       const identity = runtimeIdentity ?? getPosRuntimeIdentity();
       const checkoutIdentity = await createCheckoutIdentity(identity);
       const order = confirmOrder(createOrder({ id: checkoutIdentity.orderId, orderNumber: checkoutIdentity.orderNumber, branchId: identity.branchId, deviceId: identity.deviceId, cashierId: identity.cashierId, cart }));
-      const stationByProduct: Readonly<Record<string, KitchenStation>> = {};
+      const stationByProduct: Readonly<Record<string, KitchenStation>> = Object.fromEntries(
+        cart.items.map((item): [string, KitchenStation] => [item.product.id, item.product.kitchenStation ?? 'KITCHEN']),
+      );
       const stations = [...new Set(order.items.map((item) => stationByProduct[item.productId] ?? 'KITCHEN'))];
       const printJobs = stations.map((station, index) => createPrintJob({ id: `${order.id}:kitchen:${index}`, order: { ...order, items: order.items.filter((item) => (stationByProduct[item.productId] ?? 'KITCHEN') === station) }, station }));
       printJobs.push(createPrintJob({ id: `${order.id}:customer`, order, station: 'CUSTOMER' }));
-      const payment: PaymentInput = { orderId: order.id, shiftId: shift.id, method: paymentMethod, amount: order.total, reference: paymentMethod === 'CARD' ? `POS:${order.id}` : null };
+      const payment: PaymentInput = { orderId: order.id, shiftId: shift.id, method: paymentMethod, amount: order.total, reference: null };
       await persistCompletedCheckout({ db, order, printJobs, payment, paymentId: `${order.id}:payment`, idempotencyKey: checkoutIdentity.idempotencyKey, clientSequence: checkoutIdentity.clientSequence });
       setCart(emptyCart());
+      setShowCheckoutConfirmation(false);
       setCheckoutState('SUCCESS');
       setMessage(t.success);
       await refreshRecentOrders();
@@ -199,20 +239,24 @@ export function RealPosApp() {
   const nav = [
     ['grid', t.cashier], ['receipt', t.orders], ['clock', t.shifts], ['box', t.inventory], ['users', t.customers], ['settings', t.settings],
   ] as const;
+  const sessionPermissions = getDesktopSession()?.user.permissions ?? [];
+  const canViewDining = sessionPermissions.includes('dining_table.view');
+  const canRefundPayments = sessionPermissions.includes('payment.refund');
+  const canViewKitchen = sessionPermissions.includes('order.view');
 
   return (
-    <main className="real-pos" dir={dir}>
+    <main className="real-pos" dir={dir} data-theme={theme}>
       <aside className="real-sidebar">
         <div className="real-brand"><div className="real-brand-mark">POS</div><div><strong>Restaurant POS</strong><span>OPERATING SYSTEM</span></div></div>
         <div className="real-branch"><span>{language === 'ar' ? 'الفرع' : 'Branch'}</span><strong>{runtimeIdentity?.branchId ?? '—'}</strong><small><i /> {runtimeIdentity?.deviceId ?? '—'} · {online ? t.online : t.offline}</small></div>
-        <nav>{nav.map(([icon, label], index) => <button key={label} className={index === 0 ? 'active' : ''} type="button"><Icon name={icon} /><span>{label}</span></button>)}</nav>
+        <nav>{nav.map(([icon, label], index) => <button key={label} className={index === 0 ? 'active' : ''} type="button"><Icon name={icon} /><span>{label}</span></button>)}{canViewDining && <button type="button" onClick={() => setShowDiningWorkspace(true)}><Icon name="grid" /><span>{language === 'ar' ? 'صالة الطعام' : 'Dining room'}</span></button>}{canRefundPayments && <button type="button" onClick={() => setShowRefundWorkspace(true)}><Icon name="receipt" /><span>{language === 'ar' ? 'الاسترجاع' : 'Refunds'}</span></button>}{canViewKitchen && <button type="button" onClick={() => setShowKitchenWorkspace(true)}><Icon name="box" /><span>{language === 'ar' ? 'شاشة المطبخ' : 'Kitchen display'}</span></button>}</nav>
         <div className="real-sidebar-bottom"><div className="real-sync"><i className={online ? 'online' : 'offline'} /><div><strong>{online ? t.online : t.offline}</strong><span>{menu ? (menu.source === 'SERVER' ? t.server : menu.source === 'CACHE' ? t.cache : t.bootstrap) : t.loading}</span></div></div><div className="real-user"><div className="real-avatar">{runtimeIdentity?.displayName?.slice(0, 2).toUpperCase() ?? 'CA'}</div><div><strong>{runtimeIdentity?.displayName ?? t.cashier}</strong><span>{runtimeIdentity?.username ?? '—'}</span></div></div></div>
       </aside>
 
       <section className="real-main">
         <header className="real-topbar">
           <div><span className="real-eyebrow">{t.pos}</span><h1>{t.cashier}</h1></div>
-          <div className="real-top-actions"><button className="language-button" type="button" onClick={() => setLanguage((current) => current === 'ar' ? 'en' : 'ar')}><Icon name="globe" /> {t.language}</button><button className="notification-button" type="button"><Icon name="bell" /><i /></button>{shift ? <button className="shift-control open" type="button" disabled={Boolean(cart.items.length) || checkoutState === 'SAVING'} onClick={() => void handleCloseShiftRequest()}><i /> {t.closeShift}</button> : <button className="shift-control" type="button" onClick={() => void handleOpenShift()}>{t.openShift}</button>}</div>
+          <div className="real-top-actions"><button className="language-button" type="button" aria-pressed={theme === 'night'} onClick={() => setTheme((current) => current === 'day' ? 'night' : 'day')}>{theme === 'day' ? (language === 'ar' ? 'الوضع الليلي' : 'Night mode') : (language === 'ar' ? 'الوضع النهاري' : 'Day mode')}</button><button className="language-button" type="button" onClick={() => setLanguage((current) => current === 'ar' ? 'en' : 'ar')}><Icon name="globe" /> {t.language}</button><button className="notification-button" type="button"><Icon name="bell" /><i /></button>{shift ? <button className="shift-control open" type="button" disabled={Boolean(cart.items.length) || checkoutState === 'SAVING'} onClick={() => void handleCloseShiftRequest()}><i /> {t.closeShift}</button> : <button className="shift-control" type="button" onClick={handleOpenShiftRequest}>{t.openShift}</button>}</div>
         </header>
 
         <div className="real-workspace">
@@ -230,13 +274,58 @@ export function RealPosApp() {
             <div className="real-cart-head"><div><span>{t.currentOrder}</span><h2>{orderType === 'DINE_IN' ? t.dine : orderType === 'DELIVERY' ? t.delivery : t.takeaway}</h2></div><span className="item-badge">{itemCount} {t.cartCount}</span></div>
             <div className="real-cart-items">{cart.items.length === 0 ? <div className="real-empty-cart"><Icon name="receipt" /><strong>{t.empty}</strong><span>{language === 'ar' ? 'اضغط على أي صنف لإضافته للطلب.' : 'Click a product to add it to the order.'}</span></div> : cart.items.map((item) => <div className="real-cart-item" key={item.product.id}><div><strong>{language === 'ar' ? item.product.nameAr : item.product.nameEn}</strong><span>{money(item.product.price)}</span></div><div className="real-qty"><button type="button" onClick={() => setCart((current) => setQuantity(current, item.product.id, item.quantity - 1))}>−</button><b>{item.quantity}</b><button type="button" onClick={() => setCart((current) => setQuantity(current, item.product.id, item.quantity + 1))}>+</button><button className="remove" type="button" onClick={() => setCart((current) => removeProduct(current, item.product.id))}><Icon name="trash" /></button></div></div>)}</div>
             <div className="real-totals"><div><span>{t.subtotal}</span><b>{money(totals.subtotal)}</b></div><div><span>{t.discount}</span><b>{money(totals.discount)}</b></div>{orderType === 'DELIVERY' && <div><span>{t.deliveryFee}</span><b>{money(totals.deliveryFee)}</b></div>}<div className="grand"><span>{t.total}</span><b>{money(totals.total)}</b></div></div>
-            <div className="real-payment"><span>{language === 'ar' ? 'طريقة الدفع' : 'Payment method'}</span><div><button type="button" className={paymentMethod === 'CASH' ? 'active' : ''} onClick={() => setPaymentMethod('CASH')}><Icon name="wallet" /> {t.cash}</button><button type="button" className={paymentMethod === 'CARD' ? 'active' : ''} onClick={() => setPaymentMethod('CARD')}><Icon name="receipt" /> {t.card}</button></div></div>
+            <div className="real-payment"><span>{language === 'ar' ? 'طريقة الدفع' : 'Payment method'}</span><div><button type="button" className={paymentMethod === 'CASH' ? 'active' : ''} onClick={() => setPaymentMethod('CASH')}><Icon name="wallet" /> {t.cash}</button><button type="button" className="payment-unavailable" disabled title={language === 'ar' ? 'ربط جهاز الدفع غير متاح بعد' : 'Payment terminal integration is not configured'}><Icon name="receipt" /> {t.card} · {language === 'ar' ? 'غير متاح' : 'Unavailable'}</button></div></div>
             {message && <div className={`real-message ${checkoutState === 'ERROR' ? 'error' : ''}`}>{message}</div>}
             {shiftError && <div className="real-message error">{shiftError}</div>}
-            <button className="real-checkout" type="button" disabled={!shift || !cart.items.length || checkoutState === 'SAVING'} onClick={() => void handleCheckout()}>{checkoutState === 'SAVING' ? t.loading : `${t.checkout} · ${money(totals.total)}`}</button>
+            <button className="real-checkout" type="button" disabled={!shift || !cart.items.length || checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(true)}>{checkoutState === 'SAVING' ? t.loading : `${t.checkout} · ${money(totals.total)}`}</button>
           </aside>
         </div>
       </section>
+
+      {showDiningWorkspace && <DiningWorkspace onClose={() => setShowDiningWorkspace(false)} />}
+      {showRefundWorkspace && <RefundWorkspace onClose={() => setShowRefundWorkspace(false)} />}
+      {showKitchenWorkspace && <div style={{ position: 'fixed', inset: 0, zIndex: 13000, overflowY: 'auto', background: 'var(--real-bg, #0b0d10)' }}><KitchenDisplay onClose={() => setShowKitchenWorkspace(false)} /></div>}
+
+      {showCheckoutConfirmation && (
+        <div role="presentation" onClick={(event) => { if (event.currentTarget === event.target && checkoutState !== 'SAVING') setShowCheckoutConfirmation(false); }} className="real-modal-backdrop">
+          <section role="dialog" aria-modal="true" aria-labelledby="checkout-confirm-title" className="real-modal">
+            <div className="real-modal-head">
+              <div><span>{language === 'ar' ? 'مراجعة التحصيل' : 'Payment review'}</span><h2 id="checkout-confirm-title">{language === 'ar' ? 'تأكيد تحصيل الطلب' : 'Confirm order payment'}</h2><p>{language === 'ar' ? 'راجع تفاصيل الطلب قبل تسجيل الدفع النقدي.' : 'Review the order before recording the cash payment.'}</p></div>
+              <button type="button" disabled={checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(false)} aria-label={t.cancel}>×</button>
+            </div>
+            <div className="real-checkout-summary">
+              <div><span>{language === 'ar' ? 'نوع الطلب' : 'Order type'}</span><strong>{orderType === 'DINE_IN' ? t.dine : orderType === 'DELIVERY' ? t.delivery : t.takeaway}</strong></div>
+              <div><span>{language === 'ar' ? 'عدد الأصناف' : 'Items'}</span><strong>{itemCount}</strong></div>
+              <div><span>{t.subtotal}</span><strong>{money(totals.subtotal)}</strong></div>
+              <div><span>{t.discount}</span><strong>{money(totals.discount)}</strong></div>
+              {orderType === 'DELIVERY' && <div><span>{t.deliveryFee}</span><strong>{money(totals.deliveryFee)}</strong></div>}
+              <div className="checkout-grand"><span>{t.total}</span><strong>{money(totals.total)}</strong></div>
+            </div>
+            <div className="checkout-payment-note"><Icon name="wallet" /><span>{language === 'ar' ? 'سيتم تسجيل وسيلة الدفع نقدي. لا يتم تفعيل البطاقة قبل ربط جهاز دفع موثّق.' : 'Payment will be recorded as cash. Card payments remain unavailable until a verified terminal is connected.'}</span></div>
+            {message && checkoutState === 'ERROR' && <div className="real-message error">{message}</div>}
+            <div className="real-modal-actions"><button type="button" disabled={checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(false)}>{t.cancel}</button><button type="button" disabled={checkoutState === 'SAVING' || !shift || !cart.items.length} onClick={() => void handleCheckout()}>{checkoutState === 'SAVING' ? t.loading : language === 'ar' ? 'تأكيد التحصيل وحفظ الطلب' : 'Confirm payment & save order'}</button></div>
+          </section>
+        </div>
+      )}
+
+      {showOpenShift && (
+        <div role="presentation" onClick={(event) => { if (event.currentTarget === event.target) setShowOpenShift(false); }} className="real-modal-backdrop">
+          <section role="dialog" aria-modal="true" aria-labelledby="shift-open-title" className="real-modal">
+            <div className="real-modal-head">
+              <div><span>{t.shifts}</span><h2 id="shift-open-title">{language === 'ar' ? 'فتح وردية جديدة' : 'Open a new shift'}</h2><p>{language === 'ar' ? 'راجع بيانات الجهاز وأدخل النقدية الموجودة في الدرج عند بداية الوردية.' : 'Confirm the workstation and enter the cash physically in the drawer.'}</p></div>
+              <button type="button" onClick={() => setShowOpenShift(false)} aria-label={t.cancel}>×</button>
+            </div>
+            <div className="real-shift-identity">
+              <div><span>{language === 'ar' ? 'الفرع' : 'Branch'}</span><strong>{runtimeIdentity?.branchId ?? '—'}</strong></div>
+              <div><span>{language === 'ar' ? 'الجهاز' : 'Device'}</span><strong>{runtimeIdentity?.deviceId ?? '—'}</strong></div>
+              <div><span>{language === 'ar' ? 'الكاشير' : 'Cashier'}</span><strong>{runtimeIdentity?.displayName ?? runtimeIdentity?.cashierId ?? '—'}</strong></div>
+            </div>
+            <label className="real-modal-field"><span>{language === 'ar' ? 'النقدية الافتتاحية (ج.م)' : 'Opening cash (EGP)'}</span><input autoFocus inputMode="decimal" value={openingCashInput} onChange={(event) => setOpeningCashInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void handleOpenShiftConfirm(); }} /></label>
+            {shiftError && <div className="real-message error">{shiftError}</div>}
+            <div className="real-modal-actions"><button type="button" onClick={() => setShowOpenShift(false)}>{t.cancel}</button><button type="button" onClick={() => void handleOpenShiftConfirm()}>{language === 'ar' ? 'تأكيد وفتح الوردية' : 'Confirm & open shift'}</button></div>
+          </section>
+        </div>
+      )}
 
       {showCloseShift && reconciliation && (
         <div role="presentation" onClick={(event) => { if (event.currentTarget === event.target) setShowCloseShift(false); }} style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(0,0,0,0.55)' }}>

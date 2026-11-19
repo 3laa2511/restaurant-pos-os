@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
+import { withRlsContext } from '../../database/rls-context.js';
 import { assertBranchAccess, assertKitchenStationAccess, assertPermission, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import type { SyncEnvelope, SyncResult } from '../sync/sync-contract.js';
@@ -61,11 +62,11 @@ export class KitchenSyncService {
 
     const payload = parsePayload(envelope.payload);
     const requestHash = createHash('sha256').update(JSON.stringify(envelope)).digest('hex');
-    const existing = await this.prisma.syncOperation.findUnique({ where: { idempotencyKey: envelope.idempotencyKey } });
+    const existing = await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.findUnique({ where: { idempotencyKey: envelope.idempotencyKey } }));
     if (existing) return this.resultForExisting(existing, requestHash, context, envelope, payload);
 
     const operationId = randomUUID();
-    await this.prisma.syncOperation.create({
+    await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.create({
       data: {
         id: randomUUID(),
         operationId,
@@ -82,7 +83,7 @@ export class KitchenSyncService {
         status: 'RECEIVED',
         updatedAt: new Date(),
       },
-    });
+    }));
 
     try {
       await this.kitchen.transitionTicket(
@@ -93,19 +94,19 @@ export class KitchenSyncService {
         payload.expectedVersion,
       );
       const applied: SyncResult = { status: 'APPLIED', operationId };
-      await this.prisma.syncOperation.update({ where: { operationId }, data: { status: 'APPLIED', result: applied, updatedAt: new Date() } });
+      await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.update({ where: { operationId }, data: { status: 'APPLIED', result: applied, updatedAt: new Date() } }));
       return applied;
     } catch (error) {
-      const current = await this.prisma.kitchenTicket.findUnique({ where: { id: envelope.entityId }, select: { branchId: true, station: true, status: true, version: true } });
+      const current = await withRlsContext(this.prisma, context, (tx) => tx.kitchenTicket.findUnique({ where: { id: envelope.entityId }, select: { branchId: true, station: true, status: true, version: true } }));
       if (current && current.branchId === envelope.branchId && current.version === payload.expectedVersion + 1 && current.status === payload.target) {
         assertKitchenStationAccess(context, current.station);
         const recovered: SyncResult = { status: 'APPLIED', operationId };
-        await this.prisma.syncOperation.update({ where: { operationId }, data: { status: 'APPLIED', result: recovered, updatedAt: new Date() } });
+        await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.update({ where: { operationId }, data: { status: 'APPLIED', result: recovered, updatedAt: new Date() } }));
         return recovered;
       }
       const message = error instanceof Error ? error.message : 'Kitchen ticket sync failed';
       const conflict: SyncResult = { status: 'CONFLICT', operationId, reason: message };
-      await this.prisma.syncOperation.update({ where: { operationId }, data: { status: 'CONFLICT', result: conflict, updatedAt: new Date() } });
+      await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.update({ where: { operationId }, data: { status: 'CONFLICT', result: conflict, updatedAt: new Date() } }));
       return conflict;
     }
   }
@@ -124,15 +125,15 @@ export class KitchenSyncService {
       return existing.result as SyncResult;
     }
     if (existing.status === 'RECEIVED') {
-      const current = await this.prisma.kitchenTicket.findUnique({ where: { id: envelope.entityId }, select: { branchId: true, station: true, status: true, version: true } });
+      const current = await withRlsContext(this.prisma, context, (tx) => tx.kitchenTicket.findUnique({ where: { id: envelope.entityId }, select: { branchId: true, station: true, status: true, version: true } }));
       if (current && current.branchId === envelope.branchId && current.version === payload.expectedVersion + 1 && current.status === payload.target) {
         assertKitchenStationAccess(context, current.station);
         const recovered: SyncResult = { status: 'APPLIED', operationId: existing.operationId };
-        await this.prisma.syncOperation.update({ where: { operationId: existing.operationId }, data: { status: 'APPLIED', result: recovered, updatedAt: new Date() } });
+        await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.update({ where: { operationId: existing.operationId }, data: { status: 'APPLIED', result: recovered, updatedAt: new Date() } }));
         return recovered;
       }
       const conflict: SyncResult = { status: 'CONFLICT', operationId: existing.operationId, reason: 'Kitchen ticket sync is unresolved; reload the ticket before retrying' };
-      await this.prisma.syncOperation.update({ where: { operationId: existing.operationId }, data: { status: 'CONFLICT', result: conflict, updatedAt: new Date() } });
+      await withRlsContext(this.prisma, context, (tx) => tx.syncOperation.update({ where: { operationId: existing.operationId }, data: { status: 'CONFLICT', result: conflict, updatedAt: new Date() } }));
       return conflict;
     }
     return { status: 'DUPLICATE', operationId: existing.operationId };

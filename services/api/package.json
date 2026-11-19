@@ -6,9 +6,15 @@
     "generate": "prisma generate --schema ../../prisma/schema.prisma",
     "typecheck": "pnpm generate && tsc --noEmit",
     "lint": "eslint .",
-    "test": "jest"
+    "test": "jest",
+    "build": "pnpm generate && nest build",
+    "start:dev": "node --env-file=.env ./node_modules/@nestjs/cli/bin/nest.js start --watch",
+    "start": "node --env-file=.env dist/main.js",
+    "migrate:deploy": "node --env-file=.env ./node_modules/prisma/build/index.js migrate deploy --schema ../../prisma/schema.prisma",
+    "bootstrap:local": "node --env-file=.env scripts/bootstrap-local.mjs"
   },
   "dependencies": {
+    "@restaurant-pos/payment-policy": "workspace:*",
     "@nestjs/common": "^11.1.6",
     "@nestjs/core": "^11.1.6",
     "@nestjs/platform-express": "^11.1.6",
@@ -16,7 +22,10 @@
     "@prisma/client": "^7.10.0",
     "pg": "^8.16.3",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "@nestjs/throttler": "6.7.1",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.15.1"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
@@ -29,6 +38,7 @@
     "prisma": "^7.10.0",
     "ts-jest": "^29.4.1",
     "typescript": "^5.9.2",
-    "typescript-eslint": "8.48.0"
+    "typescript-eslint": "8.48.0",
+    "@types/jest": "^30.0.0"
   }
 }

@@ -23,4 +23,14 @@ describe('authorization rules', () => {
   it('grants kitchen operators the persisted ticket lifecycle permission', () => {
     expect(roleHasPermission(ROLE_CODES.KITCHEN, PERMISSIONS.KITCHEN_TICKET_MANAGE)).toBe(true);
   });
+
+  it('allows cashiers to view dining tables without manager-only controls', () => {
+    expect(roleHasPermission(ROLE_CODES.CASHIER, PERMISSIONS.DINING_TABLE_VIEW)).toBe(true);
+    expect(roleHasPermission(ROLE_CODES.CASHIER, PERMISSIONS.DINING_TABLE_MANAGE)).toBe(false);
+  });
+
+  it('requires manager permission to clear or administer dining tables', () => {
+    expect(roleHasPermission(ROLE_CODES.BRANCH_MANAGER, PERMISSIONS.DINING_TABLE_MANAGE)).toBe(true);
+    expect(roleHasPermission(ROLE_CODES.OWNER, PERMISSIONS.DINING_TABLE_MANAGE)).toBe(true);
+  });
 });

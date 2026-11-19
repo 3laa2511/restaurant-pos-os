@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from './auth.guard.js';
 import { AuthService } from './auth.service.js';
-import type { AuthenticatedRequest, LoginInput } from './auth.service.js';
+import type { AuthenticatedRequest } from './auth.service.js';
+import { LoginDto } from './auth.dto.js';
 import { CurrentAuth } from './auth.decorators.js';
 import type { AuthContext } from './authorization.types.js';
 
@@ -10,8 +12,15 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post('login')
-  login(@Body() input: LoginInput) {
+  @Throttle({ default: { limit: 5, ttl: 60_000, blockDuration: 300_000 } })
+  login(@Body() input: LoginDto) {
     return this.auth.login(input);
+  }
+
+  @Post('manager-approval')
+  @Throttle({ default: { limit: 5, ttl: 60_000, blockDuration: 300_000 } })
+  managerApproval(@Body() input: LoginDto) {
+    return this.auth.loginManagerApproval(input);
   }
 
   @UseGuards(AuthGuard)
@@ -23,8 +32,8 @@ export class AuthController {
   @UseGuards(AuthGuard)
   @Post('logout')
   async logout(@Req() request: AuthenticatedRequest, @CurrentAuth() context: AuthContext) {
-    if (!request.sessionId) throw new Error('Session context is missing');
-    await this.auth.logout(request.sessionId, context.userId);
+    if (!request.sessionId || request.sessionId !== context.sessionId) throw new Error('Session context is missing');
+    await this.auth.logout(context);
     return { success: true };
   }
 }

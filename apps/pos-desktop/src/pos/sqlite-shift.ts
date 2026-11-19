@@ -101,6 +101,19 @@ export async function openLocalShift(db: LocalDatabaseBridge, shift: Shift): Pro
   return mapShift(opened[0]);
 }
 
+export async function countUnsettledSyncOperations(db: LocalDatabaseBridge): Promise<number> {
+  const rows = await db.query<{ count: number | string }>(
+    `SELECT COUNT(*) AS count
+     FROM sync_queue
+     WHERE status IN ('PENDING', 'SYNCING', 'FAILED')`,
+  );
+  const count = Number(rows[0]?.count ?? 0);
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error('Unable to determine the number of unsettled sync operations');
+  }
+  return count;
+}
+
 export async function closeLocalShift(
   db: LocalDatabaseBridge,
   shiftId: string,

@@ -5,6 +5,7 @@ import type { PosRuntimeIdentity } from './runtime-identity.js';
 import type { PaymentInput } from '../../../../services/api/src/modules/payments/payment-policy.js';
 import { assertIdempotencyKey } from '../../../../services/api/src/modules/orders/idempotency.js';
 import { getPosRuntimeIdentity } from './runtime-identity.js';
+import { assertExistingCheckoutMatches } from './checkout-idempotency.js';
 
 type SqlStatement = { sql: string; params: unknown[] };
 type ExistingSyncRecord = { entity_id: string; payload: string };
@@ -133,26 +134,43 @@ function validatePersistenceInput(input: CheckoutPersistenceInput): void {
   }
 }
 
-async function assertNotAlreadyCommitted(input: CheckoutPersistenceInput): Promise<boolean> {
+async function assertNotAlreadyCommitted(
+  input: CheckoutPersistenceInput,
+  expectedPayment?: PaymentInput & { paymentId: string },
+): Promise<boolean> {
   const rows = await input.db.query<ExistingSyncRecord>(
     `SELECT entity_id, payload FROM sync_queue WHERE idempotency_key = ? LIMIT 1`,
     [input.idempotencyKey],
   );
   if (!rows.length) return false;
   const stored = JSON.parse(rows[0].payload) as SyncCheckoutPayload;
-  if (rows[0].entity_id !== input.order.id || stored.id !== input.order.id) {
-    throw new Error('Checkout idempotency key was reused with a different order');
-  }
-  if (stored.total !== input.order.total || stored.orderNumber !== input.order.orderNumber) {
-    throw new Error('Checkout idempotency key was reused with a different order payload');
-  }
+  assertExistingCheckoutMatches(input.order, rows[0].entity_id, stored, expectedPayment);
   return true;
+}
+
+
+async function persistWithIdempotencyRecovery(
+  input: CheckoutPersistenceInput,
+  statements: SqlStatement[],
+  expectedPayment?: PaymentInput & { paymentId: string },
+): Promise<void> {
+  try {
+    await input.db.transaction(statements);
+  } catch (transactionError) {
+    // Two checkout attempts can race past the preflight lookup. If the first
+    // transaction committed, treat the second attempt as a retry only when the
+    // persisted outbox payload matches the entire order/payment identity.
+    // A reused key with different data is a real conflict; let the explicit
+    // validation error surface instead of hiding it behind SQLite's error.
+    if (await assertNotAlreadyCommitted(input, expectedPayment)) return;
+    throw transactionError;
+  }
 }
 
 export async function persistCheckout(input: CheckoutPersistenceInput): Promise<void> {
   validatePersistenceInput(input);
   if (await assertNotAlreadyCommitted(input)) return;
-  await input.db.transaction(buildCheckoutStatements(input));
+  await persistWithIdempotencyRecovery(input, buildCheckoutStatements(input));
 }
 
 export async function persistCompletedCheckout(input: CompletedCheckoutPersistenceInput): Promise<void> {
@@ -164,6 +182,11 @@ export async function persistCompletedCheckout(input: CompletedCheckoutPersisten
     throw new Error('Checkout identity does not match the authenticated POS session');
   }
   if (input.payment.shiftId === '') throw new Error('Cashier shift is required for completed checkout');
-  if (await assertNotAlreadyCommitted(input)) return;
-  await input.db.transaction(buildCompletedCheckoutStatements(input, identity));
+  const expectedPayment = { ...input.payment, paymentId: input.paymentId };
+  if (await assertNotAlreadyCommitted(input, expectedPayment)) return;
+  await persistWithIdempotencyRecovery(
+    input,
+    buildCompletedCheckoutStatements(input, identity),
+    expectedPayment,
+  );
 }
