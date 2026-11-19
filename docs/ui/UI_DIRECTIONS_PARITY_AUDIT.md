@@ -130,4 +130,4 @@ Start with a shared design-system layer and the cashier journey (login shell →
 - The API applies SHIFT/OPEN and SHIFT/CLOSE in tenant/branch/device-scoped PostgreSQL transactions, enforces the matching shift permission, creates server-side drawer movements, and records audit/variance events.
 - Device sequence ordering preserves OPEN → CHECKOUT → CLOSE even when the branch is offline when those actions occur.
 - Added API service tests for open, close, server-calculated variance and permission denial, plus desktop SQLite coverage for ordered outbox operations.
-- This is code-level implementation pending fresh CI and real Windows/PostgreSQL offline-to-online acceptance; do not mark the shift lifecycle fully accepted yet.
+- API and POS Desktop Quality Gates passed on exact SHA a87f9ca (including PostgreSQL migrations, API unit/integration tests, desktop tests/build and Tauri native check). Real Windows/PostgreSQL offline-to-online acceptance remains open; do not mark the shift lifecycle fully accepted yet.
