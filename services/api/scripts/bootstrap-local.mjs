@@ -69,8 +69,8 @@ async function main() {
   const tenantSlug = await ask(rl, 'Tenant slug (lowercase, unique)', 'restaurant-local', 'BOOTSTRAP_TENANT_SLUG');
   const branchName = await ask(rl, 'Main branch name', 'Main Branch', 'BOOTSTRAP_BRANCH_NAME');
   const branchCode = await ask(rl, 'Main branch code', 'BR01', 'BOOTSTRAP_BRANCH_CODE');
-  const username = await ask(rl, 'Owner username', 'owner', 'BOOTSTRAP_OWNER_USERNAME');
-  const displayName = await ask(rl, 'Owner display name', 'System Owner', 'BOOTSTRAP_OWNER_DISPLAY_NAME');
+  const username = await ask(rl, 'Owner username', 'Alaasobhi', 'BOOTSTRAP_OWNER_USERNAME');
+  const displayName = await ask(rl, 'Owner display name', 'Alaa Sobhi', 'BOOTSTRAP_OWNER_DISPLAY_NAME');
   const deviceCode = await ask(rl, 'POS device code', 'POS-01', 'BOOTSTRAP_DEVICE_CODE');
   rl.close();
 
