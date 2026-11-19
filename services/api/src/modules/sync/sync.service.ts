@@ -68,7 +68,13 @@ export class SyncService {
       return existing;
     });
     if (preflight) return this.resultForExisting(preflight, requestHash);
-    if (envelope.operation !== 'CHECKOUT' || envelope.entityType !== 'ORDER') return this.rejectUnsupportedOperation(context, envelope, requestHash);
+    if (envelope.operation === 'SHIFT' && envelope.entityType === 'SHIFT') {
+      return this.applyShiftOperation(context, envelope, requestHash);
+    }
+    if (envelope.operation !== 'CHECKOUT' || envelope.entityType !== 'ORDER') {
+      assertPermission(context, PERMISSIONS.ORDER_CREATE);
+      return this.rejectUnsupportedOperation(context, envelope, requestHash);
+    }
     const operationId = randomUUID();
     const payload = assertCheckoutPayload(envelope.payload, envelope);
     assertPermission(context, PERMISSIONS.ORDER_CREATE);
@@ -168,6 +174,199 @@ export class SyncService {
       if (raced) return this.resultForExisting(raced, requestHash);
       throw error;
     }
+  }
+
+  private async applyShiftOperation(context: AuthContext, envelope: SyncEnvelope, requestHash: string): Promise<SyncResult> {
+    const tenantId = assertTenantScope(context);
+    const action = envelope.payload.action;
+    const shiftId = text(envelope.payload.shiftId, 'shiftId');
+    if (shiftId !== envelope.entityId) throw new Error('Shift payload id does not match the sync entity');
+    const operationId = randomUUID();
+
+    if (action === 'OPEN') {
+      assertPermission(context, PERMISSIONS.SHIFT_OPEN);
+      const openingCash = money(envelope.payload.openingCash, 'openingCash');
+      return this.prisma.$transaction(async (tx) => {
+        await setRlsContext(tx, context);
+        const branch = await tx.branch.findFirst({
+          where: { id: envelope.branchId, tenantId, active: true },
+          select: { id: true },
+        });
+        if (!branch) throw new Error('Branch not found or inactive');
+        const device = await tx.device.findFirst({
+          where: { id: envelope.deviceId, branch: { tenantId } },
+          select: { id: true, branchId: true, status: true, name: true },
+        });
+        if (!device || device.branchId !== envelope.branchId || device.status !== 'ACTIVE') {
+          throw new Error('Device is not active in the selected branch');
+        }
+        const openShift = await tx.shift.findFirst({
+          where: {
+            branch: { tenantId },
+            status: 'OPEN',
+            OR: [{ deviceId: envelope.deviceId }, { userId: context.userId }],
+          },
+          select: { id: true, userId: true, deviceId: true },
+        });
+        if (openShift) throw new Error('Cashier or device already has an open shift');
+
+        const shift = await tx.shift.create({
+          data: {
+            id: shiftId,
+            branchId: envelope.branchId,
+            userId: context.userId,
+            deviceId: envelope.deviceId,
+            openingCash: openingCash.toFixed(2),
+            status: 'OPEN',
+            openedAt: new Date(envelope.occurredAt),
+          },
+        });
+        const drawer = await tx.cashDrawer.upsert({
+          where: { deviceId: envelope.deviceId },
+          update: { active: true },
+          create: {
+            id: randomUUID(),
+            branchId: envelope.branchId,
+            deviceId: envelope.deviceId,
+            name: `${device.name} Cash Drawer`,
+            active: true,
+          },
+        });
+        if (drawer.branchId !== envelope.branchId) throw new Error('Cash drawer belongs to another branch');
+        await tx.cashDrawerMovement.create({
+          data: {
+            id: randomUUID(),
+            drawerId: drawer.id,
+            branchId: envelope.branchId,
+            deviceId: envelope.deviceId,
+            shiftId: shift.id,
+            userId: context.userId,
+            type: 'OPENING_FLOAT',
+            direction: 'IN',
+            amount: openingCash.toFixed(2),
+            reason: `Opening float for shift ${shift.id}`,
+            sourceType: 'SHIFT',
+            sourceId: shift.id,
+            idempotencyKey: `${envelope.idempotencyKey}:drawer:opening`,
+            operationId: `${operationId}:opening`,
+            metadata: { shiftId: shift.id },
+            occurredAt: new Date(envelope.occurredAt),
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorUserId: context.userId,
+            branchId: envelope.branchId,
+            action: 'SHIFT_OPENED',
+            entityType: 'SHIFT',
+            entityId: shift.id,
+            metadata: { operationId, drawerId: drawer.id, openingCash },
+          },
+        });
+        const result: SyncResult = { status: 'APPLIED', operationId };
+        await tx.syncOperation.create({
+          data: {
+            id: randomUUID(),
+            operationId,
+            deviceId: envelope.deviceId,
+            branchId: envelope.branchId,
+            operation: envelope.operation,
+            entityType: envelope.entityType,
+            entityId: envelope.entityId,
+            idempotencyKey: envelope.idempotencyKey,
+            clientSequence: envelope.clientSequence,
+            occurredAt: new Date(envelope.occurredAt),
+            payload: jsonValue(envelope.payload),
+            requestHash,
+            status: 'APPLIED',
+            result: jsonValue(result),
+            updatedAt: new Date(),
+          },
+        });
+        return result;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }
+
+    if (action === 'CLOSE') {
+      assertPermission(context, PERMISSIONS.SHIFT_CLOSE);
+      const closingCash = money(envelope.payload.closingCash, 'closingCash');
+      return this.prisma.$transaction(async (tx) => {
+        await setRlsContext(tx, context);
+        const shift = await tx.shift.findFirst({
+          where: { id: shiftId, branch: { tenantId } },
+          select: { id: true, branchId: true, userId: true, deviceId: true, status: true, openingCash: true },
+        });
+        if (!shift) throw new Error('Shift not found');
+        assertBranchAccess(context, shift.branchId);
+        if (shift.deviceId !== envelope.deviceId) throw new Error('Shift device does not match the sync device');
+        if (shift.userId !== context.userId && !context.permissions.includes(PERMISSIONS.REPORT_VIEW_FINANCIAL)) {
+          throw new Error('Only the shift owner or financial manager can close this shift');
+        }
+        if (shift.status !== 'OPEN') throw new Error('Shift is already closed');
+        const movements = await tx.cashDrawerMovement.findMany({
+          where: { shiftId: shift.id, branch: { tenantId } },
+          select: { amount: true, direction: true },
+        });
+        if (movements.length === 0) throw new Error('Shift has no cash drawer ledger; cannot close safely');
+        const expectedCash = Number(movements.reduce((total, movement) =>
+          total + (movement.direction === 'IN' ? Number(movement.amount) : -Number(movement.amount)), 0).toFixed(2));
+        const variance = Number((closingCash - expectedCash).toFixed(2));
+        const updated = await tx.shift.updateMany({
+          where: { id: shift.id, status: 'OPEN', branch: { tenantId } },
+          data: { status: 'CLOSED', closingCash: closingCash.toFixed(2), closedAt: new Date(envelope.occurredAt) },
+        });
+        if (updated.count !== 1) throw new Error('Shift was closed by another operation');
+        const after = { status: 'CLOSED', openingCash: Number(shift.openingCash), expectedCash, actualCash: closingCash, variance };
+        await tx.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorUserId: context.userId,
+            branchId: shift.branchId,
+            action: 'SHIFT_CLOSED',
+            entityType: 'SHIFT',
+            entityId: shift.id,
+            metadata: { operationId, ...after, ledgerMovementCount: movements.length },
+          },
+        });
+        if (variance !== 0) {
+          await tx.auditLog.create({
+            data: {
+              id: randomUUID(),
+              actorUserId: context.userId,
+              branchId: shift.branchId,
+              action: 'SHIFT_VARIANCE',
+              entityType: 'SHIFT',
+              entityId: shift.id,
+              metadata: { operationId, expectedCash, actualCash: closingCash, variance, ledgerMovementCount: movements.length },
+            },
+          });
+        }
+        const result: SyncResult = { status: 'APPLIED', operationId };
+        await tx.syncOperation.create({
+          data: {
+            id: randomUUID(),
+            operationId,
+            deviceId: envelope.deviceId,
+            branchId: shift.branchId,
+            operation: envelope.operation,
+            entityType: envelope.entityType,
+            entityId: envelope.entityId,
+            idempotencyKey: envelope.idempotencyKey,
+            clientSequence: envelope.clientSequence,
+            occurredAt: new Date(envelope.occurredAt),
+            payload: jsonValue(envelope.payload),
+            requestHash,
+            status: 'APPLIED',
+            result: jsonValue(result),
+            updatedAt: new Date(),
+          },
+        });
+        return result;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }
+
+    throw new Error('Unsupported shift sync action');
   }
 
   async pending(context: AuthContext, limit = 100) {
