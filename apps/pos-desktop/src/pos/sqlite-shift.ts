@@ -65,7 +65,22 @@ export async function getOpenShift(db: LocalDatabaseBridge, identity?: ShiftIden
   return rows[0] ? mapShift(rows[0]) : null;
 }
 
-export async function openLocalShift(db: LocalDatabaseBridge, shift: Shift): Promise<Shift> {
+export interface ShiftSyncMetadata {
+  idempotencyKey: string;
+  clientSequence: number;
+}
+
+function assertShiftSyncMetadata(sync: ShiftSyncMetadata): void {
+  if (!sync.idempotencyKey.trim() || sync.idempotencyKey.length < 16 || sync.idempotencyKey.length > 128) {
+    throw new Error('A valid shift sync idempotency key is required');
+  }
+  if (!Number.isSafeInteger(sync.clientSequence) || sync.clientSequence < 1) {
+    throw new Error('Shift sync client sequence must be a positive integer');
+  }
+}
+
+export async function openLocalShift(db: LocalDatabaseBridge, shift: Shift, sync: ShiftSyncMetadata): Promise<Shift> {
+  assertShiftSyncMetadata(sync);
   const scoped = assertRuntimeIdentity(shift);
   assertCash(shift.openingCash, 'Opening cash');
 
@@ -87,6 +102,17 @@ export async function openLocalShift(db: LocalDatabaseBridge, shift: Shift): Pro
         `${shift.id}:opening`, scoped.branchId, scoped.deviceId, shift.id, scoped.cashierId,
         money(shift.openingCash), shift.id, `${shift.id}:opening`, `Opening float for shift ${shift.id}`, shift.openedAt,
         money(shift.openingCash),
+      ],
+    },
+    {
+      sql: `INSERT INTO sync_queue (
+        id, entity_type, entity_id, operation, idempotency_key, client_sequence,
+        payload, status, attempts, last_error, created_at, updated_at
+      ) VALUES (?, 'SHIFT', ?, 'SHIFT', ?, ?, ?, 'PENDING', 0, NULL, ?, ?)`,
+      params: [
+        `${shift.id}:sync:open`, shift.id, sync.idempotencyKey, sync.clientSequence,
+        JSON.stringify({ action: 'OPEN', shiftId: shift.id, openingCash: money(shift.openingCash), createdAt: shift.openedAt }),
+        shift.openedAt, shift.openedAt,
       ],
     },
   ]);
@@ -118,8 +144,10 @@ export async function closeLocalShift(
   db: LocalDatabaseBridge,
   shiftId: string,
   closedAt: string,
-  closingCash?: number,
+  closingCash: number,
+  sync: ShiftSyncMetadata,
 ): Promise<Shift> {
+  assertShiftSyncMetadata(sync);
   const scoped = getPosRuntimeIdentity();
   if (closingCash === undefined) throw new Error('Actual closing cash is required');
   assertCash(closingCash, 'Actual closing cash');
@@ -149,6 +177,17 @@ export async function closeLocalShift(
         scoped.branchId,
         scoped.deviceId,
         scoped.cashierId,
+      ],
+    },
+    {
+      sql: `INSERT INTO sync_queue (
+        id, entity_type, entity_id, operation, idempotency_key, client_sequence,
+        payload, status, attempts, last_error, created_at, updated_at
+      ) VALUES (?, 'SHIFT', ?, 'SHIFT', ?, ?, ?, 'PENDING', 0, NULL, ?, ?)`,
+      params: [
+        `${shiftId}:sync:close`, shiftId, sync.idempotencyKey, sync.clientSequence,
+        JSON.stringify({ action: 'CLOSE', shiftId, closingCash: reconciliation.actualCash, expectedCash: reconciliation.expectedCash, variance: reconciliation.variance, createdAt: closedAt }),
+        closedAt, closedAt,
       ],
     },
   ]);
