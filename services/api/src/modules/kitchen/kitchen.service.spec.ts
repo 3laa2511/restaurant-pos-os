@@ -23,6 +23,7 @@ function asyncMock(): AsyncMock { return jest.fn(async (...args: unknown[]) => {
 
 function buildPrisma() {
   const tx = {
+    $executeRaw: asyncMock(),
     kitchenTicket: { findFirst: asyncMock(), findMany: asyncMock(), updateMany: asyncMock() },
     order: { findFirst: asyncMock(), updateMany: asyncMock() },
     orderEvent: { create: asyncMock() },
