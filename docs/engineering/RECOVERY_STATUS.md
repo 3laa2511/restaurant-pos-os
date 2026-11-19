@@ -92,3 +92,9 @@ Both quality-gate runs completed successfully on this exact SHA. Any subsequent 
 - `backup/menu-variants-2026-09-16` was reviewed but not copied. Its migration uses the already-occupied `0008` prefix and its variant/modifier tables lack tenant ownership and same-tenant relational constraints. The menu API also does not carry variant/modifier selections into order pricing snapshots. Reimplement this as a new tenant-safe migration and complete vertical slice; do not cherry-pick the old migration.
 - `reconcile/staging-migration-recovery-2026-09-19` is a separate historical Supabase migration stream with a different schema/backend from the current Prisma/PostgreSQL app. Do not merge its Supabase migrations or staging workflow into this codebase. Reuse only generic lessons after a specific need is established.
 - `test/rls-ci-check` points at the current main baseline and contains no additional feature work.
+
+
+### Auth logout RLS hardening (2026-11-19)
+- Logout previously read the session row before setting tenant/branch/user context, which is incompatible with forced session RLS. It now reads, revokes and audits the current authenticated session inside one `withRlsContext` transaction.
+- Controller verifies the request session id matches the authenticated context and passes the full scope to AuthService.
+- Added a service test asserting the RLS context is set before the session lookup/revocation and audit write.
