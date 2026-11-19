@@ -77,15 +77,15 @@ describeIfConfigured('Offline checkout and kitchen ticket PostgreSQL atomicity',
       [ids.shift, ids.branch, ids.user, ids.device],
     );
     await admin.query(
-      `INSERT INTO "Category" ("id","tenantId","name","nameAr","createdAt","updatedAt")
-       VALUES ($1,$2,'Checkout Test','اختبار الطلب',now(),now())`,
+      `INSERT INTO "Category" ("id","tenantId","name","nameAr")
+       VALUES ($1,$2,'Checkout Test','اختبار الطلب')`,
       [ids.category, ids.tenant],
     );
     await admin.query(
       `INSERT INTO "Product" ("id","tenantId","sku","name","nameAr","price","active","kitchenStation","categoryId","createdAt","updatedAt")
-       VALUES ($1,$3,'CK-FOOD','Kitchen Meal','وجبة',100,true,'KITCHEN',$5,now(),now()),
-              ($2,$3,'CK-DRINK','Beverage','مشروب',20,true,'BEVERAGE',$5,now(),now())`,
-      [ids.foodProduct, ids.drinkProduct, ids.tenant, ids.branch, ids.category],
+       VALUES ($1,$3,'CK-FOOD','Kitchen Meal','وجبة',100,true,'KITCHEN',$4,now(),now()),
+              ($2,$3,'CK-DRINK','Beverage','مشروب',20,true,'BEVERAGE',$4,now(),now())`,
+      [ids.foodProduct, ids.drinkProduct, ids.tenant, ids.category],
     );
   });
 
