@@ -93,7 +93,7 @@ Inspected desktop entry points and modules:
 
 ### Batch B — kitchen, order lifecycle and cash controls
 6. Finish Kitchen Display parity: station/status layout, elapsed-time cues and send-lock behavior; the existing offline-capable `KitchenDisplay.tsx` is now accessible directly from the cashier sidebar and keeps its local queue/conflict reconciliation.
-7. Checkout sync materializes station-specific kitchen tickets atomically from server-owned product routing; local printing now follows the cached product station, including BEVERAGE and PACKING printer mappings. Add end-to-end PostgreSQL coverage for order/payment/ticket rollback and verify the full offline-to-KDS replay path.
+7. Checkout sync materializes station-specific kitchen tickets atomically from server-owned product routing; local printing follows the cached product station, including BEVERAGE and PACKING printer mappings. Added PostgreSQL integration coverage that stages an order, two line items, KITCHEN + BEVERAGE tickets, ticket items and payment, then forces a late failure and verifies the entire set rolls back. This validates database transaction atomicity; a full HTTP/device offline-replay E2E remains outstanding.
 7. Add orders/history, refund approval and cash-drawer movement screens.
 8. Add sync review with explicit conflict/rejection resolution; never treat a retry as a financial settlement.
 
