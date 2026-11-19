@@ -13,7 +13,7 @@ import { createSqliteSyncRepository } from './pos/sync-repository.js';
 import { createHttpSyncTransport, createSyncWorkerRuntime } from './pos/sync-worker.js';
 import { persistCompletedCheckout } from './pos/sqlite-checkout.js';
 import { nextDeviceSequence } from './pos/sqlite-sequence.js';
-import { closeLocalShift, getOpenShift, openLocalShift } from './pos/sqlite-shift.js';
+import { closeLocalShift, countUnsettledSyncOperations, getOpenShift, openLocalShift } from './pos/sqlite-shift.js';
 import { reconcileLocalCashDrawer } from './pos/sqlite-cash-drawer.js';
 import { listRecentLocalOrders } from './pos/sqlite-orders.js';
 import { loadMenu, type LocalMenu } from './pos/sqlite-menu.js';
@@ -162,6 +162,13 @@ export function RealPosApp() {
     if (!shift || cart.items.length || checkoutState === 'SAVING') return;
     setShiftError('');
     try {
+      const unsettledSyncCount = await countUnsettledSyncOperations(db);
+      if (unsettledSyncCount > 0) {
+        setShiftError(language === 'ar'
+          ? `لا يمكن إغلاق الوردية قبل اكتمال المزامنة أو مراجعة العمليات المرفوضة. العمليات غير المحسومة: ${unsettledSyncCount}.`
+          : `Shift close is blocked until sync completes or rejected operations are reviewed. Unsettled operations: ${unsettledSyncCount}.`);
+        return;
+      }
       const current = await reconcileLocalCashDrawer(db, shift.id);
       setReconciliation(current);
       setActualCashInput(current.expectedCash.toFixed(2));
