@@ -15,7 +15,7 @@ interface CheckoutPayload {
   type: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'; status: 'CONFIRMED';
   items: Array<{ productId: string; nameAr: string; nameEn: string; sku: string; unitPrice: number; quantity: number; note: string | null }>;
   subtotal: number; discount: number; tax: number; serviceFee: number; deliveryFee: number; total: number; createdAt: string;
-  payment: { paymentId: string; orderId: string; shiftId: string; method: 'CASH' | 'CARD' | 'WALLET' | 'OTHER'; amount: number; reference?: string | null };
+  payment: { paymentId: string; orderId: string; shiftId: string; method: 'CASH' | 'CARD' | 'WALLET' | 'OTHER'; amount: number; receivedCash?: number; reference?: string | null };
 }
 function jsonValue(value: unknown): ReturnType<typeof JSON.parse> { return JSON.parse(JSON.stringify(value)); }
 function canonicalJson(value: unknown): string {
@@ -44,7 +44,16 @@ function assertCheckoutPayload(payload: unknown, envelope: SyncEnvelope): Checko
   text(value.payment.paymentId, 'payment.paymentId'); text(value.payment.shiftId, 'payment.shiftId');
   if (!['CASH', 'CARD', 'WALLET', 'OTHER'].includes(value.payment.method ?? '')) throw new Error('Invalid payment method');
   if (value.payment.method === 'CARD') throw new Error('Card checkout cannot be synced until a verified payment processor integration is configured');
-  money(value.payment.amount, 'payment.amount', false); if (value.payment.method !== 'CASH') text(value.payment.reference, 'payment.reference');
+  money(value.payment.amount, 'payment.amount', false);
+  if (value.payment.method === 'CASH') {
+    const receivedCash = value.payment.receivedCash === undefined
+      ? value.payment.amount
+      : money(value.payment.receivedCash, 'payment.receivedCash');
+    if (receivedCash < value.payment.amount) throw new Error('Insufficient cash received');
+  } else {
+    if (value.payment.receivedCash !== undefined) throw new Error('Cash received is only valid for cash payments');
+    text(value.payment.reference, 'payment.reference');
+  }
   return value as CheckoutPayload;
 }
 
@@ -146,12 +155,21 @@ export class SyncService {
           });
         }
 
-        await tx.payment.create({ data: { id: payload.payment.paymentId, orderId: payload.id, shiftId: payload.payment.shiftId, amount: payload.payment.amount.toFixed(2), method: payload.payment.method, reference: payload.payment.reference?.trim() || null, receivedAmount: payload.payment.method === 'CASH' ? payload.payment.amount.toFixed(2) : null, changeAmount: '0.00', status: 'PAID', idempotencyKey: `${envelope.idempotencyKey}:payment` } });
+        const cashReceived = payload.payment.method === 'CASH'
+          ? payload.payment.receivedCash ?? payload.payment.amount
+          : payload.payment.amount;
+        const cashChange = payload.payment.method === 'CASH'
+          ? Number((cashReceived - payload.payment.amount).toFixed(2))
+          : 0;
+        await tx.payment.create({ data: { id: payload.payment.paymentId, orderId: payload.id, shiftId: payload.payment.shiftId, amount: payload.payment.amount.toFixed(2), method: payload.payment.method, reference: payload.payment.reference?.trim() || null, receivedAmount: payload.payment.method === 'CASH' ? cashReceived.toFixed(2) : null, changeAmount: cashChange.toFixed(2), status: 'PAID', idempotencyKey: `${envelope.idempotencyKey}:payment` } });
 
         if (payload.payment.method === 'CASH') {
           const drawer = await tx.cashDrawer.findFirst({ where: { deviceId: envelope.deviceId, branch: { tenantId } }, select: { id: true, branchId: true, active: true } });
           if (!drawer || !drawer.active || drawer.branchId !== envelope.branchId) throw new Error('An active cash drawer is required for cash checkout sync');
-          await tx.cashDrawerMovement.create({ data: { id: randomUUID(), drawerId: drawer.id, branchId: envelope.branchId, deviceId: envelope.deviceId, shiftId: payload.payment.shiftId, userId: context.userId, type: 'SALE', direction: 'IN', amount: payload.payment.amount.toFixed(2), reason: `Synced cash sale for order ${payload.id}`, sourceType: 'SYNC_CHECKOUT', sourceId: operationId, idempotencyKey: `${envelope.idempotencyKey}:drawer:sale`, operationId: `${operationId}:sale`, metadata: jsonValue({ orderId: payload.id, paymentId: payload.payment.paymentId, clientSequence: envelope.clientSequence }), occurredAt: new Date(envelope.occurredAt) } });
+          await tx.cashDrawerMovement.create({ data: { id: randomUUID(), drawerId: drawer.id, branchId: envelope.branchId, deviceId: envelope.deviceId, shiftId: payload.payment.shiftId, userId: context.userId, type: 'SALE', direction: 'IN', amount: cashReceived.toFixed(2), reason: `Synced cash received for order ${payload.id}`, sourceType: 'SYNC_CHECKOUT', sourceId: operationId, idempotencyKey: `${envelope.idempotencyKey}:drawer:sale`, operationId: `${operationId}:sale`, metadata: jsonValue({ orderId: payload.id, paymentId: payload.payment.paymentId, clientSequence: envelope.clientSequence }), occurredAt: new Date(envelope.occurredAt) } });
+          if (cashChange > 0) {
+            await tx.cashDrawerMovement.create({ data: { id: randomUUID(), drawerId: drawer.id, branchId: envelope.branchId, deviceId: envelope.deviceId, shiftId: payload.payment.shiftId, userId: context.userId, type: 'CASH_CHANGE', direction: 'OUT', amount: cashChange.toFixed(2), reason: `Cash change for order ${payload.id}`, sourceType: 'SYNC_CHECKOUT', sourceId: operationId, idempotencyKey: `${envelope.idempotencyKey}:drawer:change`, operationId: `${operationId}:change`, metadata: jsonValue({ orderId: payload.id, paymentId: payload.payment.paymentId, clientSequence: envelope.clientSequence }), occurredAt: new Date(envelope.occurredAt) } });
+          }
         }
 
         await this.accounting.postSale(tx, context, { orderId: payload.id, branchId: envelope.branchId, amount: payload.total, payments: [{ method: payload.payment.method, amount: payload.payment.amount }] });
