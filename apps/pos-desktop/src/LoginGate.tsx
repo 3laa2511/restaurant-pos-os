@@ -22,7 +22,8 @@ const WORKSPACES: readonly { code: WorkspaceCode; title: string; description: st
 ];
 
 export function LoginGate({ children }: { children: ReactNode }) {
-  const previewMode = new URLSearchParams(window.location.search).get('preview') === '1';
+  const isTauriRuntime = '__TAURI_INTERNALS__' in window;
+  const previewMode = !isTauriRuntime && new URLSearchParams(window.location.search).get('preview') === '1';
   const existing = useMemo(() => getDesktopSession(), []);
   const [session, setSession] = useState(existing);
   const [workspace, setWorkspace] = useState<WorkspaceCode>('POS');
