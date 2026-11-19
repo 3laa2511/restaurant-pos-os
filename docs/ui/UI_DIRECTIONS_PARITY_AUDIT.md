@@ -117,3 +117,9 @@ Inspected desktop entry points and modules:
 ## 6. First implementation target
 
 Start with a shared design-system layer and the cashier journey (login shell → open shift → POS day/night → dining/table → collection → close shift). Do not publish a review URL until this batch is coherent, built, tested, and visually checked against the uploaded reference. The previously generated old-UI preview is not an approved review target.
+
+
+### Kitchen API RLS hardening (2026-11-19)
+- Found and fixed missing transaction-local RLS context in KitchenService list/listTickets/materialize/transition paths and KitchenSyncService idempotency/read/write paths.
+- Kitchen operations now set tenant, branch, user and session context inside each database transaction before protected tables are accessed.
+- Added unit assertions that the transaction-local RLS context is applied before ticket state changes and sync persistence.
