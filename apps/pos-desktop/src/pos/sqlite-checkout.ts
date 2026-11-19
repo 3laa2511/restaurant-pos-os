@@ -2,7 +2,7 @@ import type { Order } from './order.js';
 import type { PrintJob } from './print-job.js';
 import type { LocalDatabaseBridge } from './tauri-bridge.js';
 import type { PosRuntimeIdentity } from './runtime-identity.js';
-import type { PaymentInput } from '../../../../services/api/src/modules/payments/payment-policy.js';
+import { validatePayment, type PaymentInput } from '../../../../services/api/src/modules/payments/payment-policy.js';
 import { assertIdempotencyKey } from '../../../../services/api/src/modules/orders/idempotency.js';
 import { getPosRuntimeIdentity } from './runtime-identity.js';
 import { assertExistingCheckoutMatches } from './checkout-idempotency.js';
@@ -80,20 +80,36 @@ function buildSyncStatement(input: Omit<CheckoutPersistenceInput, 'db'>, payment
   };
 }
 
-function buildCashSaleStatement(input: CompletedCheckoutPersistenceInput, identity: PosRuntimeIdentity): SqlStatement | null {
-  if (input.payment.method !== 'CASH') return null;
+function buildCashDrawerStatements(input: CompletedCheckoutPersistenceInput, identity: PosRuntimeIdentity): SqlStatement[] {
+  if (input.payment.method !== 'CASH') return [];
   const now = input.now ?? input.order.createdAt;
-  return {
+  const receivedCash = input.payment.receivedCash ?? input.payment.amount;
+  const change = Number((receivedCash - input.payment.amount).toFixed(2));
+  const statements: SqlStatement[] = [{
     sql: `INSERT INTO cash_drawer_movements (
       id, branch_id, device_id, shift_id, cashier_id, type, direction, amount,
       source_type, source_id, idempotency_key, reason, occurred_at
     ) VALUES (?, ?, ?, ?, ?, 'SALE', 'IN', ?, 'ORDER', ?, ?, ?, ?)`,
     params: [
       `${input.order.id}:cash-sale`, identity.branchId, identity.deviceId, input.payment.shiftId,
-      identity.cashierId, input.payment.amount, input.order.id, `${input.idempotencyKey}:cash-sale`,
-      `Cash sale for order ${input.order.orderNumber}`, now,
+      identity.cashierId, receivedCash, input.order.id, `${input.idempotencyKey}:cash-sale`,
+      `Cash received for order ${input.order.orderNumber}`, now,
     ],
-  };
+  }];
+  if (change > 0) {
+    statements.push({
+      sql: `INSERT INTO cash_drawer_movements (
+        id, branch_id, device_id, shift_id, cashier_id, type, direction, amount,
+        source_type, source_id, idempotency_key, reason, occurred_at
+      ) VALUES (?, ?, ?, ?, ?, 'CASH_CHANGE', 'OUT', ?, 'ORDER', ?, ?, ?, ?)`,
+      params: [
+        `${input.order.id}:cash-change`, identity.branchId, identity.deviceId, input.payment.shiftId,
+        identity.cashierId, change, input.order.id, `${input.idempotencyKey}:cash-change`,
+        `Change returned for order ${input.order.orderNumber}`, now,
+      ],
+    });
+  }
+  return statements;
 }
 
 export function buildCheckoutStatements(input: Omit<CheckoutPersistenceInput, 'db'>): SqlStatement[] {
@@ -105,7 +121,7 @@ export function buildCompletedCheckoutStatements(
   identity: PosRuntimeIdentity = getPosRuntimeIdentity(),
 ): SqlStatement[] {
   const now = input.now ?? input.order.createdAt;
-  const cashSale = buildCashSaleStatement(input as CompletedCheckoutPersistenceInput, identity);
+  const cashDrawerStatements = buildCashDrawerStatements(input as CompletedCheckoutPersistenceInput, identity);
   return [
     ...buildOrderStatements(input),
     {
@@ -117,7 +133,7 @@ export function buildCompletedCheckoutStatements(
         input.payment.amount, input.payment.reference ?? null, now,
       ],
     },
-    ...(cashSale ? [cashSale] : []),
+    ...cashDrawerStatements,
     ...buildPrintStatements(input),
     buildSyncStatement(input, { ...input.payment, paymentId: input.paymentId }),
   ];
@@ -176,6 +192,7 @@ export async function persistCheckout(input: CheckoutPersistenceInput): Promise<
 export async function persistCompletedCheckout(input: CompletedCheckoutPersistenceInput): Promise<void> {
   validatePersistenceInput(input);
   const identity = input.runtimeIdentity ?? getPosRuntimeIdentity();
+  validatePayment(input.payment);
   if (input.payment.orderId !== input.order.id) throw new Error('Payment order does not match checkout order');
   if (input.payment.amount !== input.order.total) throw new Error('Payment amount does not match checkout total');
   if (input.order.branchId !== identity.branchId || input.order.deviceId !== identity.deviceId || input.order.cashierId !== identity.cashierId) {
