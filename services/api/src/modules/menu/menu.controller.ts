@@ -28,6 +28,7 @@ export class MenuController {
         name: product.name,
         nameAr: product.nameAr,
         price: Number(product.price),
+        kitchenStation: product.kitchenStation,
         modifierGroups: product.modifierGroups.map((group) => ({
           id: group.id,
           name: group.name,
