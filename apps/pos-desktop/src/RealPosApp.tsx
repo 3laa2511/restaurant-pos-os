@@ -203,7 +203,9 @@ export function RealPosApp() {
       const identity = runtimeIdentity ?? getPosRuntimeIdentity();
       const checkoutIdentity = await createCheckoutIdentity(identity);
       const order = confirmOrder(createOrder({ id: checkoutIdentity.orderId, orderNumber: checkoutIdentity.orderNumber, branchId: identity.branchId, deviceId: identity.deviceId, cashierId: identity.cashierId, cart }));
-      const stationByProduct: Readonly<Record<string, KitchenStation>> = {};
+      const stationByProduct: Readonly<Record<string, KitchenStation>> = Object.fromEntries(
+        cart.items.map((item) => [item.product.id, item.product.kitchenStation ?? 'KITCHEN']),
+      );
       const stations = [...new Set(order.items.map((item) => stationByProduct[item.productId] ?? 'KITCHEN'))];
       const printJobs = stations.map((station, index) => createPrintJob({ id: `${order.id}:kitchen:${index}`, order: { ...order, items: order.items.filter((item) => (stationByProduct[item.productId] ?? 'KITCHEN') === station) }, station }));
       printJobs.push(createPrintJob({ id: `${order.id}:customer`, order, station: 'CUSTOMER' }));
