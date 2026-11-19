@@ -55,6 +55,7 @@ describe('KitchenService.transitionTicket', () => {
   it('uses the ticket version in the atomic update and projects the order forward', async () => {
     const { prisma, tx } = buildPrisma(); const audit = createAuditDouble(); const service = createService(prisma, audit);
     const result = await service.transitionTicket(context, 'ticket-1', 'READY', '  pass quality check  ', 3);
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
     expect(tx.kitchenTicket.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'ticket-1', version: 3, status: 'PREPARING' }, data: expect.objectContaining({ status: 'READY', version: { increment: 1 }, readyAt: expect.any(Date) }) }));
     expect(tx.order.updateMany).toHaveBeenCalledWith({ where: { id: 'order-1', version: 10, status: 'PREPARING' }, data: { status: 'READY', version: { increment: 1 } } });
     expect(tx.orderEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'KITCHEN_READY', payload: expect.objectContaining({ source: 'KITCHEN_TICKET', ticketId: 'ticket-1', status: 'READY' }), occurredAt: expect.any(Date) }) }));
