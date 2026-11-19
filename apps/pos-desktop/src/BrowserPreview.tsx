@@ -37,7 +37,6 @@ export function BrowserPreview() {
   const [shiftOpen, setShiftOpen] = useState(true);
   const [notice, setNotice] = useState('');
   const [tickets, setTickets] = useState(['#1042', '#1041']);
-  const [filter, setFilter] = useState('الكل');
   const selected = areas.find(x => x.id === area)!;
   const cartItems = useMemo(() => products.filter(p => cart[p.id]).map(p => ({ ...p, qty: cart[p.id] })), [cart]);
   const total = cartItems.reduce((sum, p) => sum + p.price * p.qty, 0);
