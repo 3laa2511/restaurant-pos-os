@@ -153,7 +153,9 @@ export function RealPosApp() {
     try {
       const identity = runtimeIdentity ?? getPosRuntimeIdentity();
       const opened = openShift({ id: `shift:${crypto.randomUUID()}`, branchId: identity.branchId, deviceId: identity.deviceId, cashierId: identity.cashierId, openingCash });
-      setShift(await openLocalShift(db, opened));
+      const clientSequence = await nextDeviceSequence(db, identity.deviceId);
+      const sync = { idempotencyKey: `shift:open:${opened.id}`, clientSequence };
+      setShift(await openLocalShift(db, opened, sync));
       setShowOpenShift(false);
     } catch (error) { setShiftError(error instanceof Error ? error.message : t.error); }
   }
@@ -186,7 +188,9 @@ export function RealPosApp() {
     setShiftError('');
     try {
       const closed = requestShiftClose(shift, { expectedCash: reconciliation.expectedCash, actualCash: countedCash });
-      const saved = await closeLocalShift(db, closed.id, closed.closedAt!, countedCash);
+      const clientSequence = await nextDeviceSequence(db, shift.deviceId);
+      const sync = { idempotencyKey: `shift:close:${closed.id}`, clientSequence };
+      const saved = await closeLocalShift(db, closed.id, closed.closedAt!, countedCash, sync);
       setShift(saved);
       setShowCloseShift(false);
       setReconciliation(null);
