@@ -34,6 +34,7 @@
 - [ ] Restore the FlutterFlow source and 32-page UI Directions PDF, then verify visual/interaction parity.
 - [ ] Complete menu variants/modifiers as a tenant-safe end-to-end feature. Partial foundation added: migration `0032_product_modifiers`, tenant-scoped modifier group/option models and RLS, permission-gated API creation endpoints, and active modifier projection in `GET /api/menu`. Still open: modifier edit/disable management, desktop selection UI, server-side checkout price/selection validation, immutable `OrderItem.modifierSnapshot` population, kitchen ticket snapshot propagation, and end-to-end tests.
 - [ ] Verify the new offline shift lifecycle in real Windows/PostgreSQL acceptance: OPEN, CHECKOUT and CLOSE are now sequenced in the durable device outbox; API-side SHIFT handling validates permissions and writes server ledger/audit records. The local close gate blocks unresolved PENDING/SYNCING/FAILED work. Still open: server-acknowledgement UX, failed-operation review, and denomination-based cash count.
+- [ ] Verify the cash-received/change collection flow on fresh CI and Windows acceptance. Cash checkout now captures received cash, calculates change, records separate local drawer IN/OUT movements, and syncs receivedAmount/changeAmount plus matching server drawer movements. Dedicated collection keypad/receipt and split tender remain open.
 - [ ] Complete the branch-LAN coordination service for multi-cashier offline operation.
 - [ ] Finish typed Tauri IPC migration, workspace workflows, installer/updater, diagnostics and release operations.
 
