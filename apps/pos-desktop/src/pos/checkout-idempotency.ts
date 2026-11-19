@@ -10,6 +10,7 @@ export interface CheckoutPaymentIdentity {
   shiftId: string;
   method: string;
   amount: number;
+  receivedCash?: number;
   reference?: string | null;
 }
 
@@ -60,6 +61,7 @@ export function assertExistingCheckoutMatches(
       || existingPayment.shiftId !== expectedPayment.shiftId
       || existingPayment.method !== expectedPayment.method
       || existingPayment.amount !== expectedPayment.amount
+      || (existingPayment.receivedCash ?? null) !== (expectedPayment.receivedCash ?? null)
       || (existingPayment.reference ?? null) !== (expectedPayment.reference ?? null)) {
       throw new Error('Checkout idempotency key was reused with different payment details');
     }
