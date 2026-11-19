@@ -139,3 +139,11 @@ Start with a shared design-system layer and the cashier journey (login shell →
 - Offline checkout sync validates received cash against the server-calculated due amount, persists received/change amounts on the payment, and mirrors both movements on the server cash drawer.
 - Checkout idempotency now includes receivedCash so a retry cannot silently change the amount tendered.
 - Automated policy and sync-underpayment tests were added; fresh CI and real cashier acceptance remain required.
+
+
+### Browser-only workspace demo shell (2026-11-19)
+- Added a separate browser preview route through the login gate using the explicit `?preview=1` query flag; the bypass is disabled when running inside Tauri.
+- The shell exposes all nine workspaces with responsive RTL navigation, day/night theme and in-memory mock interactions. It is a navigation/layout scaffold and not yet the canonical 32-screen UI Directions implementation.
+- All demo actions remain client-side only; no API calls, real credentials, or database writes are performed. Backend-dependent workflows still require separate API-backed acceptance.
+- Automated API and POS Desktop/Tauri gates passed on SHA `cea294c0636378f38d98da7830fcb1effdda8c4c`; an additional Tauri-runtime guard was added afterward and requires fresh CI.
+- Vercel deployment of the preview commit is blocked by the project's daily deployment limit; do not share older deployment URLs as the current preview.
