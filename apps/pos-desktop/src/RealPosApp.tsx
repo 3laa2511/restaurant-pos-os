@@ -76,6 +76,7 @@ export function RealPosApp() {
   const [category, setCategory] = useState('all');
   const [orderType, setOrderType] = useState<OrderType>('TAKEAWAY');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
+  const [cashReceivedInput, setCashReceivedInput] = useState('0.00');
   const [shift, setShift] = useState<Shift | null>(null);
   const [checkoutState, setCheckoutState] = useState<CheckoutState>('IDLE');
   const [message, setMessage] = useState('');
@@ -104,6 +105,9 @@ export function RealPosApp() {
   const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
   const actualCash = Number(actualCashInput);
   const previewVariance = reconciliation && Number.isFinite(actualCash) ? Math.round((actualCash - reconciliation.expectedCash) * 100) / 100 : null;
+  const cashReceivedValue = Number(cashReceivedInput);
+  const cashChangePreview = Number.isFinite(cashReceivedValue) ? Math.round((cashReceivedValue - totals.total) * 100) / 100 : null;
+  const cashReceivedValid = cashReceivedInput.trim() !== '' && Number.isFinite(cashReceivedValue) && cashReceivedValue >= totals.total && Math.abs(cashReceivedValue * 100 - Math.round(cashReceivedValue * 100)) <= Number.EPSILON;
 
   async function refreshRecentOrders() {
     setRecentOrders(await listRecentLocalOrders(db));
@@ -201,6 +205,14 @@ export function RealPosApp() {
 
   async function handleCheckout() {
     if (!shift || !cart.items.length || checkoutState === 'SAVING') return;
+    const cashReceived = Number(cashReceivedInput);
+    if (!cashReceivedInput.trim() || !Number.isFinite(cashReceived) || cashReceived < totals.total || Math.abs(cashReceived * 100 - Math.round(cashReceived * 100)) > Number.EPSILON) {
+      setCheckoutState('ERROR');
+      setMessage(language === 'ar'
+        ? 'المبلغ المستلم لازم يكون صحيح وما يقلش عن إجمالي الطلب.'
+        : 'Cash received must be a valid amount and cannot be less than the order total.');
+      return;
+    }
     if (paymentMethod === 'CARD') {
       setCheckoutState('ERROR');
       setMessage(language === 'ar'
@@ -220,7 +232,7 @@ export function RealPosApp() {
       const stations = [...new Set(order.items.map((item) => stationByProduct[item.productId] ?? 'KITCHEN'))];
       const printJobs = stations.map((station, index) => createPrintJob({ id: `${order.id}:kitchen:${index}`, order: { ...order, items: order.items.filter((item) => (stationByProduct[item.productId] ?? 'KITCHEN') === station) }, station }));
       printJobs.push(createPrintJob({ id: `${order.id}:customer`, order, station: 'CUSTOMER' }));
-      const payment: PaymentInput = { orderId: order.id, shiftId: shift.id, method: paymentMethod, amount: order.total, reference: null };
+      const payment: PaymentInput = { orderId: order.id, shiftId: shift.id, method: paymentMethod, amount: order.total, receivedCash: cashReceived, reference: null };
       await persistCompletedCheckout({ db, order, printJobs, payment, paymentId: `${order.id}:payment`, idempotencyKey: checkoutIdentity.idempotencyKey, clientSequence: checkoutIdentity.clientSequence });
       setCart(emptyCart());
       setShowCheckoutConfirmation(false);
@@ -281,7 +293,7 @@ export function RealPosApp() {
             <div className="real-payment"><span>{language === 'ar' ? 'طريقة الدفع' : 'Payment method'}</span><div><button type="button" className={paymentMethod === 'CASH' ? 'active' : ''} onClick={() => setPaymentMethod('CASH')}><Icon name="wallet" /> {t.cash}</button><button type="button" className="payment-unavailable" disabled title={language === 'ar' ? 'ربط جهاز الدفع غير متاح بعد' : 'Payment terminal integration is not configured'}><Icon name="receipt" /> {t.card} · {language === 'ar' ? 'غير متاح' : 'Unavailable'}</button></div></div>
             {message && <div className={`real-message ${checkoutState === 'ERROR' ? 'error' : ''}`}>{message}</div>}
             {shiftError && <div className="real-message error">{shiftError}</div>}
-            <button className="real-checkout" type="button" disabled={!shift || !cart.items.length || checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(true)}>{checkoutState === 'SAVING' ? t.loading : `${t.checkout} · ${money(totals.total)}`}</button>
+            <button className="real-checkout" type="button" disabled={!shift || !cart.items.length || checkoutState === 'SAVING'} onClick={() => { setCashReceivedInput(totals.total.toFixed(2)); setShowCheckoutConfirmation(true); }}>{checkoutState === 'SAVING' ? t.loading : `${t.checkout} · ${money(totals.total)}`}</button>
           </aside>
         </div>
       </section>
@@ -305,9 +317,13 @@ export function RealPosApp() {
               {orderType === 'DELIVERY' && <div><span>{t.deliveryFee}</span><strong>{money(totals.deliveryFee)}</strong></div>}
               <div className="checkout-grand"><span>{t.total}</span><strong>{money(totals.total)}</strong></div>
             </div>
-            <div className="checkout-payment-note"><Icon name="wallet" /><span>{language === 'ar' ? 'سيتم تسجيل وسيلة الدفع نقدي. لا يتم تفعيل البطاقة قبل ربط جهاز دفع موثّق.' : 'Payment will be recorded as cash. Card payments remain unavailable until a verified terminal is connected.'}</span></div>
+            <label className="real-modal-field">
+              <span>{language === 'ar' ? 'المبلغ المستلم نقدًا (ج.م)' : 'Cash received (EGP)'}</span>
+              <input autoFocus inputMode="decimal" type="number" min={totals.total} step="0.01" value={cashReceivedInput} onChange={(event) => setCashReceivedInput(event.target.value)} />
+            </label>
+            <div className="checkout-payment-note"><Icon name="wallet" /><span>{language === 'ar' ? `الباقي للعميل: ${cashChangePreview === null ? '—' : money(Math.max(0, cashChangePreview))}. سيتم تسجيل النقدية المستلمة والباقي كحركتين منفصلتين في الدرج.` : `Change due: ${cashChangePreview === null ? '—' : money(Math.max(0, cashChangePreview))}. Cash received and change are recorded as separate drawer movements.`}</span></div>
             {message && checkoutState === 'ERROR' && <div className="real-message error">{message}</div>}
-            <div className="real-modal-actions"><button type="button" disabled={checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(false)}>{t.cancel}</button><button type="button" disabled={checkoutState === 'SAVING' || !shift || !cart.items.length} onClick={() => void handleCheckout()}>{checkoutState === 'SAVING' ? t.loading : language === 'ar' ? 'تأكيد التحصيل وحفظ الطلب' : 'Confirm payment & save order'}</button></div>
+            <div className="real-modal-actions"><button type="button" disabled={checkoutState === 'SAVING'} onClick={() => setShowCheckoutConfirmation(false)}>{t.cancel}</button><button type="button" disabled={checkoutState === 'SAVING' || !shift || !cart.items.length || !cashReceivedValid} onClick={() => void handleCheckout()}>{checkoutState === 'SAVING' ? t.loading : language === 'ar' ? 'تأكيد التحصيل وحفظ الطلب' : 'Confirm payment & save order'}</button></div>
           </section>
         </div>
       )}
