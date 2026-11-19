@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
+import { setRlsContext, withRlsContext } from '../../database/rls-context.js';
 import { assertBranchAccess, assertKitchenStationAccess, assertPermission, assertTenantScope, type AuthContext } from '../auth/authorization.types.js';
 import { PERMISSIONS } from '../auth/rbac.constants.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -24,7 +25,7 @@ export class KitchenService {
     const scopedBranchId = (branchId ?? context.branchId)?.trim();
     if (scopedBranchId) assertBranchAccess(context, scopedBranchId);
 
-    return this.prisma.order.findMany({
+    return withRlsContext(this.prisma, context, (tx) => tx.order.findMany({
       where: {
         ...(scopedBranchId ? { branchId: scopedBranchId } : {}),
         branch: { tenantId },
@@ -32,7 +33,7 @@ export class KitchenService {
       },
       orderBy: { updatedAt: 'asc' },
       include: { items: true },
-    });
+    }));
   }
 
   async listTickets(context: AuthContext, branchId?: string) {
@@ -41,7 +42,7 @@ export class KitchenService {
     const scopedBranchId = (branchId ?? context.branchId)?.trim();
     if (scopedBranchId) assertBranchAccess(context, scopedBranchId);
 
-    return this.prisma.kitchenTicket.findMany({
+    return withRlsContext(this.prisma, context, (tx) => tx.kitchenTicket.findMany({
       where: {
         ...(scopedBranchId ? { branchId: scopedBranchId } : {}),
         branch: { tenantId },
@@ -50,7 +51,7 @@ export class KitchenService {
       },
       include: { items: true, order: { select: { orderNumber: true, type: true } } },
       orderBy: [{ createdAt: 'asc' }, { sequence: 'asc' }],
-    });
+    }));
   }
 
   async materializeTickets(context: AuthContext, orderId: string) {
@@ -60,6 +61,7 @@ export class KitchenService {
     if (!id) throw new Error('orderId is required');
 
     return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
       const order = await tx.order.findFirst({
         where: { id, branch: { tenantId } },
         select: { id: true, branchId: true, status: true },
@@ -144,6 +146,7 @@ export class KitchenService {
     if (target === 'CANCELLED' && !cleanReason) throw new Error('Cancellation reason is required');
 
     return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
       const ticket = await tx.kitchenTicket.findFirst({
         where: { id, branch: { tenantId } },
         select: { id: true, orderId: true, branchId: true, station: true, status: true, version: true },
@@ -239,6 +242,7 @@ export class KitchenService {
     if (target === 'CANCELLED' && !cleanReason) throw new Error('Cancellation reason is required');
 
     return this.prisma.$transaction(async (tx) => {
+      await setRlsContext(tx, context);
       const order = await tx.order.findFirst({
         where: { id, branch: { tenantId } },
         select: { id: true, branchId: true, status: true, version: true },
