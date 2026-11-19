@@ -2,7 +2,7 @@
 
 **Repository:** `3laa2511/restaurant-pos-os`  
 **Branch reviewed:** `feat/recovery-integration`  
-**Reviewed HEAD:** `344c054766e41a7b9be2ee9dc2b3dd93587870f0`  
+**Reviewed through:** kitchen print-routing/cache work on `feat/recovery-integration` (2026-11-19)  
 **Reference:** user-supplied `Restaurant POS OS — UI Directions.html` (32 embedded pages)
 
 ## 1. Reference contract
@@ -42,7 +42,7 @@ Reference-wide requirements observed in the embedded page templates:
 | 4 | نافذة — مسح الطاولة | Manager-authorized table clear with required reason and kitchen-ticket cancellation | `DiningWorkspace.tsx` supports cashier-initiated manager re-authentication or direct manager action; API verifies terminal order state, table version, cancels eligible unfinished kitchen tickets and audits all writes | **Exists / partial.** Cashier submits manager username/password; a separate branch-scoped manager session executes the action and is immediately revoked. `SENT_TO_KITCHEN`/`PREPARING` tickets are cancelled in the same transaction with order events/audit records; `READY` tickets block clearing until resolved in Kitchen. No persistent approval grant or offline approval path. |
 | 5 | POS نهاري | Day-mode cashier: categories/products/cart/order type/checkout/status | `RealPosApp.tsx` and `real-pos.css`; local cart, checkout, shift, cash drawer and sync workers exist | **Exists / partial.** Core sale flow exists; visual parity, table service, discounts, server totals, modifiers, and exact states need completion. |
 | 6 | POS ليلي | Same cashier workflow in night theme | Same `RealPosApp.tsx`; only one current dark visual treatment in `real-pos.css` | **Exists / partial.** Add a true theme switch and match reference night palette; do not confuse current dark CSS with reference parity. |
-| 7 | المطبخ | Station filters, new/preparing/ready tickets, local mode, elapsed time | `KitchenDisplay.tsx` is now reachable from the cashier sidebar; it retains SQLite cache, offline transition queue, station filtering, sync-state badges, conflict reconciliation and server-side version checks | **Functional foundation / visual parity pending.** Existing offline-capable KDS is reused rather than duplicated. Verify ticket send-lock, elapsed-time presentation, station assignment and end-to-end offline replay against the 32-screen reference. |
+| 7 | المطبخ | Station filters, new/preparing/ready tickets, local mode, elapsed time | `KitchenDisplay.tsx` is reachable from the cashier sidebar; it retains SQLite cache, offline transition queue, station filtering, sync-state badges, conflict reconciliation and server-side version checks. Product `kitchenStation` now flows from the API menu into a dedicated SQLite routing cache; local print jobs split KITCHEN/BEVERAGE/PACKING orders and Tauri resolves dedicated printer environment variables | **Functional foundation / visual parity pending.** Existing offline-capable KDS is reused rather than duplicated. Verify ticket send-lock, elapsed-time presentation and end-to-end offline replay against the 32-screen reference; validate printer station configuration on real Windows devices. |
 | 8 | مركز التحكم | All-branch control center, sales KPIs, branch connection and channel breakdown | `OperationalWorkspace` in `WorkspaceRouter.tsx` only loads `operations/management/overview` and displays basic counts/status totals | **Exists / partial, major gap.** Replace generic summary with the reference control-center hierarchy and branch/channel metrics supported by API. |
 | 9 | نظرة مباشرة على الفرع | Branch-level live sales, shift, connectivity, devices and sync | No dedicated branch live-overview route found | **API only / missing UI** where data endpoints exist; verify endpoint coverage then build the screen. |
 | 10 | تسجيل الدخول | Registered branch/device context, staff selection and PIN keypad, offline-aware sign-in | `LoginGate.tsx` currently uses username/password, workspace selector, and editable branch/device fields | **Exists / partial, interaction mismatch.** Preserve the current backend authentication contract until PIN auth is implemented; separate device identity from user-selectable login fields. |
@@ -76,7 +76,7 @@ Inspected desktop entry points and modules:
 - `App.tsx` composes the login gate and workspace router.
 - `LoginGate.tsx` provides username/password login and a nine-workspace selector. It is not the reference PIN/device-registration flow.
 - `RealPosApp.tsx` contains the strongest existing operational slice: local cart, checkout persistence, shifts, cash-drawer reconciliation, recent local orders, printing and sync workers.
-- `KitchenDisplay.tsx` is a dedicated kitchen screen with ticket state and sync/offline handling.
+- `KitchenDisplay.tsx` is a dedicated kitchen screen with ticket state and sync/offline handling. Product kitchen stations are now returned by the menu API, persisted in an additive SQLite table for existing installs, and used to route local kitchen print jobs; missing legacy station data safely falls back to KITCHEN.
 - `WorkspaceRouter.tsx` routes POS, Kitchen, HR, Accounting, Inventory, Settings; Call Center, Dispatch and Management share a generic operational workspace. POS now opens the API-backed `DiningWorkspace.tsx` from its sidebar.
 - `InventoryWorkspace.tsx`, `AccountingWorkspace.tsx`, and `HrWorkspace.tsx` are real API-connected screens, but their current styling and composition do not match the reference.
 - `DiningWorkspace.tsx` and `RefundWorkspace.tsx` are API-connected POS overlays. Dining mutations are branch-scoped and audited; refund UI currently exposes cash-only payments on the same device's open shift.
@@ -93,7 +93,7 @@ Inspected desktop entry points and modules:
 
 ### Batch B — kitchen, order lifecycle and cash controls
 6. Finish Kitchen Display parity: station/status layout, elapsed-time cues and send-lock behavior; the existing offline-capable `KitchenDisplay.tsx` is now accessible directly from the cashier sidebar and keeps its local queue/conflict reconciliation.
-7. Checkout sync now materializes station-specific kitchen tickets atomically from server-owned product routing; add end-to-end PostgreSQL coverage for order/payment/ticket rollback and verify the full offline-to-KDS replay path.
+7. Checkout sync materializes station-specific kitchen tickets atomically from server-owned product routing; local printing now follows the cached product station, including BEVERAGE and PACKING printer mappings. Add end-to-end PostgreSQL coverage for order/payment/ticket rollback and verify the full offline-to-KDS replay path.
 7. Add orders/history, refund approval and cash-drawer movement screens.
 8. Add sync review with explicit conflict/rejection resolution; never treat a retry as a financial settlement.
 
