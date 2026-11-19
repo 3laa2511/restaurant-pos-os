@@ -243,4 +243,42 @@ describe('auth service', () => {
     expect(prisma.branch.findFirst).not.toHaveBeenCalled();
     expect(prisma.session.create).not.toHaveBeenCalled();
   });
+  it('revokes the current session and writes its audit record inside the authenticated RLS transaction', async () => {
+    const prisma = mockPrisma();
+    prisma.session.findUnique.mockResolvedValue({
+      id: 'session-logout',
+      tenantId: 'tenant-1',
+      branchId: 'branch-1',
+      userId: 'user-1',
+      revokedAt: null,
+    });
+    prisma.session.updateMany.mockResolvedValue({ count: 1 });
+    prisma.auditLog.create.mockResolvedValue({});
+    const context = {
+      sessionId: 'session-logout',
+      userId: 'user-1',
+      tenantId: 'tenant-1',
+      branchId: 'branch-1',
+    } as never;
+
+    await new AuthService(prisma as never).logout(context);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.session.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'session-logout' },
+    }));
+    expect(prisma.session.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'session-logout', userId: 'user-1', revokedAt: null },
+    }));
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        actorUserId: 'user-1',
+        branchId: 'branch-1',
+        action: 'AUTH_LOGOUT',
+        entityId: 'session-logout',
+      }),
+    }));
+  });
+
 });
