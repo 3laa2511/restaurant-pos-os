@@ -56,6 +56,35 @@ test('opening shift and opening cash movement are one transaction boundary', () 
   assert.equal(Number(database.prepare(`SELECT COUNT(*) AS count FROM cash_drawer_movements`).get().count), 0);
 });
 
+test('unsettled sync operations block shift close until every operation is synced', () => {
+  const database = db();
+  insertShift(database, 'shift-1');
+  const insertSync = database.prepare(`
+    INSERT INTO sync_queue (
+      id, entity_type, entity_id, operation, idempotency_key, client_sequence,
+      payload, status, attempts, created_at, updated_at
+    ) VALUES (?, 'ORDER', ?, 'CHECKOUT', ?, ?, '{}', ?, 0, '2026-01-01T11:00:00Z', '2026-01-01T11:00:00Z')
+  `);
+  insertSync.run('sync-pending', 'order-1', 'key-pending', 1, 'PENDING');
+  insertSync.run('sync-running', 'order-2', 'key-running', 2, 'SYNCING');
+  insertSync.run('sync-failed', 'order-3', 'key-failed', 3, 'FAILED');
+  insertSync.run('sync-done', 'order-4', 'key-done', 4, 'SYNCED');
+
+  const unsettled = Number(database.prepare(`
+    SELECT COUNT(*) AS count FROM sync_queue
+    WHERE status IN ('PENDING', 'SYNCING', 'FAILED')
+  `).get().count);
+  assert.equal(unsettled, 3, 'pending, in-flight and rejected operations must prevent closing');
+
+  database.prepare(`UPDATE sync_queue SET status = 'SYNCED'`).run();
+  const afterSync = Number(database.prepare(`
+    SELECT COUNT(*) AS count FROM sync_queue
+    WHERE status IN ('PENDING', 'SYNCING', 'FAILED')
+  `).get().count);
+  assert.equal(afterSync, 0, 'shift can proceed only after all queued operations are resolved');
+  database.close();
+});
+
 test('closing shift records actual, expected and variance consistently', () => {
   const database = db();
   insertShift(database, 'shift-1');
