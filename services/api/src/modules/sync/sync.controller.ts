@@ -15,7 +15,6 @@ export class SyncController {
   constructor(private readonly sync: SyncService) {}
 
   @Post('operations')
-  @RequirePermission(PERMISSIONS.ORDER_CREATE)
   submit(@CurrentAuth() context: AuthContext, @Body() envelope: SyncEnvelopeDto) {
     return this.sync.submit(context, envelope as unknown as SyncEnvelope);
   }
