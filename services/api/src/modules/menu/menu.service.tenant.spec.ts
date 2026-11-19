@@ -12,8 +12,8 @@ describe('MenuService tenant and branch isolation', () => {
         nameAr: null,
         sortOrder: 1,
         products: [
-          { id: 'prod-1', sku: 'P1', name: 'Meal', nameAr: null, price: 100, modifierGroups: [] },
-          { id: 'prod-2', sku: 'P2', name: 'Drink', nameAr: null, price: 50, modifierGroups: [] },
+          { id: 'prod-1', sku: 'P1', name: 'Meal', nameAr: null, price: 100, kitchenStation: 'KITCHEN', modifierGroups: [] },
+          { id: 'prod-2', sku: 'P2', name: 'Drink', nameAr: null, price: 50, kitchenStation: 'BEVERAGE', modifierGroups: [] },
         ],
       },
     ]);
@@ -59,6 +59,7 @@ describe('MenuService tenant and branch isolation', () => {
       include: expect.objectContaining({
         products: expect.objectContaining({
           select: expect.objectContaining({
+            kitchenStation: true,
             modifierGroups: expect.objectContaining({
               where: { tenantId: 'tenant-a', active: true },
               include: expect.objectContaining({
@@ -75,6 +76,7 @@ describe('MenuService tenant and branch isolation', () => {
     });
     expect(result[0]!.products).toHaveLength(1);
     expect(result[0]!.products[0]!.price).toBe(120);
+    expect(result[0]!.products[0]!.kitchenStation).toBe('KITCHEN');
   });
 
   it('denies catalog access when the authenticated session has no tenant scope', async () => {
