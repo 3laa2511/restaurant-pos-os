@@ -129,3 +129,10 @@
 ## Operating rule
 
 Do not mark a task done because code was written or a workflow was started. Mark it done only after the relevant check reports success. If a real database or UI cannot be exercised in the current environment, keep it explicitly open for verification.
+
+
+### Browser preview work (2026-11-19)
+- [x] Added isolated browser-only workspace demo entry at `?preview=1`, with in-memory mock data and no backend/database writes.
+- [x] Kept the preview bypass disabled in Tauri runtime so the Windows desktop login flow remains unchanged.
+- [ ] Publish and verify a fresh Vercel preview after the deployment quota resets; older preview deployments do not contain this code.
+- [ ] Replace demo placeholders incrementally with canonical UI Directions screens and real API-backed test workflows; demo shell alone is not feature acceptance.
