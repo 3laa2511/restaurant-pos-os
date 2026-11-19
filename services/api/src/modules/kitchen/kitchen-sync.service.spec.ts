@@ -46,11 +46,14 @@ function build() {
     kitchenTicket: { findUnique: asyncMock() },
   };
   const kitchen = { transitionTicket: asyncMock() };
-  const service = new KitchenSyncService(prisma as unknown as PrismaService, kitchen as unknown as KitchenService);
+  const tx = { $executeRaw: asyncMock(), syncOperation: prisma.syncOperation, kitchenTicket: prisma.kitchenTicket };
+  const transaction = jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx));
+  const scopedPrisma = { ...prisma, $transaction: transaction };
+  const service = new KitchenSyncService(scopedPrisma as unknown as PrismaService, kitchen as unknown as KitchenService);
   prisma.syncOperation.create.mockResolvedValue({});
   prisma.syncOperation.update.mockResolvedValue({});
   prisma.kitchenTicket.findUnique.mockResolvedValue({ branchId: 'branch-1', station: 'KITCHEN', status: 'PREPARING', version: 3 });
-  return { prisma, kitchen, service };
+  return { prisma: scopedPrisma, kitchen, service, transaction, tx };
 }
 
 describe('KitchenSyncService.submit', () => {
