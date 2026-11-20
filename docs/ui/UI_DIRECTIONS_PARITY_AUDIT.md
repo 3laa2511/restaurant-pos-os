@@ -147,3 +147,18 @@ Start with a shared design-system layer and the cashier journey (login shell →
 - All demo actions remain client-side only; no API calls, real credentials, or database writes are performed. Backend-dependent workflows still require separate API-backed acceptance.
 - Automated API and POS Desktop/Tauri gates passed on SHA `cea294c0636378f38d98da7830fcb1effdda8c4c`; an additional Tauri-runtime guard was added afterward and requires fresh CI.
 - Vercel deployment of the preview commit is blocked by the project's daily deployment limit; do not share older deployment URLs as the current preview.
+
+
+## 7. Implementation progress — 2026-11-20
+
+### Shared workspace foundation (committed to this branch)
+- Added a shared RTL workspace shell with Arabic-first IBM Plex Sans Arabic typography, consistent page hierarchy, reference day-palette tokens, responsive spacing, and common content boundaries.
+- Reworked the shared data table into a consistent surface with readable headers, row dividers, hover state, and horizontal overflow on narrow screens.
+- Added shared input/focus/disabled states and token-based field/action styles for workspace components.
+- Removed the legacy global `1100px` body minimum width. The browser UI can now render at a 320px viewport without inheriting a desktop-only horizontal minimum.
+- POS day/night token implementation already exists in `real-pos.css`; it remains scoped to the POS shell and is not treated as proof that the other eight workspaces match the reference.
+
+### Validation and remaining work
+- The two shared-workspace commits are on `feat/recovery-integration`; GitHub Actions for the current head must complete before this batch is considered validated.
+- This is a foundation batch only. It does not complete any of the 32 reference pages, does not replace the browser-only mock with the production app, and does not establish pixel parity.
+- The original 32-page HTML asset is not currently present in the repository tree or the accessible ChatGPT file library. The parity audit remains available, but exact per-page spacing, icon, and component comparison requires that source asset to be available again. Do not infer missing visual details or mark screens complete without it.
